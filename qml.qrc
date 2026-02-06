@@ -1,0 +1,30 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.qml</file>
+        <file>Src/Basic/BasicConfig.qml</file>
+        <file>Src/Basic/qmldir</file>
+        <file>Src/BottomPage/BottomPage.qml</file>
+        <file>Src/Components/AuthorBriefItem.qml</file>
+        <file>Src/Components/EAnimatedWindow.qml</file>
+        <file>Src/Components/EBlurCard.qml</file>
+        <file>Src/Components/ETheme.qml</file>
+        <file>Src/LeftPage/LeftPage.qml</file>
+        <file>Src/RightPage/RightPage.qml</file>
+        <file>Src/RightPage/MainStackView/LocalMusicStack.qml</file>
+        <file>Src/RightPage/MainStackView/MainStackView.qml</file>
+        <file>Src/RightPage/MainStackView/MyFavoriteMusicStack.qml</file>
+        <file>Src/RightPage/MainStackView/SettingStack.qml</file>
+        <file>Src/RightPage/MainStackView/VideoPlayerStack.qml</file>
+        <file>Src/RightPage/TopMenuBar/LoginPopup.qml</file>
+        <file>Src/RightPage/TopMenuBar/MainLoginPopup.qml</file>
+        <file>Src/RightPage/TopMenuBar/SearchPopup.qml</file>
+        <file>Src/RightPage/TopMenuBar/TopLeftBar.qml</file>
+        <file>Src/RightPage/TopMenuBar/TopMiddleMenuBar.qml</file>
+        <file>Src/RightPage/TopMenuBar/TopRightBar.qml</file>
+        <file>Src/Components/ELoader.qml</file>
+        <file>Src/RightPage/MainStackView/ScreenCaptureStack.qml</file>
+        <file>Src/Components/VideoRendererItem.qml</file>
+        <file>Src/Components/Oran7ProgressSlider.qml</file>
+        <file>Src/Components/Oran7ESelectRect.qml</file>
+    </qresource>
+</RCC>

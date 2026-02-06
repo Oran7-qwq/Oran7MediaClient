@@ -1,0 +1,317 @@
+// d3d11videoitem.cpp
+#include "d3d11videoitem.h"
+#include "globalhelper.h"
+#include <QMutexLocker>
+#include <QMetaObject>
+#include <QDebug>
+
+D3D11VideoItem::D3D11VideoItem(QQuickItem *parent)
+    : QQuickItem(parent)
+{
+    setFlag(ItemHasContents, true);
+    connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow *w){
+        if (w) hookWindow(w);
+        else {
+            m_window = nullptr;
+        }
+    }, Qt::DirectConnection);
+}
+
+void D3D11VideoItem::submitFrame(AVFrame *frameRef)
+{
+    AVFrame *old = nullptr;
+    {
+        QMutexLocker locker(&m_mutex);
+        old = m_pendingFrame;
+        if (old == frameRef) {
+            return;
+        }
+        m_pendingFrame = frameRef;
+    }
+    if (old) av_frame_free(&old);
+
+    QMetaObject::invokeMethod(this, "update", Qt::QueuedConnection);
+}
+
+void D3D11VideoItem::componentComplete()
+{
+    QQuickItem::componentComplete();
+    if (window())
+    {
+        hookWindow(window());
+        INFO_LOG<<"By D3D11VideoItem::componentComplete hookWindow.";
+        return;
+    }
+    INFO_LOG<<"Cannot hookWindow, because of in 'ComponentComplete' window() is nullptr.";
+}
+
+void D3D11VideoItem::itemChange(ItemChange change, const ItemChangeData &data)
+{
+    QQuickItem::itemChange(change, data);
+
+    if (change == ItemSceneChange) {
+        // 这里 data.window 有时为空，或者时序早
+        if (data.window) {
+            hookWindow(data.window);
+        } else if (window()) {
+            hookWindow(window());
+        }
+    }
+}
+
+void D3D11VideoItem::releaseResources()
+{
+    m_bgraTex.Reset();
+    m_vp.Reset();
+    m_vpEnum.Reset();
+    // 可把 pendingFrame 清掉
+    QMutexLocker locker(&m_mutex);
+    if (m_pendingFrame) {
+        av_frame_free(&m_pendingFrame);
+        m_pendingFrame = nullptr;
+    }
+}
+
+
+
+
+void D3D11VideoItem::hookWindow(QQuickWindow *w)
+{
+    INFO_LOG<<"hookWindow.";
+    if (m_window == w) return;
+    m_window = w;
+    INFO_LOG<<"New hookWindow.";
+
+    connect(w, &QQuickWindow::sceneGraphInitialized, this, [this, w](){
+        auto *ri = w->rendererInterface();
+        auto *dev = static_cast<ID3D11Device*>(ri->getResource(w, QSGRendererInterface::DeviceResource));
+        if (!dev) return;
+
+        m_dev = dev;
+        dev->GetImmediateContext(&m_ctx);
+
+        dev->QueryInterface(IID_ID3D11VideoDevice, (void**)&m_videoDev);
+        m_ctx->QueryInterface(IID_ID3D11VideoContext, (void**)&m_videoCtx);
+
+        emit d3d11DeviceReady(dev);
+    }, Qt::DirectConnection);
+
+    connect(w, &QQuickWindow::sceneGraphInvalidated, this, [this](){
+        m_ctx.Reset();
+        m_dev.Reset();
+        m_videoDev.Reset();
+        m_videoCtx.Reset();
+    }, Qt::DirectConnection);
+}
+
+bool D3D11VideoItem::initD3D11Resources()
+{
+    if (m_dev) return true;
+
+    QSGRendererInterface *ri = window()->rendererInterface();
+    if (!ri) return false;
+
+    auto *dev = static_cast<ID3D11Device*>(ri->getResource(window(), QSGRendererInterface::DeviceResource));
+    if (!dev) return false;
+
+    m_dev = dev;
+    m_dev->GetImmediateContext(&m_ctx);
+    m_dev.As(&m_videoDev);
+    m_ctx.As(&m_videoCtx);
+
+    return true;
+}
+
+bool D3D11VideoItem::ensureBgraTarget(int w, int h)
+{
+    if (m_bgraTex && m_bgraSize == QSize(w, h))
+        return false; // 没重建
+
+    m_bgraTex.Reset();
+    m_bgraSize = QSize(w, h);
+
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = (UINT)w;
+    desc.Height = (UINT)h;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+
+    HRESULT hr = m_dev->CreateTexture2D(&desc, nullptr, &m_bgraTex);
+    return SUCCEEDED(hr) && m_bgraTex;
+}
+
+
+bool D3D11VideoItem::ensureVideoProcessor(int srcW, int srcH)
+{
+    m_vp.Reset();
+    m_vpEnum.Reset();
+
+    D3D11_VIDEO_PROCESSOR_CONTENT_DESC c{};
+    c.InputWidth = srcW;
+    c.InputHeight = srcH;
+    c.OutputWidth = srcW;
+    c.OutputHeight = srcH;
+
+    HRESULT hr = m_videoDev->CreateVideoProcessorEnumerator(&c, &m_vpEnum);
+    if (FAILED(hr)) return false;
+
+    hr = m_videoDev->CreateVideoProcessor(m_vpEnum.Get(), 0, &m_vp);
+    return SUCCEEDED(hr);
+}
+
+bool D3D11VideoItem::blitNv12ToBgra(ID3D11Texture2D *srcTex, int srcW, int srcH, int slice)
+{
+    if (!srcTex || !m_vp || !m_vpEnum || !m_videoCtx) return false;
+
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inDesc{};
+    inDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+    inDesc.Texture2D.ArraySlice = slice;
+
+    ComPtr<ID3D11VideoProcessorInputView> inView;
+    HRESULT hr = m_videoDev->CreateVideoProcessorInputView(
+        srcTex, m_vpEnum.Get(), &inDesc, &inView);
+    if (FAILED(hr)) return false;
+
+    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outDesc{};
+    outDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+    outDesc.Texture2D.MipSlice = 0;
+
+    ComPtr<ID3D11VideoProcessorOutputView> outView;
+    hr = m_videoDev->CreateVideoProcessorOutputView(
+        m_bgraTex.Get(), m_vpEnum.Get(), &outDesc, &outView);
+    if (FAILED(hr)) return false;
+
+    RECT srcRect{0, 0, srcW, srcH};
+    RECT dstRect{0, 0, srcW, srcH};
+
+    m_videoCtx->VideoProcessorSetStreamSourceRect(m_vp.Get(), 0, TRUE, &srcRect);
+    m_videoCtx->VideoProcessorSetStreamDestRect(m_vp.Get(), 0, TRUE, &dstRect);
+
+    D3D11_VIDEO_PROCESSOR_STREAM stream{};
+    stream.Enable = TRUE;
+    stream.pInputSurface = inView.Get();
+
+    hr = m_videoCtx->VideoProcessorBlt(m_vp.Get(), outView.Get(), 0, 1, &stream);
+    return SUCCEEDED(hr);
+}
+
+QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* data)
+{
+    if (!m_window && window()) {
+        hookWindow(window());
+        INFO_LOG<<"By D3D11VideoItem::updatePaintNode hookWindow.";
+    }
+
+    auto *node = static_cast<QSGSimpleTextureNode*>(oldNode);
+    if (!node) {
+        node = new QSGSimpleTextureNode();
+        node->setOwnsTexture(true);  // 节点管理纹理生命周期
+    }
+
+    AVFrame *cur = nullptr;
+    {
+        QMutexLocker locker(&m_mutex);
+        cur = m_pendingFrame;
+        m_pendingFrame = nullptr;
+    }
+
+    if (!cur) {
+        if (node && node->texture()) {
+            node->setRect(boundingRect());
+            return node;
+        }
+        else
+        {
+            delete node;
+            return nullptr;
+        }
+    }
+
+    if (!m_dev) {
+        if (!initD3D11Resources()) {
+            av_frame_free(&cur);
+            node->setRect(boundingRect());
+            WARNNING_LOG<<"Failed to initD3D11Resources().";
+            delete node;
+            return nullptr;
+        }
+    }
+
+    auto *srcTex = reinterpret_cast<ID3D11Texture2D*>(cur->data[0]);
+    D3D11_TEXTURE2D_DESC sdesc{};
+    srcTex->GetDesc(&sdesc);
+    int srcW = (int)sdesc.Width;
+    int srcH = (int)sdesc.Height;
+
+    static int lastW = 0, lastH = 0;
+    if (srcW != lastW || srcH != lastH) {
+        lastW = srcW; lastH = srcH;
+        emit sourceSizeChanged(srcW, srcH);
+    }
+
+    const bool recreated = ensureBgraTarget(srcW, srcH);
+    if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
+        if (!m_vp || !m_vpEnum) {
+            if (!ensureVideoProcessor(srcW, srcH)) {
+                av_frame_free(&cur);
+                return node;
+            }
+        }
+        int slice = (int)(intptr_t)cur->data[1];
+        if (!blitNv12ToBgra(srcTex, srcW, srcH, slice)) {
+            av_frame_free(&cur);
+            return node;
+        }
+    }
+    else
+    {
+        // 其他格式先不处理（或加 CopyResource/转换）
+        av_frame_free(&cur);
+        return node;
+    }
+
+    // 只有当 BGRA 纹理重建，才需要创建新的 QSGTexture wrapper 并 setTexture
+    if (recreated || node->texture() == nullptr) {
+        QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
+            m_bgraTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
+
+        if (tex)
+            node->setTexture(tex);
+    }
+    node->setRect(boundingRect());
+
+    //==============  static video info ================//
+    static int frame_count = 0;
+    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+    frame_count++;
+    auto now = QDateTime::currentMSecsSinceEpoch();
+    if (now - t0 >= 1000)//1000ms
+    {
+        Oran7VideoInfo info;
+        info.srcSize = QSize(cur->width,cur->height);
+        info.srcFormat = cur->format;
+        info.srcFormatName = QString(av_get_pix_fmt_name(static_cast<AVPixelFormat>(cur->format)));
+        info.renderSize =QSize(boundingRect().width(),boundingRect().height());
+        info.dxgiFormat = sdesc.Format;
+        info.dxgiFormatName =dxgiFormatName(sdesc.Format);
+        info.fps = frame_count;
+        info.isFromHardWare = true;
+        info.decodeDevice = "d3d11va";
+        info.renderDevice = "d3d11va";
+
+        emit sendVideoFrameInfo(info);
+
+        frame_count = 0;
+        t0 = now;
+    }
+
+    av_frame_free(&cur);
+
+    return node;
+}
+
+
