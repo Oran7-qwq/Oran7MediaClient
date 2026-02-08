@@ -200,19 +200,6 @@ Rectangle{
             anchors.right: rightTopMenuItem.left
             height:70
         }
-        LoginPopup{
-            id:loginPopup
-            width: 380
-            height:520
-            anchors.centerIn: parent
-        }
-        MainLoginPopup{
-            id:mainLoginPopup
-            width: loginPopup.width
-            height:loginPopup.height
-            anchors.centerIn: parent
-        }
-
         //--------------------------------
         TopLeftBar{
             id:leftTopMenuItem
@@ -220,16 +207,28 @@ Rectangle{
             anchors.left: parent.left
             height:70
         }
-        SearchPopup{
-            id:searchPopup
-            width: 776
-            height:596
-            x:leftTopMenuItem.x
-            y:leftTopMenuItem.y+65
-            onClosed: {
-                BasicConfig.gradientPosition2 = 1.0
-            }
+    }
+    SearchPopup{
+        id:searchPopup
+        width: 776
+        height:596
+        x:leftTopMenuItem.x
+        y:leftTopMenuItem.y+65
+        onClosed: {
+            BasicConfig.gradientPosition2 = 1.0
         }
+    }
+    LoginPopup{
+        id:loginPopup
+        width: 380
+        height:520
+        anchors.centerIn: parent
+    }
+    MainLoginPopup{
+        id:mainLoginPopup
+        width: loginPopup.width
+        height:loginPopup.height
+        anchors.centerIn: parent
     }
 
     //============================

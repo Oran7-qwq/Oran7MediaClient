@@ -63,5 +63,6 @@
         <file>shaders/VideoPlayerRenderGLSL.vert</file>
         <file>image/ep_select.png</file>
         <file>image/formkit_file.png</file>
+        <file>app.rc</file>
     </qresource>
 </RCC>

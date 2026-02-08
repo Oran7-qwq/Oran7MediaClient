@@ -38,6 +38,7 @@ set(PROJECT_SOURCES
 qt_add_executable(Oran7MediaClient
     MANUAL_FINALIZATION
     ${PROJECT_SOURCES}
+    app.rc
     sever.cpp sever.h sonic.cpp sonic.h
     database.cpp database.h
     ffmsg.h
@@ -68,6 +69,33 @@ qt_add_executable(Oran7MediaClient
 #         shaders/VideoPlayerRenderGLSL.frag
 # )
 # =====================================================================
+
+# ===================== 运行时依赖自动拷贝 =====================
+if(WIN32)
+    # ffmpeg/bin 目录
+    set(FFMPEG_BIN_DIR "${FFMPEG_ROOT_DIR}/bin")
+
+    # SQLite 目录
+    set(SQLITE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/SQLite")
+
+    # exe 输出目录（Debug/Release）
+    set(APP_OUT_DIR "$<TARGET_FILE_DIR:Oran7MediaClient>")
+
+    add_custom_command(TARGET Oran7MediaClient POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Copying runtime deps to: ${APP_OUT_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${APP_OUT_DIR}"
+
+        # 1) 拷贝 ffmpeg6.0/bin 下所有内容到 exe 目录
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${FFMPEG_BIN_DIR}" "${APP_OUT_DIR}"
+
+        # 2) 拷贝 SQLite 文件夹到 exe 目录
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${SQLITE_DIR}" "${APP_OUT_DIR}/SQLite"
+    )
+endif()
+# ===============================================================
+
 
 
 # 在qt_add_executable之后立即添加FFmpeg的配置
