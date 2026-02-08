@@ -233,6 +233,12 @@ Item {
                         anchors.leftMargin: 4
                         anchors.verticalCenter: bilibiliRoomTextFiled.verticalCenter
                         scale:0.77
+                        Behavior on scale {
+                            NumberAnimation{
+                                duration: 300
+                                easing.type:Easing.OutCubic
+                            }
+                        }
                         mipmap: true
                         cache: true
                         asynchronous: false
@@ -281,6 +287,10 @@ Item {
                                         inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause()
                                 }
                             }
+                            onExited: cursorShape = Qt.ArrowCursor
+                            onEntered: cursorShape = Qt.PointingHandCursor
+                            onPressed: bilibiliRoomNumWayPlayBtnImage.scale = 0.5
+                            onReleased: bilibiliRoomNumWayPlayBtnImage.scale = 0.77
                         }
                     }
                 }
@@ -386,6 +396,12 @@ Item {
                         anchors.leftMargin: 1
                         anchors.top: inputFilePathRect.top
                         scale:0.77
+                        Behavior on scale {
+                            NumberAnimation{
+                                duration: 300
+                                easing.type: Easing.OutCubic
+                            }
+                        }
                         mipmap: true
                         cache: true
                         asynchronous: false
@@ -436,12 +452,58 @@ Item {
                                         inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause()
                                 }
                             }
+                            onExited: cursorShape = Qt.ArrowCursor
+                            onEntered: cursorShape = Qt.PointingHandCursor
+                            onPressed: inputFilePath_WayPlayBtnImage.scale = 0.5
+                            onReleased: inputFilePath_WayPlayBtnImage.scale = 0.77
+                        }
+                    }
+                    //inputFilePathWay_OpenFileBtnImage
+                    Image {
+                        id: inputFilePathWay_OpenFileBtnImage
+                        source: "qrc:/image/formkit_file.png"
+                        height:inputFilePathRect.collapsedHeight
+                        width: height
+                        anchors.left: inputFilePath_WayPlayBtnImage.right
+                        anchors.leftMargin: 0
+                        scale: 0.7
+                        Behavior on scale {
+                            NumberAnimation{
+                                duration: 300
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                        asynchronous: false
+                        cache: true
+                        mipmap: false
+                        antialiasing: true
+
+                        layer.enabled: true
+                        layer.effect: ColorOverlay{
+                            source: inputFilePathWay_OpenFileBtnImage
+                            color:"#1eb074"
+                        }
+                        Oran7FileDialog{
+                            id:inputFilePathWay_OpenFileDialog
+                            onReady: {
+                                inputFilePathTextArea.text = filesArray[0]
+                                inputFilePathTextArea.focus = true
+                            }
+                        }
+                        MouseArea{
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onExited: cursorShape = Qt.ArrowCursor
+                            onEntered: cursorShape = Qt.PointingHandCursor
+                            onPressed: inputFilePathWay_OpenFileBtnImage.scale = 0.5
+                            onReleased:  inputFilePathWay_OpenFileBtnImage.scale = 0.7
+                            onClicked: inputFilePathWay_OpenFileDialog.open()
                         }
                     }
                     //in inputFilePathRect
                 }
 
-                //========启用开发者信息调试模式openVideoInfo======//
+                //======== 启用开发者信息调试模式 openVideoInfo======//
                 Oran7ESelectRect{
                     id:openVIdeoInfo_eSelRect
                     labelText: "OpenVideoInfo"
@@ -520,6 +582,12 @@ Item {
                 sourceSize.width:40
                 sourceSize.height: 40
                 scale: 0.9
+                Behavior on scale {
+                    NumberAnimation{
+                        duration: 300
+                        easing.type: Easing.OutCubic
+                    }
+                }
                 property string playImageSourceUrl: "qrc:/image/ClearPlay.png"
                 property string pouseImageSourceUrl: "qrc:/image/ClearPause.png"
                 source: playImageSourceUrl
@@ -532,6 +600,7 @@ Item {
                 MouseArea{
                     id:playIamgeMouseArea
                     anchors.fill: parent
+                    hoverEnabled: true
                     onClicked: {
                         if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex)return;
                         if(BasicConfig.isPlaying === false)
@@ -543,6 +612,10 @@ Item {
                             inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause()
                         }
                     }
+                    onExited: cursorShape = Qt.ArrowCursor
+                    onEntered: cursorShape = Qt.PointingHandCursor
+                    onPressed: playImage.scale = 0.7
+                    onReleased:playImage.scale = 0.9
                 }
                 Connections{
                     target: BasicConfig

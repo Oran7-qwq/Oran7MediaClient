@@ -26,5 +26,6 @@
         <file>Src/Components/VideoRendererItem.qml</file>
         <file>Src/Components/Oran7ProgressSlider.qml</file>
         <file>Src/Components/Oran7ESelectRect.qml</file>
+        <file>Src/Components/Oran7FileDialog.qml</file>
     </qresource>
 </RCC>

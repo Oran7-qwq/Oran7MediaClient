@@ -13,6 +13,19 @@ Rectangle{
 
     // 外部控制选中状态
     property bool checked: false
+    onCheckedChanged:{
+        if(root.checked === true)
+        {
+            ep_selectImage.visible = true
+            ep_selectImage.scale = 1.0
+        }
+        else
+        {
+            ep_selectImage.scale = 0.5
+            ep_selectImage.visible = false
+        }
+    }
+
     property string labelText: "undefined"
 
     signal clicked()
@@ -24,12 +37,19 @@ Rectangle{
         anchors.horizontalCenter: parent.horizontalCenter
         sourceSize.width: parent.width * 1.2
         sourceSize.height: parent.height * 1.2
-        visible: root.checked
-        layer.enabled: true
+        visible: false
         mipmap: true
         antialiasing: true
         cache:true
         asynchronous:false
+        scale:0.5
+        Behavior on scale {
+            NumberAnimation{
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+        }
+        layer.enabled: true
         layer.effect: ColorOverlay{
             source: ep_selectImage
             color:"#fc3c55"
@@ -37,6 +57,7 @@ Rectangle{
     }
     MouseArea{
         anchors.fill: parent
+        hoverEnabled: true
         onClicked: {
                 root.clicked()
         }

@@ -57,13 +57,11 @@
         <file>image/transparent.png</file>
         <file>image/useApp.png</file>
         <file>image/usericon.png</file>
-        <file>image/vipsoundeffect.png</file>
         <file>image/volume.png</file>
-        <file>image/wb.png</file>
         <file>image/wechat.png</file>
-        <file>image/wy.png</file>
         <file>shaders/VideoPlayerRenderGLSL.frag</file>
         <file>shaders/VideoPlayerRenderGLSL.vert</file>
         <file>image/ep_select.png</file>
+        <file>image/formkit_file.png</file>
     </qresource>
 </RCC>
