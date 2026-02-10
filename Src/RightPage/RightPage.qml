@@ -241,22 +241,8 @@ Rectangle{
         anchors.bottom: parent.bottom
         clip: true
 
-        // 使用 Loader 加载初始项
-        // initialItem: Item {
-        //     Loader {
-        //         id: initialLoader
-        //         anchors.fill: parent
-        //         source: "qrc:/Src/RightPage/MainStackView/VideoPlayerStack.qml"
-        //         onLoaded: {
-        //             if (item) {
-        //                 item.pageName = "VideoPlayerPage"
-        //             }
-        //         }
-        //     }
-        // }
         initialItem: Qt.createComponent("qrc:/Src/RightPage/MainStackView/VideoPlayerStack.qml")
                      .createObject(mainStackView, {"pageName": "VideoPlayerPage"})
-
 
         function popPage()
         {

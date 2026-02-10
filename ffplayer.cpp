@@ -284,6 +284,7 @@ int FFPlayer::read_thread()
         {
             /*同时要标志启动视频渲染刷新线程*/
             sureHaveVideo=true;
+            last_frame_timer = av_gettime_relative() / 1000000.0;//渲染初始帧pts
 
             ret = stream_component_open( st_index[AVMEDIA_TYPE_VIDEO]);
         }
@@ -424,6 +425,9 @@ int FFPlayer::read_thread()
             }
             else if (pkt->stream_index == video_stream && sureHaveVideo==true)
             {
+                // static int put_video_pkt_num = 0;
+                // put_video_pkt_num++;
+                // av_log(NULL,AV_LOG_INFO,"ReadThread of put video packet num:%d\n\n",put_video_pkt_num);
                 packet_queue_put(&videoq, pkt);
             }
             else
@@ -473,6 +477,10 @@ void FFPlayer::video_refresh(double *remaining_time)
     Frame *lastvp = NULL;
     double last_duration, duration, delay;
 
+    static int64_t run_times = 0;
+    run_times+=1;
+    //av_log(NULL, AV_LOG_INFO,"video_refresh run_times: %d\n",(int)run_times);
+
     // 判断有没有视频画面
     if(video_st)
     {
@@ -490,13 +498,10 @@ void FFPlayer::video_refresh(double *remaining_time)
                    pictq.size,frame_drops_late);
         }
         //=====================
-        //====================
         //运行频率调试：
         // 每20秒打印一次刷新次数
         static int64_t last_check_time2 = 0;
         int64_t current_time2 = av_gettime_relative();
-        static int64_t run_times = 0;
-        run_times+=1;
         if (current_time2 - last_check_time2 > 20*1000000)// 20秒
         {
             last_check_time2 = current_time2;
@@ -515,7 +520,8 @@ void FFPlayer::video_refresh(double *remaining_time)
                 {
                     Video_EOF=true;//视频播放结束
                 }
-                //av_log(NULL, AV_LOG_WARNING,":-->Video frame queue now remaining of frame is Empty!!!!\n\n");
+                av_log(NULL, AV_LOG_WARNING,":-->Video frame queue now remaining of frame is Empty!!!!%d\n\n",(int)run_times);
+                *remaining_time = FFMIN(*remaining_time, 0.01); // 10ms
                 return;
             }
             // 能跑到这里说明帧队列不为空，肯定有frame可以读取|-----------|同步丢包策略算法
@@ -538,7 +544,10 @@ void FFPlayer::video_refresh(double *remaining_time)
                 // 新的播放序列重置当前时间，记录最后一帧播放的时刻
                 last_frame_timer = av_gettime_relative() / 1000000.0;
             }
-            if (paused) return;
+            if (paused) {
+                INFO_LOG<<"Video Now is Pause.";
+                return;
+            }
             /* compute nominal last_duration */
             //lastvp上一帧，vp当前帧 ，nextvp下一帧
             //last_duration 计算上一帧应显示的时长
@@ -548,9 +557,11 @@ void FFPlayer::video_refresh(double *remaining_time)
             if (time <  last_frame_timer + delay)
             {
                 *remaining_time = FFMIN( last_frame_timer + delay - time, *remaining_time);
-                av_usleep(*remaining_time * 1000);
-                if(abort_request)return;
-                continue;
+                if (*remaining_time < 0.001) *remaining_time = 0.001;
+                // INFO_LOG<<"time :"<<time;
+                // INFO_LOG<<"last_frame_timer: "<<last_frame_timer;
+                // INFO_LOG<<"delay :"<<delay;
+                return;
             }
             last_frame_timer += delay;
             if (delay > 0 && time -  last_frame_timer > AV_SYNC_THRESHOLD_MAX)
@@ -2103,6 +2114,10 @@ int Decoder::video_thread(void *arg)
             //printf("Warning:get_video_frame - frame->pts === AV_NOPTS_VALUE!\n");
         }
         pts = (frame->pts == AV_NOPTS_VALUE) ? NAN : frame->pts * av_q2d(tb);
+
+        static int put_video_hw_frame_num = 0;
+        put_video_hw_frame_num++;
+        //av_log(NULL, AV_LOG_INFO, "put_video_hw_frame_num :%d\n",put_video_hw_frame_num);
         // 将解码后的视频帧插入队列
         ret = queue_picture(&is->pictq, frame, pts, duration, frame->pkt_pos, is->viddec.pkt_serial_);
         // 释放临时frame对应的

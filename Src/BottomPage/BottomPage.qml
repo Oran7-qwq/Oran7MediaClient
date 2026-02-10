@@ -225,7 +225,7 @@ Rectangle{
             function onUpdataQmlTransforStopIcon()
             {
                 playImage.visible = !playImage.visible
-                pauseImage.visible = !playImage.visible
+                pauseImage.visible = !pauseImage.visible
 
                 BasicConfig.isPlaying=false
 
@@ -368,6 +368,11 @@ Rectangle{
                 lastImage.layer.enabled=true
             }
             onClicked: {
+                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
+                {
+                    playImage.visible=false
+                    pauseImage.visible=true
+                }
                 Client.reqPlayLast(/*(BasicConfig.playingIndex - 1) < 0 ? BasicConfig.localMusicListModel.count-1 : BasicConfig.playingIndex - 1*/)
             }
         }
@@ -400,6 +405,11 @@ Rectangle{
                 nextImage.layer.enabled=true
             }
             onClicked: {
+                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
+                {
+                    playImage.visible=false
+                    pauseImage.visible=true
+                }
                 Client.reqPlayNext(/*(BasicConfig.playingIndex + 1)%BasicConfig.localMusicListModel.count*/)
             }
         }

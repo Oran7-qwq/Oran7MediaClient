@@ -247,7 +247,7 @@ ApplicationWindow {
             layer.samples: 12
             antialiasing: true
 
-            property bool openIngState: false
+            property bool openIngState: true
 
             // ShapePath{
             //     strokeWidth: 1
@@ -258,6 +258,16 @@ ApplicationWindow {
             //     PathArc { x: 0; y: 40; radiusX: 20; radiusY: 20 }
             //     PathLine { x: 0; y: 40 }
             // }
+            Connections{
+                target:BasicConfig
+                function onClearAllUi_inVIdeoRenderArea(ok)
+                {
+                    if(ok === false)
+                        openImage.visible = true
+                    else if(openSemiCircle.openIngState !== true)
+                        openImage.visible = false
+                }
+            }
             Image{
                 id:openImage
                 scale: 2
@@ -293,19 +303,19 @@ ApplicationWindow {
                 onClicked: {
                     if(openSemiCircle.openIngState === false)
                     {
-                        openImage.rotation = 180
-                        leftRectangle.width = 0
-
-                        openSemiCircle.openIngState = true
-                        rightRectangle.topBarHeight = 0
-                    }
-                    else
-                    {
                         openImage.rotation = 0
                         leftRectangle.width = leftRectangle.defaultWidth
 
-                        openSemiCircle.openIngState = false
+                        openSemiCircle.openIngState = true
                         rightRectangle.topBarHeight = rightRectangle.topBarDefultHeight
+                    }
+                    else
+                    {
+                        openImage.rotation = 180
+                        leftRectangle.width = 0
+
+                        openSemiCircle.openIngState = false
+                        rightRectangle.topBarHeight = 0
                     }
                 }
             }

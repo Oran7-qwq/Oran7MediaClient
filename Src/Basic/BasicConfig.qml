@@ -64,6 +64,13 @@ Item
     signal clickedOutside()
     signal newTextAreaFocused(var item)
 
+    //triggered by VideoPlayerStack use in clear all ui in videoRender Area
+    /*NOW connect in
+        main.qml of openSemiCircle
+        VideoPlayerStack.qml of openSemiCircleRect
+    */
+    signal clearAllUi_inVIdeoRenderArea(var ok)
+
     /*===============================GLOBAL INSTANCE============================*/
     /*-------------------Global Paragramers--------------------------*/
     //<AppWindowParas>

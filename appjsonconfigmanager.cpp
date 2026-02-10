@@ -36,8 +36,8 @@ AppConfigManager::AppConfigManager(QObject* parent) : QObject(parent)
                      {"remember_password", true}
                  })},
         {"recent_files", QJsonArray()},
-        {"recent_files_max_count", 10},  // 最大最近文件数量
-        {"last_used_file", ""},  // 最近使用的单个文件路径
+        {"recent_files_max_count", 10}, // 最大最近文件数量
+        {"last_used_file", ""}, // 最近使用的单个文件路径
         {"playerVolume",25},//Global PlayerVolume
         //本地缓存排序模块记录
         {"local_music_sort",QJsonObject({
@@ -90,7 +90,6 @@ bool AppConfigManager::loadConfig()
     // 确保最近文件配置存在
     if (!m_config.contains("recent_files")) {
         m_config["recent_files"] = QJsonArray();
-        qDebug()<<"===========ERROR1";
     }
     if (!m_config.contains("recent_files_max_count")) {
         m_config["recent_files_max_count"] = 10;
@@ -99,7 +98,6 @@ bool AppConfigManager::loadConfig()
     //确保最后使用文件配置存在
     if (!m_config.contains("last_used_file")){
         m_config["last_used_file"] = "";
-        qDebug()<<"===========ERROR3";
     }
 
     return true;
@@ -249,7 +247,7 @@ void AppConfigManager::setNestedValue(const QStringList& keys, const QVariant& v
     }
 
     /**
-     *      QJsonObject语法讲解  QJsonObject operator[]返回一个QJsonValueRef代理对象   QJsonValueRef.toObject()方法将其转换为QJsonObject
+     *      QJsonObject语法  QJsonObject operator[]返回一个QJsonValueRef代理对象   QJsonValueRef.toObject()方法将其转换为QJsonObject
      *      这里类似于一个键值对通过将currentKey：对应的QJsonObject返回  ，即通过QJsonObject operator[]获取currentKey对应的QJsonObject值
      */
     // 进入下一层递归
@@ -284,14 +282,11 @@ void AppConfigManager::setNestedValueList(const QStringList &keys,
         obj[currentKey] = QJsonObject();
     }
 
-    // 获取下一层对象
-    QJsonObject nestedObj = obj[currentKey].toObject();
+    QJsonObject nestedObj = obj[currentKey].toObject();// 获取下一层对象
 
-    // 递归处理剩余键
-    setNestedValueList(keys.mid(1), valueList, nestedObj);
+    setNestedValueList(keys.mid(1), valueList, nestedObj);// 递归处理剩余键
 
-    // 将修改后的对象赋值回去
-    obj[currentKey] = nestedObj;
+    obj[currentKey] = nestedObj;// 将修改后的对象赋值回去
 }
 
 bool AppConfigManager::validateConfig()
@@ -328,7 +323,7 @@ void AppConfigManager::addRecentFile(const QString& filePath)
     QStringList recentFiles = getRecentFiles();
     int maxCount = getMaxRecentFiles();
 
-    // 移除已存在的相同文件路径（避免重复）
+    // 移除已存在的相同文件路径
     recentFiles.removeAll(filePath);
 
     // 将新文件添加到列表开头

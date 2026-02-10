@@ -11,7 +11,7 @@ Item {
     id:root_parent
     property string pageName: ""
     StackView.onActivated: {
-        // 切回到该页面时，确保重新挂载（配合 VideoRendererItem 的 Timer 更稳）
+        // 切回到该页面时，确保重新挂载
         if (videoRenderItem) {
             Client.attachVideoItem(videoRenderItem.videoHost)
         }
@@ -20,6 +20,93 @@ Item {
         id:root
         anchors.fill: parent
         layer.enabled: false
+        //====================  VideoPlayerStack in MainStackView isActive ???  ==================///
+        property bool isActive: false
+        // 获取 StackView
+        property var _myStackView: null
+        // 尝试获取 StackView
+        function findAndSetupStackView()
+        {
+            if (StackView.view)
+            {
+                //console.log("通过 StackView.view 获取");
+                _myStackView = StackView.view;
+            }
+            else
+            {
+                //通过父级查找
+                //console.log("通过父级查找 StackView");
+                var parent = root.parent;
+                var depth = 0;
+                while (parent && depth < 20)
+                {
+                    //console.log("查找深度", depth, "父级:", parent);
+                    if (typeof parent.push === "function" &&
+                        typeof parent.pop === "function")
+                    {
+                        //console.log("找到 StackView");
+                        _myStackView = parent;
+                        break;
+                    }
+                    parent = parent.parent;
+                    depth++;
+                }
+            }
+            if (root._myStackView)
+            {
+                //console.log("成功获取 StackView，开始监听");
+                // 监听 currentItem 变化
+                root._myStackView.currentItemChanged.connect(updateActiveState);
+                // 立即更新一次
+                root.updateActiveState();
+            } else {
+                //console.warn("无法获取 StackView");
+            }
+        }
+        // 更新活动状态
+        function updateActiveState()
+        {
+            if (!_myStackView || !_myStackView.currentItem)
+            {
+                root.isActive = false;
+                //console.log("_myStackView 或_myStackView.currentItem 无效-->isActive=false")
+                return;
+            }
+            const newActive = (_myStackView.currentItem === root.parent);
+            if (root.isActive !== newActive) {
+                // console.log("活动状态变化:", newActive);
+                root.isActive = newActive;
+                if(root.isActive===true)
+                {
+
+                }
+            }
+            else {
+                // console.log("root.isActive !== newActive")
+                // console.log(_myStackView.currentItem)
+                // console.log(root.parent)
+            }
+        }
+        // 初始化
+        Component.onCompleted: {
+            // console.log("=== VideoPlayerStack 加载完成 ===");
+            // console.log("root:", root);
+            // console.log("StackView.view:", StackView.view);
+            // console.log("root.parent:", root.parent);
+            // 延迟执行，确保 StackView 已附加
+            Qt.callLater(function() {
+                findAndSetupStackView();
+            });
+        }
+        // 清理
+        Component.onDestruction: {
+            if (_myStackView) {
+                _myStackView.currentItemChanged.disconnect(updateActiveState);
+            }
+        }
+        //================================================
+
+        //=============== 自定义组件===================
         FileHelper{
             id:fileHelper
         }
@@ -42,6 +129,17 @@ Item {
             anchors.top: videoPlayerMenueRectangle.top
             anchors.topMargin: 20
 
+            Connections{
+                target:BasicConfig
+                function onClearAllUi_inVIdeoRenderArea(ok)
+                {
+                    if(ok === false)
+                        openImage.visible = true
+                    else if(openSemiCircleRect.openIngState !== true)
+                        openImage.visible = false
+                }
+            }
+
             property bool openIngState: true
             Image{
                 id:openImage
@@ -51,7 +149,7 @@ Item {
                 anchors.leftMargin: 0 //4
                 source: "/image/stackback.png"
 
-                rotation: 0
+                rotation: parent.openIngState ? 180 : 0
                 Behavior on rotation {
                     NumberAnimation{
                         duration: 200
@@ -77,16 +175,12 @@ Item {
                 onClicked: {
                     if(parent.openIngState === true)
                     {
-                        openImage.rotation = 0
                         videoPlayerMenueRectangle.width = 0
-
                         parent.openIngState = false
                     }
                     else
                     {
-                        openImage.rotation = 180
                         videoPlayerMenueRectangle.width = videoPlayerMenueRectangle.defaultWidth
-
                         parent.openIngState = true
                     }
                 }
@@ -674,6 +768,12 @@ Item {
                                     +String(Math.floor(Math.floor(AllTime%60)/10)) + String(Math.floor(Math.floor(AllTime%60)%10))
                         }
                     }
+                    function onUpdataQmlTransforStopIcon(){
+                        playImage.source = playImage.playImageSourceUrl
+                        inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl
+                        videoProgressSlider.progressHandleX=videoProgressSlider.width - videoProgressSlider.progressHandleWidth/2
+                        videoProgressSlider.visibleProgressX=videoProgressSlider.width
+                    }
                 }
             }
             Label{
@@ -743,10 +843,17 @@ Item {
 
         //============= VideoPlayerStack鼠标定时隐藏逻辑 =============//
         property bool mouseHidden: false
+        onMouseHiddenChanged:{
+            if(root.isActive === false)return;
+            if(root.mouseHidden === true)
+                BasicConfig.clearAllUi_inVIdeoRenderArea(true)
+            else
+                BasicConfig.clearAllUi_inVIdeoRenderArea(false)
+        }
 
         Timer {
             id: mouseHideTimer
-            interval: 8000
+            interval: 6000
             repeat: false
             running: true
             onTriggered: root.mouseHidden = true
