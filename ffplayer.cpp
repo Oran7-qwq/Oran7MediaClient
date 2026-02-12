@@ -489,7 +489,7 @@ void FFPlayer::video_refresh(double *remaining_time)
         //性能调试：
         static int64_t last_check_time = 0;
         int64_t current_time = av_gettime_relative();
-        if (current_time - last_check_time > 1*1000000)// 10秒
+        if (current_time - last_check_time > 10*1000000)// 10秒
         {
             last_check_time = current_time;
             av_log(NULL, AV_LOG_INFO,
@@ -545,7 +545,7 @@ void FFPlayer::video_refresh(double *remaining_time)
                 last_frame_timer = av_gettime_relative() / 1000000.0;
             }
             if (paused) {
-                INFO_LOG<<"Video Now is Pause.";
+                //INFO_LOG<<"Video Now is Pause.";
                 return;
             }
             /* compute nominal last_duration */

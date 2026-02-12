@@ -77,7 +77,6 @@ void D3D11VideoItem::releaseResources()
 
 void D3D11VideoItem::hookWindow(QQuickWindow *w)
 {
-    INFO_LOG<<"hookWindow.";
     if (m_window == w) return;
     m_window = w;
     INFO_LOG<<"New hookWindow.";
@@ -85,7 +84,10 @@ void D3D11VideoItem::hookWindow(QQuickWindow *w)
     connect(w, &QQuickWindow::sceneGraphInitialized, this, [this, w](){
         auto *ri = w->rendererInterface();
         auto *dev = static_cast<ID3D11Device*>(ri->getResource(w, QSGRendererInterface::DeviceResource));
-        if (!dev) return;
+        if (!dev) {
+            WARNNING_LOG<<"Cant get ID3D11Device from qt.";
+            return;
+        }
 
         m_dev = dev;
         dev->GetImmediateContext(&m_ctx);
@@ -267,9 +269,13 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
             return node;
         }
     }
-    else
-    {
-        // 其他格式先不处理（或加 CopyResource/转换）
+    else if (sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+             sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
+        //RGBA -> RGBA，直接拷贝
+        m_ctx->CopyResource(m_bgraTex.Get(), srcTex);
+    }
+    else {
+        // 其他格式先不处理
         av_frame_free(&cur);
         return node;
     }

@@ -4,6 +4,7 @@
 #include"Oran7MediaPlayer.h"
 #include "d3d11videoitem.h"
 #include "globalhelper.h"
+#include "oran7screencapture.h"
 
 #include <QTimer>
 #include <QObject>
@@ -35,8 +36,6 @@ class Client : public QObject
 public:
     explicit Client(const QString &host,quint16 port,QObject *parent = nullptr);
     ~Client();
-    enum class ScaleMode { Fit, Fill };
-    Q_ENUM(ScaleMode)
     //外部调用强制清理播放器内核
     void StopPlayerRuning()
     {
@@ -75,16 +74,11 @@ public:
     QElapsedTimer m_callTimer;
     static const int CALL_INTERVAL_MS = 100; //100ms
 
-    //用于触发Local MusicList前端列表刷新
-    void refreshLocalMusicList();
+    void refreshLocalMusicList();//用于触发Local MusicList前端列表刷新
+    Q_INVOKABLE void addNewLocalMusic(const QVariantList &fileList);//供qml前端调用,请求添加本地音乐文件
+    QList<QFileInfo> sortFileInfoList_byFilePaths(const QList<QFileInfo> &fileInfoList , const QVariantList& orderPaths);//排序audioFileTool
 
-    //--->排序工具
-    QList<QFileInfo> sortFileInfoList_byFilePaths(const QList<QFileInfo> &fileInfoList , const QVariantList& orderPaths);
-
-    //供qml前端调用,请求添加本地音乐文件
-    Q_INVOKABLE void addNewLocalMusic(const QVariantList &fileList);
-
-    //-----------------------------------------------------<ConfigLoadSave接口>-----------------------------------------------------------//
+    //-----------------------------------------------------<Config-->Load-Save接口>-----------------------------------------------------------//
     //获取配置文件记录ui底部的近期最近一次关闭应用程序前的第一首music，并加载
     void loadConfig_lastCloseAppFocusedMusic();
     //加载提取config文件中保存的loaclMusicStack-->play_order，协商排列顺序
@@ -112,32 +106,54 @@ public:
     int OutputVideo(const Frame *frame,AVFrame* copy_frame);//VideoFrameRender渲染接口 , 会在FFplayer内层Video_refresh_thread回调
     //供qml前端调用触发Client信号
     Q_INVOKABLE void triggerSigPlayOrPause(){emit SigPlayOrPause();}
-
     Q_INVOKABLE void triggerSigStop(){emit SigStop();}
-
     Q_INVOKABLE void qmlClickedReqPreparePlayMusic(QString file_path);//由qml前端调用，music列表点击播放事件
-
+    Q_INVOKABLE void qmlClickedReqPreparePlayVideo(QString file_path);//由VideoPlayerStack调用
+    void preparePlayingMedia(QString file_path);
     Q_INVOKABLE int progressSlider_Seek(int cur_valule);//供qml前端调用，请求seek操作
-
     Q_INVOKABLE void reqChangeVolumeValue(int cur_valume);//供qml前端调用，请求调整音量
-
     Q_INVOKABLE void reqPlayNext()//供qml前端调用，请求播放下一首
     {
         emit this->triggerPlayNext();
     }
-
     Q_INVOKABLE void reqPlayLast()//供qml前端调用，请求播放上一首
     {
         emit this->triggerPlayLast();
     }
 
-    Q_INVOKABLE D3D11VideoItem* d3d11VideoItem(){return m_videoItem;}
-    Q_INVOKABLE void createVideoItem(QQuickItem* host);
-    Q_INVOKABLE bool attachVideoItem(QQuickItem* host);
+    //===== D3D11VideoRender --> Oran7VideoRender ==========
+    enum class ScaleMode { Fit, Fill };
+    Q_ENUM(ScaleMode)
+    enum class RenderObject { VideoPlayerRender, ScreenCaptureRender };
+    Q_ENUM(RenderObject)
+
+    typedef struct D3D11RenderSlot {
+        QPointer<D3D11VideoItem> item;
+        QPointer<QQuickItem> host;//qml端视频画面渲染父对象host
+        QMetaObject::Connection cW, cH;
+        QSize srcSize;                         // 源视频尺寸
+        ScaleMode scaleMode = ScaleMode::Fit;
+        bool syncPending = false;    //异步缩放请求
+    }D3D11RenderContext;
+
+    inline uint qHash(RenderObject key, uint seed = 0) noexcept {
+        return ::qHash(static_cast<int>(key), seed);
+    }
+    QHash<RenderObject, D3D11RenderSlot> m_d3d11Slots;
+
+    void createVideoItem(const RenderObject key,QQuickItem* host);
+    Q_INVOKABLE bool attachVideoItem(const RenderObject key,QQuickItem* host);
+    void setVideoSourceSize(const RenderObject &key,const QSize &s) { m_d3d11Slots[key].srcSize = s; scheduleSyncVideoItemSize(key); }
+    Q_INVOKABLE void setScaleMode(const RenderObject &key,const ScaleMode m) { m_d3d11Slots[key].scaleMode = m; syncVideoItemSize(key); }
     ID3D11Device* m_qtDevice = nullptr;//D3D11设备存储
     void setD3D11Device(ID3D11Device *dev);//定义FFplayer(ffmpeg)使用的硬件解码D3D11设备-接口
-    void setVideoSourceSize(const QSize &s) { m_srcSize = s; scheduleSyncVideoItemSize(); }
-    Q_INVOKABLE void setScaleMode(ScaleMode m) { m_scaleMode = m; syncVideoItemSize(); }
+
+    //===== Oran7ScreenCapture =====//
+    QPointer<Oran7ScreenCaptureController> m_screenCap;
+    Q_INVOKABLE QObject* screenCapture() const{return m_screenCap;}
+    Q_INVOKABLE void startPreview(int index){
+        m_screenCap->startPreview(index);
+    }
 
 public:
     //=============================<Get Or Save Client QThread shared_data Function>======================//
@@ -205,39 +221,29 @@ private slots:
     //==========================<Oran7MediaPlayer  -->private slots>=================== //
     void OnPlayOrPause();
     void OnStop();
-    void syncVideoItemSize();
-    void scheduleSyncVideoItemSize();
+    void syncVideoItemSize(const Client::RenderObject &key);
+    void scheduleSyncVideoItemSize(const Client::RenderObject &key);
 
 private:
     //==========================<Client Sever>===========================//
     //单例实例
     // static std::shared_ptr<Client> m_instance;<-----Discard
-    //客户端套接字
-    QTcpSocket *Client_socket;
-    //客户端响应服务器协议处理器容器
-    QMap<quint8,Packedhandler_> Client_handler;
-    //从服务器读取的数据缓冲区
-    QByteArray responseFromSever;
-    //<客户端缓存数据>
-    quint32 UID;
-    //本地数据库
-    QSqlDatabase localdb;
+    QTcpSocket *Client_socket;//客户端套接字
+    QMap<quint8,Packedhandler_> Client_handler;//客户端响应服务器协议处理器容器
+    QByteArray responseFromSever;//从服务器读取的数据缓冲区
+    quint32 UID;//<客户端缓存数据>
+    QSqlDatabase localdb;//本地数据库
+
+    //========= Client of Connections ==============
+    QList<QMetaObject::Connection> connections;
 
     //=============================<Oran7MediaPlayer>========================//
     //--------------------------<Parameters>-------------------//
     Oran7MediaPlayer *mp_=nullptr;//私有处理Oran7MediaPlayer通信接口工具
     QTimer *Progress_SliderPos_ReqUpdateTimer;
-
-    QPointer<D3D11VideoItem> m_videoItem=nullptr;
-    QPointer<QQuickItem> m_host;//qml端视频画面渲染父对象host
-    QSize m_srcSize;                 // 源视频尺寸
-    ScaleMode m_scaleMode = ScaleMode::Fit;
-    bool m_syncPending = false;
-
     long total_duration_ = 0;           //当前媒体总播放时间，(单位ms)
     bool req_seeking_ = false;          //<progressSlider_SeekRequest标志位>//;
     long Current_SecPosition_ = 0; //记录当前播放位置，单位秒
-
     std::atomic_bool shutting_down_{false};//退出时防止帧堆积，直接释放标志
 
     //--------------------------<function>-------------------//
@@ -247,23 +253,7 @@ private:
     //=============================<Client QThread shared_data >======================//
     mutable QMutex client_mutex; //Client共享数据线程同步锁
     //-----------------------------------<Client Global Data>--------------------------------//
-    QString lastDirectory=QDir().homePath();    //App程序最近一次访问的目录
-
-    QString medioAbsoluteFilePath=QString();//当前正在播放的文件绝对路径
-
-    //*媒体文件缓存路径*//
-    QString appDirPath;              //应用主目录 Oran7CloudMusic
-    QString audioDirPath;           //audio 子目录
-    QString audioCoverDirPath; //audioCover存储封面子目录
-
     Oran7AppData appData=Oran7AppData();
-
-    //---------------------------------<LocalMusic module>-------------------------//
-    QList<QFileInfo> localMusic_fileList=QList<QFileInfo>();     //存储文件列表（顺序只在首次启动时与Config.json同步）
-    QSet<QString> localMusic_fileSet=QSet<QString>();          //字典-用于提升查重效率
-    QVariantList Custom_LocalMusic_playOrder=QVariantList();//临时存储用户指定顺序(路径)
-
-    QList<QMetaObject::Connection> connections;
 
     //==========================<Client Config tools>=====================>
     QMap<QString, QVariant> extractMediaInfo(const QJsonObject& root);  //分析从ffprobe生成的媒体信息json文件

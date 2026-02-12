@@ -23,9 +23,11 @@
         <file>Src/RightPage/TopMenuBar/TopRightBar.qml</file>
         <file>Src/Components/ELoader.qml</file>
         <file>Src/RightPage/MainStackView/ScreenCaptureStack.qml</file>
-        <file>Src/Components/VideoRendererItem.qml</file>
+        <file>Src/Components/Oran7VideoRendererItem.qml</file>
         <file>Src/Components/Oran7ProgressSlider.qml</file>
         <file>Src/Components/Oran7ESelectRect.qml</file>
         <file>Src/Components/Oran7FileDialog.qml</file>
+        <file>Src/Components/Oran7PlayerVolumeComponent.qml</file>
+        <file>Src/Components/Oran7ScreenCapture.qml</file>
     </qresource>
 </RCC>

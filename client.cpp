@@ -68,6 +68,9 @@ Client::Client(const QString &host,quint16 port,QObject *parent)
 
     //启动防ui频繁请求触发工具QElapsedTimer  ，已在[Client::qmlClickedReqPreparePlayMusic:]中使用
     m_callTimer.start();
+
+    //Oran7ScreenCaptureController
+    if (!m_screenCap) m_screenCap = new Oran7ScreenCaptureController(this);
 }
 
 Client::~Client()
@@ -83,8 +86,6 @@ Client::~Client()
     //释放定时器
     Progress_SliderPos_ReqUpdateTimer->stop();
     delete Progress_SliderPos_ReqUpdateTimer;
-
-    m_videoItem = nullptr;
 
     for (auto& conn : connections) {
         QObject::disconnect(conn);
@@ -109,7 +110,7 @@ int Client::InitSignalsAndSlots()
 
     connections << connect(this,&Client::reOrder_localMusicList,this,[self](const QVariantList reOrdered_list){
         QMutexLocker locker(&self->client_mutex);
-        self->Custom_LocalMusic_playOrder = reOrdered_list;//reset
+        self->appData.Custom_LocalMusic_playOrder = reOrdered_list;//reset
         // this->refreshLocalMusicList();
     },Qt::QueuedConnection);
 
@@ -121,46 +122,46 @@ QString Client::createAppDirectories()
     //获取系统临时目录文件
     // QString tempPath = QDir::tempPath(); //<--Discard
     //创建应用主目录 Oran7CloudMusic
-    this->appDirPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    QDir appDir(appDirPath);
+    this->appData.appDirPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    QDir appDir(appData.appDirPath);
     if (!appDir.exists())
     {
         if (!appDir.mkpath("."))
         {
-            qWarning() << "[Client::createAppDirectories:]Could not Create request Path:" << appDirPath;
+            qWarning() << "[Client::createAppDirectories:]Could not Create request Path:" << appData.appDirPath;
             return QString();
         }
     }
     //在应用目录下创建 audio 子目录
-    this->audioDirPath = appDirPath + "/audio";
-    QDir audioDir(audioDirPath);
+    this->appData.audioDirPath = appData.appDirPath + "/audio";
+    QDir audioDir(appData.audioDirPath);
     if (!audioDir.exists())
     {
         if (!audioDir.mkpath("."))
         {
-            qWarning() << "[Client::createAppDirectories:]Could not Create request Path:"  << audioDirPath;
+            qWarning() << "[Client::createAppDirectories:]Could not Create request Path:"  << appData.audioDirPath;
             return QString();
         }
     }
     //audioCover存储封面子目录
-    this->audioCoverDirPath = audioDirPath + "/audioCover";
-    QDir audioCoverDir(audioCoverDirPath);
+    this->appData.audioCoverDirPath = appData.audioDirPath + "/audioCover";
+    QDir audioCoverDir(appData.audioCoverDirPath);
     if(!audioCoverDir.exists())
     {
         if(!audioCoverDir.mkdir("."))
         {
-            qWarning() << "[Client::createAppDirectories:]Could not Create request Path:"  << audioCoverDirPath;
+            qWarning() << "[Client::createAppDirectories:]Could not Create request Path:"  << appData.audioCoverDirPath;
             return QString();
         }
     }
-    return QDir(audioDirPath).absolutePath();
+    return QDir(appData.audioDirPath).absolutePath();
 }
 
 void Client::saveConfig_lastCloseAppFocusedMusic()
 {
     QMutexLocker loceker(&client_mutex);
-    if(this->medioAbsoluteFilePath.isEmpty())return;
-    AppConfigManager::instance().setLastUsedFile(this->medioAbsoluteFilePath);
+    if(this->appData.audioAbsoluteFilePath.isEmpty())return;
+    AppConfigManager::instance().setLastUsedFile(this->appData.audioAbsoluteFilePath);
 }
 
 void Client::loadConfig_lastCloseAppFocusedMusic()
@@ -444,20 +445,27 @@ QMap<QString, QVariant> Client::analyzeMediaFileInfo(QString filepath)
 
 void Client::qmlClickedReqPreparePlayMusic(QString file_path)
 {
+    if(file_path.isEmpty())return;
+    appData.audioAbsoluteFilePath = file_path;
+    this->preparePlayingMedia(file_path);
+}
+
+void Client::qmlClickedReqPreparePlayVideo(QString file_path)
+{
+    if(file_path.isEmpty())return;
+    appData.videoAbsoluteFilePath = file_path;
+    this->preparePlayingMedia(file_path);
+}
+
+void Client::preparePlayingMedia(QString file_path)
+{
     QMutexLocker locker(&client_mutex);
 
     if(file_path.isEmpty())return;
-
-    // QFile file(file_path);
-    // if(file.exists() == false)
-    // {
-    //     WARNNING_LOG<<"qmlClickedReqPreparePlayMusic -> filePath of file isn't exists! -> Request for play return void;";
-    //     return;
-    // }
     qDebug()<<"REQ For Prepare Play:"<<file_path;
-    if(!medioAbsoluteFilePath.isEmpty())
+    if(!appData.CurMediaFilePath.isEmpty())
     {
-        if(medioAbsoluteFilePath!=file_path)
+        if(appData.CurMediaFilePath!=file_path)
         {
             if(mp_)
             {
@@ -468,7 +476,7 @@ void Client::qmlClickedReqPreparePlayMusic(QString file_path)
                     return;
                 }
                 m_callTimer.restart();
-                medioAbsoluteFilePath=file_path;
+                appData.CurMediaFilePath=file_path;
                 emit this->SigStop();
                 //休眠等待100ms，待内存播放器进程销毁后再触发重启
                 QTimer::singleShot(50, this,[this](){emit this->SigPlayOrPause();});
@@ -477,7 +485,7 @@ void Client::qmlClickedReqPreparePlayMusic(QString file_path)
             else
             {
                 //到这里指：上次播放的媒体已经结束，并请求播放下一首和上次不同的文件
-                medioAbsoluteFilePath=file_path;
+                appData.CurMediaFilePath=file_path;
                 emit this->SigPlayOrPause();
                 return;
             }
@@ -492,7 +500,7 @@ void Client::qmlClickedReqPreparePlayMusic(QString file_path)
     else
     {
         //上一次播放为空，直接复制路径然后触发播放
-        medioAbsoluteFilePath=file_path;
+        appData.CurMediaFilePath=file_path;
         emit this->SigPlayOrPause();
         return;
     }
@@ -921,7 +929,7 @@ void Client::OnPlayOrPause()
         //设置url播放资源
         {
             QMutexLocker locker(&client_mutex);
-            mp_->oran7mp_set_data_source(QString(medioAbsoluteFilePath).toUtf8());//<---default
+            mp_->oran7mp_set_data_source(QString(appData.CurMediaFilePath).toUtf8());//<---default
             //TEXT
             //mp_->oran7mp_set_data_source("C:/Users/funny/Videos/zzz1.mp4");
             //mp_->oran7mp_set_data_source("C:/Users/funny/QtProject.doc/MediaTestSrc/4K极致_8K__120fps_带来全球最美的_HDR.mp4");
@@ -963,7 +971,6 @@ void Client::OnStop()
     if(mp_)
     {
         qDebug() << "[Client::OnStop:]Destorying FFPlayer.";
-        // shutting_down_ = true;//make sure video frame will be free
         delete mp_;
         mp_ = nullptr;
     }
@@ -991,70 +998,40 @@ void Client::reqChangeVolumeValue(int cur_valume)
     mp_->oran7mp_set_playback_volume(cur_valume);
 }
 
-
-// void Client::createVideoItem(QQuickItem *host)
-// {
-//     if (!host) {
-//         WARNNING_LOG << "createVideoItem: host is nullptr";
-//         return;
-//     }
-
-//     // 已有则直接挂载
-//     if (m_videoItem) {
-//         m_videoItem->setParentItem(host);
-//         m_videoItem->setParent(host);
-//         QMetaObject::invokeMethod(m_videoItem, "update", Qt::QueuedConnection);
-//         return;
-//     }
-
-//     auto *item = new D3D11VideoItem(host);
-//     item->setParentItem(host);
-//     item->setParent(host);
-//     item->setVisible(true);
-
-//     if(!item)
-//     {
-//         m_videoItem = item;
-//         INFO_LOG << "Success create D3D11VideoItem";
-//     }
-//     else
-//     {
-//         WARNNING_LOG<<"Failed to create D3D11VideoItem !!!";
-//     }
-//     QMetaObject::invokeMethod(m_videoItem, "update", Qt::QueuedConnection);
-// }
-void Client::createVideoItem(QQuickItem *host)
+void Client::createVideoItem(const RenderObject key,QQuickItem *host)
 {
     if (!host) {
         WARNNING_LOG << "createVideoItem: host is nullptr";
         return;
     }
 
-    if (!m_videoItem) {
+    auto &s = m_d3d11Slots[key];
+    if (!s.item) {
         D3D11VideoItem* item = new D3D11VideoItem(nullptr);
         if(item)
         {
             //<----Successed create D3D11VideoItem
-            m_videoItem = item;
+            s.item = item;
             //传递·D3D11 Device from Qt device
-            connect(m_videoItem, &D3D11VideoItem::d3d11DeviceReady,
-                    this, [this](ID3D11Device* dev){
-                        INFO_LOG << "Client received ID3D11Device";
+            connect(s.item, &D3D11VideoItem::d3d11DeviceReady,
+                    this, [this,key](ID3D11Device* dev){
+                        INFO_LOG << "Client received ID3D11Device.";
                         m_qtDevice = dev;
                         // 如果 mp_ 已经存在,可以立即 set
                         if (mp_) {
                             setD3D11Device(m_qtDevice);
                         }
+                        //Set Oran7ScreenCaptureController D3D11Device
                     },
                     Qt::QueuedConnection);
             //传递 D3D11VideoItem::sourceVideoSize,回调syncVideoItemSize,设置VideoRenderItem中渲染大小
-            connect(m_videoItem, &D3D11VideoItem::sourceSizeChanged,
-                    this, [this](int w, int h){ setVideoSourceSize(QSize(w,h)); },
+            connect(s.item, &D3D11VideoItem::sourceSizeChanged,
+                    this, [this,key](int w, int h){ setVideoSourceSize(key,QSize(w,h)); },
                     Qt::QueuedConnection);
             //传递 D3D11VideoItem中updatePaintNode 获取到的VideoInfo
-            connect(m_videoItem,&D3D11VideoItem::sendVideoFrameInfo,this,[this](Oran7VideoInfo info){
+            connect(s.item,&D3D11VideoItem::sendVideoFrameInfo,this,[this,s](Oran7VideoInfo info){
                 //加入ScaleMode信息
-                switch (this->m_scaleMode) {
+                switch (s.scaleMode) {
                 case ScaleMode::Fit:
                     info.fillModeName = "Fit";
                     break;
@@ -1066,7 +1043,7 @@ void Client::createVideoItem(QQuickItem *host)
                 }
                 emit updateQmlRenderedVideoInfo(Oran7VideoInfo_To_QVariantMap(info));
             });
-            INFO_LOG << "Success create D3D11VideoItem";
+            INFO_LOG << "Success create D3D11VideoItem of "<<(key ==RenderObject::VideoPlayerRender ? "VideoPlayerRender" : "ScreenCaptureRender");
         }
         else
         {
@@ -1074,13 +1051,13 @@ void Client::createVideoItem(QQuickItem *host)
         }
     }
 
-    m_videoItem->setParentItem(host);
-    m_videoItem->setParent(host);
-    m_videoItem->setVisible(true);
+    s.item->setParentItem(host);
+    s.item->setParent(host);
+    s.item->setVisible(true);
 
     QPointer<QQuickItem> safeHost(host);
 
-    auto tryHook = [this, safeHost]() {
+    auto tryHook = [this, safeHost,s]() {
         if (!safeHost)
         {
             INFO_LOG<<"Host allReady destory.";
@@ -1092,7 +1069,7 @@ void Client::createVideoItem(QQuickItem *host)
             WARNNING_LOG<<"safeHost->window() return is nullptr!";
             return false;
         }
-        QMetaObject::invokeMethod(m_videoItem, "update", Qt::QueuedConnection);
+        QMetaObject::invokeMethod(s.item, "update", Qt::QueuedConnection);
         return true;
     };
 
@@ -1104,35 +1081,53 @@ void Client::createVideoItem(QQuickItem *host)
     }
 }
 
-bool Client::attachVideoItem(QQuickItem *host)
+bool Client::attachVideoItem(const RenderObject key,QQuickItem *host)
 {
     if (!host) return false;
 
-    if (!m_videoItem) {
-        createVideoItem(host);
+    auto &s = m_d3d11Slots[key];
+    if (!s.item) {
+        createVideoItem(key,host);
+        if(key == RenderObject::ScreenCaptureRender)
+        {
+            if(m_d3d11Slots[RenderObject::ScreenCaptureRender].item)
+            {
+                m_screenCap->setVideoItem(m_d3d11Slots[RenderObject::ScreenCaptureRender].item);
+                INFO_LOG<<"Successed set ScreenCaptureRender of d3d11VideoItem.";
+            }
+            else
+                WARNNING_LOG<<"Cannot set ScreenCaptureRender of d3d11VideoItem!";
+            if (m_qtDevice)
+                m_screenCap->setD3D11Device(m_qtDevice);
+            else
+                WARNNING_LOG<<"Cannot set ScreenCaptureRender of d3d11VideoItem d3d11device!";
+
+        }
         return true;
     }
 
-    m_videoItem->setParentItem(host);
-    m_videoItem->setParent(host);
-    m_videoItem->setVisible(true);
+    s.item->setParentItem(host);
+    s.item->setParent(host);
+    s.item->setVisible(true);
 
     //==========VideoRender 缩放宽度调整===========
     //让视频 item 占满 host
-    m_videoItem->setSize(host->size());   //setWidth/Height
-    m_videoItem->setPosition({0, 0});     // x=0,y=0
+    s.item->setSize(host->size());   //setWidth/Height
+    s.item->setPosition({0, 0});     // x=0,y=0
 
-    m_host = host;
-    syncVideoItemSize();
-    QObject::connect(host, &QQuickItem::widthChanged,
-                     this, &Client::scheduleSyncVideoItemSize,
-                     Qt::UniqueConnection);
-    QObject::connect(host, &QQuickItem::heightChanged,
-                     this, &Client::scheduleSyncVideoItemSize,
-                     Qt::UniqueConnection);
+    s.host = host;
+    syncVideoItemSize(key);
 
+    if(s.cW) QObject::disconnect(s.cW);
+    if(s.cH) QObject::disconnect(s.cH);
+    QObject::connect(host, &QQuickItem::widthChanged,this, [this,key]{
+        this->scheduleSyncVideoItemSize(key);
+    });
+    QObject::connect(host, &QQuickItem::heightChanged,this, [this,key]{
+         this->scheduleSyncVideoItemSize(key);
+     });
 
-    QMetaObject::invokeMethod(m_videoItem, "update", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(s.item, "update", Qt::QueuedConnection);
     return true;
 }
 
@@ -1186,55 +1181,59 @@ int Client::OutputVideo(const Frame* frame, AVFrame* copy_frame)
     //std::unique_ptr<AVFrame, void(*)(AVFrame*)> g(copy_frame, [](AVFrame* f){ av_frame_free(&f); });//--->Discard 2026/1/27
     QPointer<Client> self(this);
     if (!self) return 0;
+    auto &s = m_d3d11Slots[RenderObject::VideoPlayerRender];
 
     // if (!self->m_textureProvider) return 0;//--->Discard 2026/1/27
     // self->processVideoFrame(frame->frame);//--->Discard 2026/1/27
 
     //New --->2026/1/27   Used by D3D11VideoItem : public QQuickItem
     //copy_frame的释放权交给渲染侧D3D11VideoItem
-    if (!self->m_videoItem) { av_frame_free(&copy_frame); return 0; }
+    if (!s.item) { av_frame_free(&copy_frame); return 0; }
     AVFrame* safe = av_frame_clone(copy_frame); // clone 会 ref 内部 buffer
     av_frame_free(&copy_frame);
-    self->m_videoItem->submitFrame(safe); // submitFrame 接管所有权：以后由 item 释放
+    s.item->submitFrame(safe); // submitFrame 接管所有权：以后由 item 释放
 
     return 0;
 }
 
-void Client::syncVideoItemSize()
+void Client::syncVideoItemSize(const RenderObject &key)
 {
-    if (!m_videoItem || !m_host) return;
+    auto &s =m_d3d11Slots[key];
+    if (!s.item || !s.host) return;
 
-    const QSizeF hostSize(m_host->width(), m_host->height());
+    const QSizeF hostSize(s.host->width(), s.host->height());
     if (hostSize.isEmpty()) return;
 
     // 没拿到源尺寸前：先铺满
-    if (m_srcSize.isEmpty()) {
-        m_videoItem->setX(0);
-        m_videoItem->setY(0);
-        m_videoItem->setWidth(hostSize.width());
-        m_videoItem->setHeight(hostSize.height());
+    if (s.srcSize.isEmpty()) {
+        s.item->setX(0);
+        s.item->setY(0);
+        s.item->setWidth(hostSize.width());
+        s.item->setHeight(hostSize.height());
         return;
     }
 
-    const bool fill = (m_scaleMode == ScaleMode::Fill);
+    const bool fill = (s.scaleMode == ScaleMode::Fill);
     qreal dpr = 1.0;
-    if (m_host && m_host->window())
-        dpr = m_host->window()->devicePixelRatio();
-    QRectF r = calcAspectRectSnapped(QSizeF(m_srcSize), hostSize, fill, dpr);
+    if (s.host && s.host->window())
+        dpr = s.host->window()->devicePixelRatio();
+    QRectF r = calcAspectRectSnapped(QSizeF(s.srcSize), hostSize, fill, dpr);
 
-    m_videoItem->setX(r.x());
-    m_videoItem->setY(r.y());
-    m_videoItem->setWidth(r.width());
-    m_videoItem->setHeight(r.height());
+    s.item->setX(r.x());
+    s.item->setY(r.y());
+    s.item->setWidth(r.width());
+    s.item->setHeight(r.height());
 }
 
-void Client::scheduleSyncVideoItemSize()
+void Client::scheduleSyncVideoItemSize(const RenderObject &key)
 {
-    if (m_syncPending) return;
-    m_syncPending = true;
-    QMetaObject::invokeMethod(this, [this]{
-        m_syncPending = false;
-        syncVideoItemSize();
+    auto &s = m_d3d11Slots[key];
+    if (s.syncPending) return;
+    s.syncPending = true;
+    QMetaObject::invokeMethod(this, [this,key]{
+        auto &s = m_d3d11Slots[key];
+        s.syncPending = false;
+        syncVideoItemSize(key);
     }, Qt::QueuedConnection);
 }
 
@@ -1248,8 +1247,8 @@ void Client::addNewLocalMusic(const QVariantList &fileList)
     for(const QVariant& filePath : std::as_const(fileList))
     {
         QFileInfo fileInfo(filePath.toString().replace("file:///",""));
-        QString destFile = audioDirPath + "/" + fileInfo.fileName();
-        if(localMusic_fileSet.contains(destFile))
+        QString destFile = appData.audioDirPath + "/" + fileInfo.fileName();
+        if(appData.localMusic_fileSet.contains(destFile))
         {
             qDebug()<<"[Client::addNewLocalMusic:]Already has file:"<<fileInfo.absoluteFilePath();
             break;
@@ -1259,7 +1258,7 @@ void Client::addNewLocalMusic(const QVariantList &fileList)
 
         //拷贝文件到应用程序存储本地文件目录
         QFile::copy(fileInfo.absoluteFilePath(), destFile);
-        qDebug()<<"[Client::addNewLocalMusic:]Do copy for "<<fileInfo.absoluteFilePath() << " to "<<audioDirPath;
+        qDebug()<<"[Client::addNewLocalMusic:]Do copy for "<<fileInfo.absoluteFilePath() << " to "<<appData.audioDirPath;
     }
     //刷新
     refreshLocalMusicList();
@@ -1268,19 +1267,19 @@ void Client::addNewLocalMusic(const QVariantList &fileList)
 QVariantList& Client::getCustom_LocalMusic_playOrder()
 {
     QMutexLocker locker(&client_mutex);
-    return Custom_LocalMusic_playOrder;
+    return appData.Custom_LocalMusic_playOrder;
 }
 
 QSet<QString>& Client::getLocalMusic_fileSet()
 {
     QMutexLocker locker(&client_mutex);
-    return localMusic_fileSet;
+    return appData.localMusic_fileSet;
 }
 
 QList<QFileInfo>& Client::getLocalMusic_fileList()
 {
     QMutexLocker locker(&client_mutex);
-    return this->localMusic_fileList;
+    return this->appData.localMusic_fileList;
 }
 
 void Client::refreshLocalMusicList()
@@ -1289,13 +1288,13 @@ void Client::refreshLocalMusicList()
 
     qDebug()<<"[Client::refreshLocalMusicList:]";
     //重遍历列表
-    ApplicationContext::instance()->asyncWorker()->startSearchLocalMediaFiles_Task(this->audioDirPath);
+    ApplicationContext::instance()->asyncWorker()->startSearchLocalMediaFiles_Task(this->appData.audioDirPath);
 }
 
 void Client::loadConfig_localMusicList_playOrder()
 {
     QMutexLocker locker(&client_mutex);
-    this->Custom_LocalMusic_playOrder=AppConfigManager::instance().getLocalMusicList_palyOrder();
+    this->appData.Custom_LocalMusic_playOrder=AppConfigManager::instance().getLocalMusicList_palyOrder();
 }
 
 void Client::loadConfig_AppWindowSize(const QQmlApplicationEngine &engine)
@@ -1400,16 +1399,16 @@ QList<QFileInfo> Client::sortFileInfoList_byFilePaths(const QList<QFileInfo> &fi
 void Client::saveConfig_localMusicList_playOrder()
 {
     QMutexLocker locker(&client_mutex);
-    if(Custom_LocalMusic_playOrder.isEmpty())
+    if(appData.Custom_LocalMusic_playOrder.isEmpty())
     {
-        if(localMusic_fileList.isEmpty())return;
+        if(appData.localMusic_fileList.isEmpty())return;
 
-        for(const QFileInfo& fl : std::as_const(localMusic_fileList))
+        for(const QFileInfo& fl : std::as_const(appData.localMusic_fileList))
         {
-            Custom_LocalMusic_playOrder.append(QVariant(fl.absoluteFilePath()));
+            appData.Custom_LocalMusic_playOrder.append(QVariant(fl.absoluteFilePath()));
         }
     }
-    AppConfigManager::instance().saveLocalMusicList_playOrder(Custom_LocalMusic_playOrder);
+    AppConfigManager::instance().saveLocalMusicList_playOrder(appData.Custom_LocalMusic_playOrder);
 }
 
 void Client::saveConfig_AppWindowSize(const QQmlApplicationEngine &engine)

@@ -4,6 +4,7 @@
 #include <QStringList>
 #include <QSize>
 #include <QVariantMap>
+#include <QDir>
 
 #define MAX_SLIDER_VALUE 65536
 
@@ -160,7 +161,24 @@ struct Oran7AppData
 {
 public:
     Oran7AppData() {}
+    //=========  Global =========//
+    QString lastDirectory=QDir().homePath(); //App程序最近一次访问的目录
+    QString audioAbsoluteFilePath=QString();//上次播放的audio文件绝对路径
+    QString videoAbsoluteFilePath = QString();//上次播放的video文件绝对路径
+    QString CurMediaFilePath = QString();//当前正在播放的media文件绝对路径
+
+    //*cache 媒体文件缓存路径*//
+    QString appDirPath;              //应用主目录 Oran7CloudMusic
+    QString audioDirPath;           //audio 子目录
+    QString audioCoverDirPath; //audioCover存储封面子目录
+
+    //============== Oran7MediaPlayer Parameters ===============
     int playerVolume = 25;
+
+    //============== LocalMusic module ==============//
+    QList<QFileInfo> localMusic_fileList=QList<QFileInfo>();     //存储文件列表（顺序只在首次启动时与Config.json同步）
+    QSet<QString> localMusic_fileSet=QSet<QString>();          //字典-用于提升查重效率
+    QVariantList Custom_LocalMusic_playOrder=QVariantList();//临时存储用户指定顺序(路径)
 };
 
 struct Oran7VideoInfo{

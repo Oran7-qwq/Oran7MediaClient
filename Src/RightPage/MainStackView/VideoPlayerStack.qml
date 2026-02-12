@@ -13,7 +13,7 @@ Item {
     StackView.onActivated: {
         // 切回到该页面时，确保重新挂载
         if (videoRenderItem) {
-            Client.attachVideoItem(videoRenderItem.videoHost)
+            Client.attachVideoItem(Client.VideoPlayerRender,videoRenderItem.videoHost)
         }
     }
     Item {
@@ -106,14 +106,14 @@ Item {
         }
         //================================================
 
-        //=============== 自定义组件===================
+        //=============== 自定义组件 ===============
         FileHelper{
             id:fileHelper
         }
-        VideoRendererItem{
+        Oran7VideoRendererItem{
             id:videoRenderItem
             anchors.fill: parent
-            //fillMode: 1
+            renderObject:Client.VideoPlayerRender
             openVideoInfo: false
         }
         //openSemiCircleRect
@@ -186,7 +186,7 @@ Item {
                 }
             }
         }
-        //videoPlayerMenueRectangle
+        // =============== VideoPlayer Menue Rectangle ================
         Rectangle{
             id:videoPlayerMenueRectangle
             property real defaultWidth: 300
@@ -261,7 +261,7 @@ Item {
                             {
                                 //console.log("Now---->play:",urls[0])
                                 videoRenderItem.tryAttachDelayed()//这个很关键,获取渲染item父对象实例
-                                Client.qmlClickedReqPreparePlayMusic(urls[0])
+                                Client.qmlClickedReqPreparePlayVideo(urls[0])
                             }
                         }
 
@@ -388,7 +388,7 @@ Item {
                         }
                     }
                 }
-                //----->Second way open in local folder
+                //----->Second way : open in local folder
                 Label{
                     text:"从本地文件夹 :"
                     font.family: "微软雅黑"
@@ -518,14 +518,14 @@ Item {
                             playImage.source = playImage.pouseImageSourceUrl
                             BasicConfig.isPlaying = true
                             videoRenderItem.tryAttachDelayed()
-                            Client.qmlClickedReqPreparePlayMusic(inputFilePathTextArea.text)
+                            Client.qmlClickedReqPreparePlayVideo(inputFilePathTextArea.text)
                         }
                         function handle_InputFilePathWay_pause()
                         {
                             inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl
                             playImage.source = playImage.playImageSourceUrl
                             BasicConfig.isPlaying = false
-                            Client.qmlClickedReqPreparePlayMusic(inputFilePathTextArea.text)
+                            Client.qmlClickedReqPreparePlayVideo(inputFilePathTextArea.text)
                         }
 
                         MouseArea{
@@ -630,7 +630,7 @@ Item {
                     checked: parent.scaleMode === Client.Fit
                     onClicked: {
                         parent.scaleMode = Client.Fit
-                        Client.setScaleMode(Client.Fit)
+                        Client.setScaleMode(Client.VideoPlayerRender,Client.Fit)
                     }
                 }
                 Oran7ESelectRect {
@@ -639,7 +639,7 @@ Item {
                     checked: parent.scaleMode === Client.Fill
                     onClicked: {
                         parent.scaleMode = Client.Fill
-                        Client.setScaleMode(Client.Fill)
+                        Client.setScaleMode(Client.VideoPlayerRender,Client.Fill)
                     }
                 }
                 //==========================================//
@@ -787,6 +787,16 @@ Item {
                 text: videoProgressSlider.nowTimeText+" - "+videoProgressSlider.allTimeText
             }
 
+            //Volume set
+            Oran7PlayerVolumeComponent{
+                id:videoPlayerStackBottomControl_playerVolumeControl
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 20
+            }
+
+            // ================ bottom Control Hidden logic=================
             HoverHandler {
                 id: hover
                 acceptedDevices: PointerDevice.Mouse

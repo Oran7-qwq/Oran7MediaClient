@@ -62,8 +62,4 @@ private:
     ComPtr<ID3D11VideoProcessor> m_vp;
 
     QQuickWindow *m_window = nullptr;
-    //QSGTexture *m_sgTex = nullptr;  //QSGTexture*
-
-
-    //DebugInfo
 };

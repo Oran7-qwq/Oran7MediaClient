@@ -20,6 +20,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     OpenGL
     OpenGLWidgets
     ShaderTools
+    Multimedia
 )
 
 # 查找OpenGL
@@ -59,6 +60,7 @@ qt_add_executable(Oran7MediaClient
     filehelper.h filehelper.cpp
     d3d11videoitem.h d3d11videoitem.cpp
     bilibliliveroomaddresscatch.h bilibliliveroomaddresscatch.cpp
+    oran7screencapture.h oran7screencapture.cpp
 )
 
 # ===================== ShaderEffect 自动编译 QSB =====================
@@ -125,6 +127,7 @@ target_link_libraries(Oran7MediaClient
     Qt6::OpenGL
     Qt6::OpenGLWidgets
     Qt6::ShaderTools
+    Qt6::Multimedia
   PRIVATE
     avcodec avformat avutil avdevice avfilter swresample swscale
   PRIVATE

@@ -86,10 +86,10 @@ int main(int argc, char *argv[])
     // 针对性能优化
     format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
     format.setSwapInterval(1);  // 启用VSync
-    format.setDepthBufferSize(24);
-    format.setStencilBufferSize(8);
+    format.setDepthBufferSize(32);
+    format.setStencilBufferSize(16);
     format.setSamples(4);  // 4x MSAA
-    format.setAlphaBufferSize(8);
+    format.setAlphaBufferSize(16);
     // 使用兼容性配置文件
     format.setVersion(3, 3);
     format.setProfile(QSurfaceFormat::CompatibilityProfile);
@@ -123,6 +123,7 @@ int main(int argc, char *argv[])
                              "BasicConfig", 1, 0, "BasicConfig");
     qmlRegisterType<FileHelper>("FileHelper", 1, 0, "FileHelper");
     qmlRegisterType<BilibiliRoomAddressCatch>("BilibiliRoomAddressCatch",1,0,"BilibiliRoomAddressCatch");
+    qmlRegisterType<D3D11VideoItem>("D3D11VideoItem", 1, 0, "D3D11VideoItem");
 
     const QUrl url(QStringLiteral("qrc:/main.qml"));
     QObject::connect(
