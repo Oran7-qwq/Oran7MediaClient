@@ -24,6 +24,7 @@ public:
     QVariantList& avliStrAdr(){return m_avliStrAdr;}
 signals:
     void urlsReady();
+    void urlsError();
     void avliStrAdrChanged();
 
 private:

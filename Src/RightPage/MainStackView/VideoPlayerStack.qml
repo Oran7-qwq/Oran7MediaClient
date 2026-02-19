@@ -116,6 +116,14 @@ Item {
             renderObject:Client.VideoPlayerRender
             openVideoInfo: false
         }
+        Connections{
+            target: Client
+            function onSigStop()
+            {
+                Client.renderBlackFrame(videoRenderItem.renderObject);
+            }
+        }
+
         //openSemiCircleRect
         Rectangle{
             id:openSemiCircleRect
@@ -253,25 +261,32 @@ Item {
                             easing.type: Easing.OutCubic
                         }
                     }
+                    Connections{
+                        target:Client
+                        function onSigStop()
+                        {
+                            videoNetwork_Loader.visible = false
+                            if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_LivePlayerIndex)
+                                bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl
+                            if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex)
+                                inputFilePath_WayPlayBtnImage.source =inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl
+                        }
+                    }
                     BilibiliRoomAddressCatch{
                         id:bilibiliRoomAddressCatch
-                        property bool isAlready: false
-                        onIsAlreadyChanged: {
-                            if(bilibiliRoomAddressCatch.isAlready === true)
-                            {
-                                //console.log("Now---->play:",urls[0])
-                                videoRenderItem.tryAttachDelayed()//这个很关键,获取渲染item父对象实例
-                                Client.qmlClickedReqPreparePlayVideo(urls[0])
-                            }
-                        }
-
                         property var urls: []
                         onUrlsReady:{
-                            urls = []
+                            urls = [] //Clear
                             bilibiliRoomAddressCatch.avliStrAdr.forEach(function(url) {
                                 urls.push(url)
                             });
-                            bilibiliRoomAddressCatch.isAlready = true
+                            bilibiliRoomNumWayPlayBtnImage.sureReadyPlay = true
+                            videoNetwork_Loader.visible = false //reset
+                        }
+                        onUrlsError: {
+                            bilibiliRoomNumWayPlayBtnImage.sureReadyPlay = false
+                            bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl
+                            videoNetwork_Loader.visible = false
                         }
                     }
                     TextField {
@@ -292,7 +307,6 @@ Item {
                             if(focus)
                             {
                                 BasicConfig.newTextAreaFocused(bilibiliRoomTextFiled)
-
                                 inputBilibiliRoomNumRect.currentWidth = inputBilibiliRoomNumRect.expandedWidth
                             }
                             else
@@ -304,6 +318,7 @@ Item {
                         onTextChanged: {
                             var isValid = /^[0-9]+$/.test(text);
                             if (isValid && text.length <= 10) {
+                                videoNetwork_Loader.visible = true
                                 netStreamAddressGet_DelayTimer.restart()
                             }
                         }
@@ -340,45 +355,43 @@ Item {
                         property string bilibiliRoomNumWayBtn_playImageSourceUrl: "qrc:/image/ClearPlay.png"
                         property string bilibiliRoomNumWayBtn_pauseImageSourceUrl: "qrc:/image/ClearPause.png"
                         source: bilibiliRoomNumWayBtn_playImageSourceUrl
-                        property color bilibiliRoomNumWayPlayBtn_noReadyColorOverlay_Color: "#d63348"
-                        property color bilibiliRoomNumWayPlayBtn_sureReadyColorOverlay_Color: "#578b2c"
                         layer.enabled: true
                         layer.effect: ColorOverlay{
                             source: bilibiliRoomNumWayPlayBtnImage
-                            color:bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayPlayBtn_noReadyColorOverlay_Color
+                            color:bilibiliRoomNumWayPlayBtnImage.sureReadyPlay ? "#578b2c" : "#d63348"
                         }
                         function handle_bilibiliRoomNumWay_play()
                         {
                             bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_pauseImageSourceUrl
                             playImage.source = playImage.pouseImageSourceUrl
                             BasicConfig.isPlaying = true
-                            videoRenderItem.tryAttachDelayed()
-
+                            videoRenderItem.tryAttachDelayed() //sureLoad videoItemCpp
+                            Client.qmlClickedReqPreparePlayVideo(bilibiliRoomAddressCatch.urls[0])
                         }
                         function handle_bilibiliRoomNumWay_pause()
                         {
                             bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl
                             playImage.source = playImage.playImageSourceUrl
                             BasicConfig.isPlaying = false
-
+                            Client.qmlClickedReqPreparePlayVideo(bilibiliRoomAddressCatch.urls[0])
                         }
                         property bool sureReadyPlay : false
                         MouseArea{
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: {
-                                if(inputFilePath_WayPlayBtnImage.sureReadyPlay === true)
+                                if(bilibiliRoomNumWayPlayBtnImage.sureReadyPlay === true)
                                 {
-                                    if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex)
+                                    if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_LivePlayerIndex)
                                     {
                                         BasicConfig.isPlaying =false
-                                        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_VideoPlayerIndex
+                                        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_LivePlayerIndex
                                     }
 
                                     if(BasicConfig.isPlaying === false)
-                                        inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_play()
+                                        bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_play()
                                     else
-                                        inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause()
+                                        bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_pause()
                                 }
                             }
                             onExited: cursorShape = Qt.ArrowCursor
@@ -579,9 +592,19 @@ Item {
                         }
                         Oran7FileDialog{
                             id:inputFilePathWay_OpenFileDialog
+                            selectReset: true
                             onReady: {
                                 inputFilePathTextArea.text = filesArray[0]
                                 inputFilePathTextArea.focus = true
+                                //reset
+                                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex)
+                                {
+                                    BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_VideoPlayerIndex
+                                }
+                                playImage.source = playImage.playImageSourceUrl
+                                inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl
+                                BasicConfig.isPlaying =false
+                                Client.sigStop()
                             }
                         }
                         MouseArea{
@@ -696,14 +719,21 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex)return;
+                        if(!(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex ||
+                                BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex))return;
                         if(BasicConfig.isPlaying === false)
                         {
-                            inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_play()
+                            if(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
+                                bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_play()
+                            if(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
+                                inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_play()
                         }
                         else
                         {
-                            inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause()
+                            if(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
+                                bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_pause()
+                            if(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
+                                inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause()
                         }
                     }
                     onExited: cursorShape = Qt.ArrowCursor
@@ -905,13 +935,15 @@ Item {
             }
         }
         //====================================================//
-        // ELoader{
-        //     size: 100
-        //     color: "#ff7384"
-        //     anchors.horizontalCenter: parent.horizontalCenter
-        //     anchors.verticalCenter: parent.verticalCenter
-        //     speed: 0.8
-        // }
+        ELoader{
+            id:videoNetwork_Loader
+            size: 100
+            color: "white"
+            visible: false
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.verticalCenter: parent.verticalCenter
+            speed: 0.8
+        }
 
         //<---root
     }

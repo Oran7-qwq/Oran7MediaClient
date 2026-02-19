@@ -4,6 +4,7 @@
 #include <QMutexLocker>
 #include <QMetaObject>
 #include <QDebug>
+#include <QThread>
 
 D3D11VideoItem::D3D11VideoItem(QQuickItem *parent)
     : QQuickItem(parent)
@@ -31,6 +32,13 @@ void D3D11VideoItem::submitFrame(AVFrame *frameRef)
     if (old) av_frame_free(&old);
 
     QMetaObject::invokeMethod(this, "update", Qt::QueuedConnection);
+}
+
+void D3D11VideoItem::renderBlackFrame()
+{
+    INFO_LOG << "renderBlackFrame request";
+    m_needClearBlack.store(true, std::memory_order_release);
+    update(); // 让渲染线程尽快跑 updatePaintNode
 }
 
 void D3D11VideoItem::componentComplete()
@@ -124,18 +132,19 @@ bool D3D11VideoItem::initD3D11Resources()
     return true;
 }
 
-bool D3D11VideoItem::ensureBgraTarget(int w, int h)
+bool D3D11VideoItem::ensureBgraTarget(int w, int h,DXGI_FORMAT fmt)
 {
     if (m_bgraTex && m_bgraSize == QSize(w, h))
         return false; // 没重建
 
     m_bgraTex.Reset();
     m_bgraSize = QSize(w, h);
+    m_targetFmt = fmt;
 
     D3D11_TEXTURE2D_DESC desc{};
     desc.Width = (UINT)w;
     desc.Height = (UINT)h;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format = fmt;
     desc.MipLevels = 1;
     desc.ArraySize = 1;
     desc.SampleDesc.Count = 1;
@@ -201,6 +210,13 @@ bool D3D11VideoItem::blitNv12ToBgra(ID3D11Texture2D *srcTex, int srcW, int srcH,
     return SUCCEEDED(hr);
 }
 
+bool D3D11VideoItem::ensureSwizzlePipeline()
+{
+    if(m_vs && m_psBgraToRgba && m_sampler && m_blendOff && m_rs && m_dss)
+        return true;
+
+}
+
 QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* data)
 {
     if (!m_window && window()) {
@@ -220,6 +236,55 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
         cur = m_pendingFrame;
         m_pendingFrame = nullptr;
     }
+    //=======================Render Black======================
+    const bool needBlack = m_needClearBlack.exchange(false, std::memory_order_acq_rel);
+    if (needBlack) {
+        // 如果拿到了新视频帧，丢掉它，避免覆盖黑屏
+        if (cur) {
+            av_frame_free(&cur);
+            cur = nullptr;
+        }
+
+        if (!m_dev) {
+            if (!initD3D11Resources()) {
+                node->setRect(boundingRect());
+                delete node;
+                return nullptr;
+            }
+        }
+        // 用当前 item 尺寸来建黑屏纹理
+        int w = int(width());
+        int h = int(height());
+        if (w > 0 && h > 0) {
+            const bool recreated = ensureBgraTarget(w, h,DXGI_FORMAT_R8G8B8A8_UNORM);
+
+            // 确保这张纹理是可 RTV 的
+            ComPtr<ID3D11RenderTargetView> rtv;
+            D3D11_RENDER_TARGET_VIEW_DESC desc = {};
+            desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+            desc.Texture2D.MipSlice = 0;
+
+            HRESULT hr = m_dev->CreateRenderTargetView(m_bgraTex.Get(), &desc, rtv.GetAddressOf());
+            if (SUCCEEDED(hr) && rtv) {
+                const float color[4] = {0.f, 0.f, 0.f, 1.f};
+                m_ctx->ClearRenderTargetView(rtv.Get(), color);
+                m_ctx->Flush();
+            } else {
+                WARNNING_LOG << "CreateRenderTargetView failed hr=" << QString::number(hr, 16).toStdString();
+            }
+
+            // 确保 node 有纹理 wrapper
+            if (recreated || node->texture() == nullptr) {
+                QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
+                    m_bgraTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
+                if (tex) node->setTexture(tex);
+            }
+        }
+        node->setRect(boundingRect());
+        return node;
+    }
+    //=============================================================
 
     if (!cur) {
         if (node && node->texture()) {
@@ -255,16 +320,18 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
         emit sourceSizeChanged(srcW, srcH);
     }
 
-    const bool recreated = ensureBgraTarget(srcW, srcH);
+    const bool recreated = ensureBgraTarget(srcW, srcH,DXGI_FORMAT_R8G8B8A8_UNORM);
     if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
-        if (!m_vp || !m_vpEnum) {
+        if (!m_vp || !m_vpEnum)
+        {
             if (!ensureVideoProcessor(srcW, srcH)) {
                 av_frame_free(&cur);
                 return node;
             }
         }
         int slice = (int)(intptr_t)cur->data[1];
-        if (!blitNv12ToBgra(srcTex, srcW, srcH, slice)) {
+        if (!blitNv12ToBgra(srcTex, srcW, srcH, slice))
+        {
             av_frame_free(&cur);
             return node;
         }

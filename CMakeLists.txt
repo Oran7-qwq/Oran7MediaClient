@@ -87,11 +87,11 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E echo "Copying runtime deps to: ${APP_OUT_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${APP_OUT_DIR}"
 
-        # 1) 拷贝 ffmpeg6.0/bin 下所有内容到 exe 目录
+        # 1 拷贝 ffmpeg6.0/bin 下所有内容到 exe 目录
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${FFMPEG_BIN_DIR}" "${APP_OUT_DIR}"
 
-        # 2) 拷贝 SQLite 文件夹到 exe 目录
+        # 2 拷贝 SQLite 文件夹到 exe 目录
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${SQLITE_DIR}" "${APP_OUT_DIR}/SQLite"
     )

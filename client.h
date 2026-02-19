@@ -106,7 +106,7 @@ public:
     int OutputVideo(const Frame *frame,AVFrame* copy_frame);//VideoFrameRender渲染接口 , 会在FFplayer内层Video_refresh_thread回调
     //供qml前端调用触发Client信号
     Q_INVOKABLE void triggerSigPlayOrPause(){emit SigPlayOrPause();}
-    Q_INVOKABLE void triggerSigStop(){emit SigStop();}
+    Q_INVOKABLE void triggerSigStop(){emit sigStop();}
     Q_INVOKABLE void qmlClickedReqPreparePlayMusic(QString file_path);//由qml前端调用，music列表点击播放事件
     Q_INVOKABLE void qmlClickedReqPreparePlayVideo(QString file_path);//由VideoPlayerStack调用
     void preparePlayingMedia(QString file_path);
@@ -147,13 +147,11 @@ public:
     Q_INVOKABLE void setScaleMode(const RenderObject &key,const ScaleMode m) { m_d3d11Slots[key].scaleMode = m; syncVideoItemSize(key); }
     ID3D11Device* m_qtDevice = nullptr;//D3D11设备存储
     void setD3D11Device(ID3D11Device *dev);//定义FFplayer(ffmpeg)使用的硬件解码D3D11设备-接口
+    Q_INVOKABLE void renderBlackFrame(const RenderObject &key){m_d3d11Slots[key].item->renderBlackFrame();};
 
     //===== Oran7ScreenCapture =====//
-    QPointer<Oran7ScreenCaptureController> m_screenCap;
-    Q_INVOKABLE QObject* screenCapture() const{return m_screenCap;}
-    Q_INVOKABLE void startPreview(int index){
-        m_screenCap->startPreview(index);
-    }
+    // QPointer<Oran7ScreenCaptureController> m_screenCap;
+    // Q_INVOKABLE QObject* screenCapture() const{return m_screenCap;}
 
 public:
     //=============================<Get Or Save Client QThread shared_data Function>======================//
@@ -192,7 +190,7 @@ signals:
     //用于处理qml控件发出的暂停按键触发信号在Client建立连接
     void SigPlayOrPause();
     //用于处理qml控件发出的停止信号在Client建立连接
-    void SigStop();
+    Q_INVOKABLE void sigStop();
     //用于响应媒体文件播放暂停时，自动触发一次qml中暂停区域的onClicked ,在qml中建立连接
     void updataQmlTransforStopIcon();
     //用于传入前端qml播放的当前进度条的当前位置，在qml中建立连接

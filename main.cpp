@@ -61,19 +61,15 @@ int main(int argc, char *argv[])
     disableDPIVirtualization();
 
     //threaded 渲染循环
-    //qputenv("QSG_RHI_BACKEND", "opengl");
     qputenv("QSG_RENDER_LOOP", "basic");
+    //qputenv("QSG_RHI_BACKEND", "opengl");
     //qputenv("QSG_RHI_PROFILE", "false");
     //qputenv("QSG_INFO", "1");
-
-    // 非强制 opengl，让 Qt 默认走 D3D11
     // qputenv("QSG_RHI_BACKEND", "opengl");//Discard
-
-    // 禁用RHI验证（Qt 6.7+）
-    //qputenv("QSG_RHI_VALIDATE_LAYER", "0");
+    //qputenv("QSG_RHI_VALIDATE_LAYER", "0");// 禁用RHI验证
 #endif
 
-    // 日志调试
+    //QT_LOGGING_RULES
     qputenv("QT_LOGGING_RULES",
             "qt.scenegraph.general=true\n"
             "qt.scenegraph.renderloop=true\n"
@@ -81,17 +77,15 @@ int main(int argc, char *argv[])
             "qt.rhi.warning=true\n"
             );
 
-    // 配置渲染表面
+    // Config SurfaceFormat
     QSurfaceFormat format;
-    // 针对性能优化
     format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
     format.setSwapInterval(1);  // 启用VSync
     format.setDepthBufferSize(32);
     format.setStencilBufferSize(16);
-    format.setSamples(4);  // 4x MSAA
+    format.setSamples(4);         // 4x MSAA
     format.setAlphaBufferSize(16);
-    // 使用兼容性配置文件
-    format.setVersion(3, 3);
+    format.setVersion(3, 3);       // 使用兼容性配置文件
     format.setProfile(QSurfaceFormat::CompatibilityProfile);
     QSurfaceFormat::setDefaultFormat(format);
 
@@ -100,12 +94,10 @@ int main(int argc, char *argv[])
 
     QGuiApplication app(argc, argv);
 
-    // 设置场景图形后端
-    //QQuickWindow::setSceneGraphBackend("software");  // 使用软件渲染器
-
+    // 设置场景图形后端-->Direct3D11
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
 
-    // Qt 默认 backend（Windows 下通常是 D3D11）
+    // Qt 默认 backend-->Windows : D3D11
     qDebug() << "Graphics API:" << QQuickWindow::graphicsApi();
 
     app.setWindowIcon(QIcon(":/image/Oran7.jpg"));
@@ -189,13 +181,9 @@ ConfigRET Config_AppConfigManager_Load(QQmlApplicationEngine &engine)
         QString SearchLocalMediaFiles_folderPath=ApplicationContext::instance()->client()->createAppDirectories();
         if(SearchLocalMediaFiles_folderPath.isEmpty())
             throw std::runtime_error("AppData Temp folder in Oran7CloudMusic Could not be Created correctly");
-
         ApplicationContext::instance()->client()->loadConfig_localMusicList_playOrder();//*加载localMusicList自定义排序Config配置
-
         ApplicationContext::instance()->asyncWorker()->startSearchLocalMediaFiles_Task(SearchLocalMediaFiles_folderPath); //*Load localMusic列表（Async）
-
         ApplicationContext::instance()->client()->loadConfig_lastCloseAppFocusedMusic();//*加载last focus music info
-
         ApplicationContext::instance()->client()->loadConfig_AppSetPlayerVolume();//*Load PlayerVolume Config
     }
     catch (std::exception &e)
@@ -211,9 +199,7 @@ ConfigRET Config_AppConfigManager_Save()
     try
     {
         ApplicationContext::instance()->client()->saveConfig_lastCloseAppFocusedMusic();//* 保存客户端最近一次播放的文件
-
         ApplicationContext::instance()->client()->saveConfig_localMusicList_playOrder();//* 保存Custom自定义LocalMusicList_playOrder的Config配置
-
         ApplicationContext::instance()->client()->saveConfig_AppSetPlayerVolume();
 
         AppConfigManager::instance().saveConfig();// 确保程序退出前保存配置

@@ -258,9 +258,11 @@ Rectangle{
         //响应播放状态改变，播放图标对应改变
         Connections{
             target:BasicConfig
-            function onIsPlayingChanged(){
-                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)return;
-                if(BasicConfig.isPlaying===true)
+            function onIsPlayingChanged()
+            {
+                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
+                    return;
+                if(BasicConfig.isPlaying === true)
                 {
                     playImage.visible=false
                     pauseImage.visible=true

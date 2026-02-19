@@ -9,6 +9,7 @@ FileDialog{
     fileMode:FileDialog.OpenFile
     property string lastOpenFileDir: ""
     property var filesArray: []
+    property bool selectReset: false
     signal ready()
     currentFolder:{
         if(root.lastOpenFileDir==="")
@@ -32,6 +33,8 @@ FileDialog{
             root.lastOpenFileDir=currentFolder
         }
         const files=selectedFiles.map(url => url.toString())
+        if(root.selectReset === true)
+            filesArray = []
         files.forEach(fileUrl => {
                 const localPath = fileUrl.replace("file:///", "")
                 root.filesArray.push(localPath)

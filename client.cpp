@@ -70,7 +70,7 @@ Client::Client(const QString &host,quint16 port,QObject *parent)
     m_callTimer.start();
 
     //Oran7ScreenCaptureController
-    if (!m_screenCap) m_screenCap = new Oran7ScreenCaptureController(this);
+    // if (!m_screenCap) m_screenCap = new Oran7ScreenCaptureController(this);
 }
 
 Client::~Client()
@@ -100,7 +100,7 @@ int Client::InitSignalsAndSlots()
         qDebug()<<"SigPlayOrPause Reveived";
         this->OnPlayOrPause();
     },Qt::QueuedConnection);
-    connections << connect(this,&Client::SigStop,this,[=](){
+    connections << connect(this,&Client::sigStop,this,[=](){
         this->OnStop();
     },Qt::QueuedConnection);
     connections << connect(this->Progress_SliderPos_ReqUpdateTimer,&QTimer::timeout,this,[=](){
@@ -477,9 +477,9 @@ void Client::preparePlayingMedia(QString file_path)
                 }
                 m_callTimer.restart();
                 appData.CurMediaFilePath=file_path;
-                emit this->SigStop();
+                emit this->sigStop();
                 //休眠等待100ms，待内存播放器进程销毁后再触发重启
-                QTimer::singleShot(50, this,[this](){emit this->SigPlayOrPause();});
+                QTimer::singleShot(100, this,[this](){emit this->SigPlayOrPause();});
                 return;
             }
             else
@@ -874,7 +874,7 @@ int Client::message_loop(void *arg)
             qDebug() << __FUNCTION__ << "FFP_MSG_PLAY_FNISH";
             /*数据播放完毕，停止播放*/
             emit this->updataQmlTransforStopIcon();//更新qml前端暂停图标为停止
-            emit this->SigStop();//停止并销毁Oran7MediaPlayer，以及其中内层的所有子线程，在安静时清空播放器运行资源
+            emit this->sigStop();//停止并销毁Oran7MediaPlayer，以及其中内层的所有子线程，在安静时清空播放器运行资源
             shutting_down_ = false;//主动播放结束-->重置不拦截video frame
             /*触发自动播放下一首*/
             emit this->triggerPlayNext();
@@ -1088,21 +1088,20 @@ bool Client::attachVideoItem(const RenderObject key,QQuickItem *host)
     auto &s = m_d3d11Slots[key];
     if (!s.item) {
         createVideoItem(key,host);
-        if(key == RenderObject::ScreenCaptureRender)
-        {
-            if(m_d3d11Slots[RenderObject::ScreenCaptureRender].item)
-            {
-                m_screenCap->setVideoItem(m_d3d11Slots[RenderObject::ScreenCaptureRender].item);
-                INFO_LOG<<"Successed set ScreenCaptureRender of d3d11VideoItem.";
-            }
-            else
-                WARNNING_LOG<<"Cannot set ScreenCaptureRender of d3d11VideoItem!";
-            if (m_qtDevice)
-                m_screenCap->setD3D11Device(m_qtDevice);
-            else
-                WARNNING_LOG<<"Cannot set ScreenCaptureRender of d3d11VideoItem d3d11device!";
-
-        }
+        // if(key == RenderObject::ScreenCaptureRender)
+        // {
+        //     if(m_d3d11Slots[RenderObject::ScreenCaptureRender].item)
+        //     {
+        //         m_screenCap->setVideoItem(m_d3d11Slots[RenderObject::ScreenCaptureRender].item);
+        //         INFO_LOG<<"Successed set ScreenCaptureRender of d3d11VideoItem.";
+        //     }
+        //     else
+        //         WARNNING_LOG<<"Cannot set ScreenCaptureRender of d3d11VideoItem!";
+        //     if (m_qtDevice)
+        //         m_screenCap->setD3D11Device(m_qtDevice);
+        //     else
+        //         WARNNING_LOG<<"Cannot set ScreenCaptureRender of d3d11VideoItem d3d11device!";
+        // }
         return true;
     }
 

@@ -31,6 +31,7 @@ class D3D11VideoItem : public QQuickItem
 public:
     explicit D3D11VideoItem(QQuickItem *parent = nullptr);
     void submitFrame(AVFrame *frameRef);
+    void renderBlackFrame();
 
 signals:
     void d3d11DeviceReady(ID3D11Device* dev);
@@ -46,9 +47,10 @@ protected:
 private:
     void hookWindow(QQuickWindow *window);
     bool initD3D11Resources();
-    bool ensureBgraTarget(int w, int h);
+    bool ensureBgraTarget(int w, int h,DXGI_FORMAT fmt);
     bool ensureVideoProcessor(int srcW, int srcH);
     bool blitNv12ToBgra(ID3D11Texture2D *srcTex, int srcW, int srcH, int slice);
+    bool ensureSwizzlePipeline();
 
     QMutex m_mutex;
     AVFrame *m_pendingFrame = nullptr;
@@ -57,9 +59,19 @@ private:
     ComPtr<ID3D11VideoDevice> m_videoDev;
     ComPtr<ID3D11VideoContext> m_videoCtx;
     ComPtr<ID3D11Texture2D> m_bgraTex;
+
+    ComPtr<ID3D11VertexShader> m_vs;//swizzle渲染管线
+    ComPtr<ID3D11PixelShader>  m_psBgraToRgba;
+    ComPtr<ID3D11SamplerState> m_sampler;
+    ComPtr<ID3D11BlendState>   m_blendOff;
+    ComPtr<ID3D11RasterizerState> m_rs;
+    ComPtr<ID3D11DepthStencilState> m_dss;
+
     QSize m_bgraSize;
+    DXGI_FORMAT m_targetFmt = DXGI_FORMAT_UNKNOWN;
     ComPtr<ID3D11VideoProcessorEnumerator> m_vpEnum;
     ComPtr<ID3D11VideoProcessor> m_vp;
+    std::atomic_bool m_needClearBlack{false};
 
     QQuickWindow *m_window = nullptr;
 };

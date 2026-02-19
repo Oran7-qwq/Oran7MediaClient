@@ -101,6 +101,7 @@ Item
     property int globalPlayingFocus: -1
     property int globalPlayer_MusicPlayerIndex: 0
     property int globalPlayer_VideoPlayerIndex: 1
+    property int globalPlayer_LivePlayerIndex: 2
     //全局播放器使用foucus工厂
     property var globalPlayerItems: [
         {focusedPlayingItem: "MusicPlayer"},//0

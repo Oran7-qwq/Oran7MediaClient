@@ -56,21 +56,25 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
                     else
                     {
                         NECTWORK_LOG << QString("ATTENTION: Live is not being").toStdWString();
+                        emit urlsError();
                     }
                 }
                 else
                 {
                     NECTWORK_LOG << QString("API ERROR: Code").toStdWString() << code << "-" << message.toStdString();
+                    emit urlsError();
                 }
             }
             else
             {
                 NECTWORK_LOG << QString("ERROR: Cant not analyse JSON response").toStdWString();
+                emit urlsError();
             }
         }
         else
         {
             NECTWORK_LOG << QString("NectWork ERROR:").toStdWString() << reply->errorString().toStdString();
+            emit urlsError();
         }
         reply->deleteLater();
     });
