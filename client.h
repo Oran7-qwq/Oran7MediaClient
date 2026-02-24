@@ -145,13 +145,13 @@ public:
     Q_INVOKABLE bool attachVideoItem(const RenderObject key,QQuickItem* host);
     void setVideoSourceSize(const RenderObject &key,const QSize &s) { m_d3d11Slots[key].srcSize = s; scheduleSyncVideoItemSize(key); }
     Q_INVOKABLE void setScaleMode(const RenderObject &key,const ScaleMode m) { m_d3d11Slots[key].scaleMode = m; syncVideoItemSize(key); }
-    ID3D11Device* m_qtDevice = nullptr;//D3D11设备存储
+    ComPtr<ID3D11Device> m_qtDevice = nullptr; //D3D11设备临时存储
     void setD3D11Device(ID3D11Device *dev);//定义FFplayer(ffmpeg)使用的硬件解码D3D11设备-接口
     Q_INVOKABLE void renderBlackFrame(const RenderObject &key){m_d3d11Slots[key].item->renderBlackFrame();};
 
     //===== Oran7ScreenCapture =====//
-    // QPointer<Oran7ScreenCaptureController> m_screenCap;
-    // Q_INVOKABLE QObject* screenCapture() const{return m_screenCap;}
+    QPointer<Oran7ScreenCaptureController> m_screenCap;
+    Q_INVOKABLE QObject* screenCapture() const{return m_screenCap;}
 
 public:
     //=============================<Get Or Save Client QThread shared_data Function>======================//

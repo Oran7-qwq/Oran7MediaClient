@@ -27,13 +27,13 @@ int Oran7MediaPlayer::oran7mp_create(std::function<int (void *)> msg_loop)
 {
     //创建内层播放器FFplayer对象实例
     if(ffplayer_)
-        std::cout<<"[Oran7MediaPlayer::oran7mp_create:]ffplayer still exist.\n";
+        INFO_LOG<<"Oran7MediaPlayer::oran7mp_create:ffplayer still exist.\n";
     else
-        std::cout<<"[Oran7MediaPlayer::oran7mp_create:]ffplayer not exist,prepare to new one.\n";
+        INFO_LOG<<"Oran7MediaPlayer::oran7mp_create:ffplayer not exist,prepare to new one.\n";
     ffplayer_ = new FFPlayer();
     if(!ffplayer_)
     {
-        std::cout << " new FFPlayer() failed\n ";
+        WARNING_LOG << " new FFPlayer() failed\n ";
         return -1;
     }
     //绑定消息循环回调函数

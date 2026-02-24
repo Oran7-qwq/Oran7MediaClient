@@ -56,6 +56,9 @@ ConfigRET Config_AppConfigManager_Save();
 #undef main
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
 #ifdef Q_OS_WIN
     QLoggingCategory::setFilterRules("qt.gui.imageio=false");
     disableDPIVirtualization();
@@ -98,7 +101,7 @@ int main(int argc, char *argv[])
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
 
     // Qt 默认 backend-->Windows : D3D11
-    qDebug() << "Graphics API:" << QQuickWindow::graphicsApi();
+    INFO_LOG << "Graphics API:" << QQuickWindow::graphicsApi();
 
     app.setWindowIcon(QIcon(":/image/Oran7.jpg"));
     app.setApplicationName("Oran7MediaClient");
@@ -152,7 +155,7 @@ int main(int argc, char *argv[])
 
     Config_AppConfigManager_RET = Config_AppConfigManager_Load(engine);
     if(Config_AppConfigManager_RET == ConfigRET::Config_SUCCESSED)
-        qDebug()<<"[AppConfigManager:]Successfully load user Config,";
+        CONFIG_LOG<<"AppConfigManager:Successfully load user Config,";
 
     QObject::connect(&app, &QGuiApplication::aboutToQuit, &app,[&engine]() mutable {
         ApplicationContext::instance()->client()->StopPlayerRuning();//先确保杀死Oran7MediaPlayer防止Video_refresh还在触发回调qml渲染对象
@@ -162,7 +165,7 @@ int main(int argc, char *argv[])
 
         Config_AppConfigManager_RET = Config_AppConfigManager_Save();
         if(Config_AppConfigManager_RET == ConfigRET::Config_SUCCESSED)
-            qDebug()<<"[AppConfigManager:]Successfully save user Config.";
+            CONFIG_LOG<<"[AppConfigManager:Successfully save user Config.";
     });
 
     return app.exec();

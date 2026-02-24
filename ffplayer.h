@@ -69,7 +69,7 @@ public:
    static int decode_interrupt_cb(void *ctx)//avformat_open_input read中断回调，避免网络堵塞无法退出
     {
         FFPlayer *p = static_cast<FFPlayer*>(ctx);
-        return p->abort_request ? 1 : 0;
+        return p->abort_request.load() ? 1 : 0;
     }
     /*判断数据包队列是否读满，从而让数据读取线程休眠，性能优化*/
     int stream_has_enough_packets(AVStream * st, int stream_id, PacketQueue * queue);
@@ -159,7 +159,7 @@ public:
     // **包队列**//
     PacketQueue audioq;             // 音频packet队列
     PacketQueue videoq;             // 视频packet队列
-    int abort_request = 0;            // 各个数据缓存队列退出请求标志
+    std::atomic<int> abort_request{0};            // 各个数据缓存队列退出请求标志
 
     AVStream		*audio_st = NULL;              // 音频流
     AVStream		*video_st = NULL;              // 视频流

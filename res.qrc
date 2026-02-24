@@ -62,5 +62,8 @@
         <file>image/ep_select.png</file>
         <file>image/formkit_file.png</file>
         <file>app.rc</file>
+        <file>shaders/NOTE.txt</file>
+        <file>shaders/bgra2rgba_vs.hlsl</file>
+        <file>shaders/bgra2rgba_ps.hlsl</file>
     </qresource>
 </RCC>

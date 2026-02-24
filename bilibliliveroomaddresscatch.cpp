@@ -23,7 +23,7 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
     request.setRawHeader("Referer", "https://live.bilibili.com");
     request.setRawHeader("Origin", "https://live.bilibili.com");
 
-    NECTWORK_LOG << QString("Request URL:").toStdWString() << (url.toString()).toStdString();
+    NETWORK_LOG << QString("Request URL:") << (url.toString()).toStdString();
 
     QNetworkReply *reply = manager->get(request);
 
@@ -31,23 +31,23 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
         if (reply->error() == QNetworkReply::NoError)
         {
             QByteArray data = reply->readAll();
-            NECTWORK_LOG << QString("Origin Response:").toStdWString() << data.left(500).toStdString() << "...";
+            NETWORK_LOG << QString("Origin Response:") << data.left(500).toStdString() << "...";
 
             QJsonDocument doc = QJsonDocument::fromJson(data);
             if (!doc.isNull()) {
                 QJsonObject root = doc.object();
                 int code = root["code"].toInt();
                 QString message = root["message"].toString();
-                NECTWORK_LOG << QString("RETURN CODE:").toStdWString() << code;
-                NECTWORK_LOG << QString("MESSAGE:").toStdWString() << message.toStdString();
+                NETWORK_LOG << QString("RETURN CODE:") << code;
+                NETWORK_LOG << QString("MESSAGE:") << message.toStdString();
 
                 if (code == 0)
                 {
                     QJsonObject data_obj = root["data"].toObject();
                     QString title = data_obj["title"].toString();
                     int live_status = data_obj["live_status"].toInt();
-                    NECTWORK_LOG << QString("Room Title:").toStdWString() << title.toStdString();
-                    NECTWORK_LOG << QString("Living Statue:").toStdWString() << live_status << QString("(1=Living, 0=NotLiving, 2=Changed)").toStdWString();
+                    NETWORK_LOG << QString("Room Title:") << title.toStdString();
+                    NETWORK_LOG << QString("Living Statue:") << live_status << QString("(1=Living, 0=NotLiving, 2=Changed)");
 
                     if (live_status == 1)
                     {
@@ -55,25 +55,25 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
                     }
                     else
                     {
-                        NECTWORK_LOG << QString("ATTENTION: Live is not being").toStdWString();
+                        NETWORK_LOG << QString("ATTENTION: Live is not being");
                         emit urlsError();
                     }
                 }
                 else
                 {
-                    NECTWORK_LOG << QString("API ERROR: Code").toStdWString() << code << "-" << message.toStdString();
+                    NETWORK_LOG << QString("API ERROR: Code") << code << "-" << message.toStdString();
                     emit urlsError();
                 }
             }
             else
             {
-                NECTWORK_LOG << QString("ERROR: Cant not analyse JSON response").toStdWString();
+                NETWORK_LOG << QString("ERROR: Cant not analyse JSON response");
                 emit urlsError();
             }
         }
         else
         {
-            NECTWORK_LOG << QString("NectWork ERROR:").toStdWString() << reply->errorString().toStdString();
+            NETWORK_LOG << QString("NectWork ERROR:") << reply->errorString().toStdString();
             emit urlsError();
         }
         reply->deleteLater();
@@ -97,7 +97,7 @@ QVariant BilibiliRoomAddressCatch::getAvailableStreams(const QJsonObject &data_o
             if (playurl.contains("stream"))
             {
                 QJsonArray streams = playurl["stream"].toArray();
-                NECTWORK_LOG << QString("\n=== Avaliable Stream ===").toStdWString();
+                NETWORK_LOG << QString("\n=== Avaliable Stream ===");
 
                 for (int i = 0; i < streams.size(); ++i)
                 {
@@ -107,7 +107,7 @@ QVariant BilibiliRoomAddressCatch::getAvailableStreams(const QJsonObject &data_o
                     {
                         QJsonObject stream_info = stream["stream_info"].toObject();
                         QString protocol_name = stream_info["protocol_name"].toString();
-                        NECTWORK_LOG << QString("\nSTREAM").toStdWString() << (i+1) << QString("PROTICAL:").toStdWString() << protocol_name.toStdString();
+                        NETWORK_LOG << QString("\nSTREAM") << (i+1) << QString("PROTICAL:") << protocol_name.toStdString();
                     }
 
                     if (stream.contains("format"))
@@ -118,7 +118,7 @@ QVariant BilibiliRoomAddressCatch::getAvailableStreams(const QJsonObject &data_o
                         {
                             QJsonObject format = formats[j].toObject();
                             QString format_name = format["format_name"].toString();
-                            NECTWORK_LOG << QString("  FORMAT:").toStdWString() << format_name.toStdString();
+                            NETWORK_LOG << QString("  FORMAT:") << format_name.toStdString();
 
                             if (format_name == "flv")
                             {
@@ -131,8 +131,8 @@ QVariant BilibiliRoomAddressCatch::getAvailableStreams(const QJsonObject &data_o
                                         QJsonObject codec = codecs[k].toObject();
                                         QString codec_name = codec["codec_name"].toString();
                                         QString base_url = codec["base_url"].toString();
-                                        NECTWORK_LOG << QString("    CODEC:").toStdWString() << codec_name.toStdString();
-                                        NECTWORK_LOG<< QString("    BASE URL:").toStdWString() << base_url.toStdString();
+                                        NETWORK_LOG << QString("    CODEC:") << codec_name.toStdString();
+                                        NETWORK_LOG<< QString("    BASE URL:") << base_url.toStdString();
 
                                         if (codec.contains("url_info"))
                                         {
@@ -145,7 +145,7 @@ QVariant BilibiliRoomAddressCatch::getAvailableStreams(const QJsonObject &data_o
                                                 QString extra = url_info["extra"].toString();
 
                                                 QString full_url = host + base_url + extra;
-                                                NECTWORK_LOG << QString("    LINK").toStdWString() << (l+1) << ":" << full_url.toStdString();
+                                                NETWORK_LOG << QString("    LINK") << (l+1) << ":" << full_url.toStdString();
                                                 m_avliStrAdr.append(QString(full_url));
                                                 emit avliStrAdrChanged();
                                             }
@@ -160,17 +160,17 @@ QVariant BilibiliRoomAddressCatch::getAvailableStreams(const QJsonObject &data_o
             }
             else
             {
-                NECTWORK_LOG << QString("ERROR: no stream key").toStdWString();
+                NETWORK_LOG << QString("ERROR: no stream key");
             }
         }
         else
         {
-            NECTWORK_LOG << QString("ERROR: no playurl key").toStdWString();
+            NETWORK_LOG << QString("ERROR: no playurl key");
         }
     }
     else
     {
-        qDebug() << QString("ERROR: no playurl_info key").toStdWString();
+        qDebug() << QString("ERROR: no playurl_info key");
     }
     return QVariant();
 }

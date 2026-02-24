@@ -7,14 +7,13 @@ Item {
     Item{
         id:root
         anchors.fill: parent
-        // Oran7ScreenCapture {
-        //     anchors.fill: parent
-        //     targetFps: 15
-        //     screenIndex: 0
-        // }
+        Oran7ScreenCaptureComponent {
+            anchors.fill: parent
+        }
         ELoader{
             size: 100
             color: "white"
+            opacity: 0
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: parent.verticalCenter
             speed: 0.8

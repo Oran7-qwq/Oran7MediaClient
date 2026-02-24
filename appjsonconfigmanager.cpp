@@ -1,4 +1,5 @@
 #include "appjsonconfigmanager.h"
+#include "globalhelper.h"
 
 #include <utility>
 
@@ -72,7 +73,7 @@ bool AppConfigManager::loadConfig()
     }
     if (!file.open(QIODevice::ReadOnly))
     {
-        qWarning() << "[AppConfigManager::loadConfig:]Cannot open config file, using defaults";
+        WARNING_LOG << "AppConfigManager::loadConfig:Cannot open config file, using defaults";
         return false;
     }
 
@@ -80,7 +81,7 @@ bool AppConfigManager::loadConfig()
     QJsonDocument doc = QJsonDocument::fromJson(data);
 
     if (doc.isNull() || !doc.isObject()) {
-        qWarning() << "Invalid config file, using defaults";
+        WARNING_LOG << "Invalid config file, using defaults";
         return false;
     }
 
@@ -93,7 +94,6 @@ bool AppConfigManager::loadConfig()
     }
     if (!m_config.contains("recent_files_max_count")) {
         m_config["recent_files_max_count"] = 10;
-        qDebug()<<"===========ERROR2";
     }
     //确保最后使用文件配置存在
     if (!m_config.contains("last_used_file")){
@@ -110,7 +110,7 @@ bool AppConfigManager::saveConfig()
     QFile file(configFilePath());
     if (!file.open(QIODevice::WriteOnly))
     {
-        qWarning() << "[AppConfigManager::saveConfig:]Cannot open config file for writing";
+        WARNING_LOG << "AppConfigManager::saveConfig:Cannot open config file for writing";
         return false;
     }
     QJsonDocument doc(m_config);
@@ -337,7 +337,7 @@ void AppConfigManager::addRecentFile(const QString& filePath)
     // 更新配置
     updateRecentFilesArray(recentFiles);
 
-    qDebug() << "[AppConfigManager::addRecentFile:]Added recent file:" << filePath << "Total:" << recentFiles.size();
+    CONFIG_LOG << "AppConfigManager::addRecentFile:Added recent file:" << filePath << "Total:" << recentFiles.size();
 }
 
 void AppConfigManager::removeRecentFile(const QString& filePath)
@@ -346,14 +346,14 @@ void AppConfigManager::removeRecentFile(const QString& filePath)
 
     if (recentFiles.removeAll(filePath) > 0) {
         updateRecentFilesArray(recentFiles);
-        qDebug() << "Removed recent file:" << filePath;
+        CONFIG_LOG << "Removed recent file:" << filePath;
     }
 }
 
 void AppConfigManager::clearRecentFiles()
 {
     updateRecentFilesArray(QStringList());
-    qDebug() << "Cleared all recent files";
+    CONFIG_LOG << "Cleared all recent files";
 }
 
 QStringList AppConfigManager::getRecentFiles() const
@@ -442,7 +442,7 @@ void AppConfigManager::setLastUsedFile(const QString& filePath)
     // 验证文件路径是否有效
     if (!QFile::exists(filePath))
     {
-        qWarning() << "[AppConfigManager::setLastUsedFile:] File does not exist:" << filePath;
+        WARNING_LOG << "AppConfigManager::setLastUsedFile:File does not exist:" << filePath;
         return;
     }
 
@@ -458,7 +458,7 @@ void AppConfigManager::setLastUsedFile(const QString& filePath)
         // emit lastUsedFileChanged();
         // emit configChanged("last_used_file", filePath);
 
-        qDebug() << "[AppConfigManager::setLastUsedFile:] Last used file set to:" << filePath;
+        CONFIG_LOG << "AppConfigManager::setLastUsedFile:Last used file set to:" << filePath;
     }
 }
 
@@ -472,7 +472,7 @@ void AppConfigManager::clearLastUsedFile()
         // 自动保存配置
         saveConfig();
 
-        qDebug() << "[AppConfigManager::clearLastUsedFile:] Last used file cleared";
+        CONFIG_LOG << "AppConfigManager::clearLastUsedFile:Last used file cleared";
     }
 }
 

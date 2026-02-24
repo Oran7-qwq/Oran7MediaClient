@@ -8,8 +8,6 @@
 	"INPUTS" : 
 	[
 		"C:/Users/funny/QtProject.doc/Oran7MediaClient/app.rc",
-		"C:/Users/funny/QtProject.doc/Oran7MediaClient/shaders/VideoPlayerRenderGLSL.vert",
-		"C:/Users/funny/QtProject.doc/Oran7MediaClient/shaders/VideoPlayerRenderGLSL.frag",
 		"C:/Users/funny/QtProject.doc/Oran7MediaClient/image/ClearPause.png",
 		"C:/Users/funny/QtProject.doc/Oran7MediaClient/image/hideContent.png",
 		"C:/Users/funny/QtProject.doc/Oran7MediaClient/image/history.png",

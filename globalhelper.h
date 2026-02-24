@@ -5,6 +5,7 @@
 #include <QSize>
 #include <QVariantMap>
 #include <QDir>
+#include <QThread>
 
 #define MAX_SLIDER_VALUE 65536
 
@@ -21,141 +22,106 @@ public:
 };
 
 //==================<Self define logInfo Out>=================//
-#include <iostream>
-#include <sstream>
-class INFO_Logger
+#pragma once
+#include <QDebug>
+#include <QDateTime>
+
+class Logger
 {
 public:
-    INFO_Logger(const char *file,const int line,const std::string& prefix = "[INFO]")
-        : enable(true)
-        , specific(false)
+    enum class Level
     {
-        if(specific==true)
-            stream << prefix << "["<<file<<":"<<line<<"]------->";
-        else
-            stream << prefix<<"--->";
-    }
-    template<typename T>
-    INFO_Logger& operator<<(const T& value)
+        Client,
+        Info,
+        Warning,
+        Network,
+        Config
+    };
+
+    Logger(Level level,
+           const char* file,
+           int line,
+           bool showDetail = false,
+           bool showData = false,
+           bool showThreadId = false)
+        : m_debug(levelToQtType(level))
     {
-        if(enable)
-            stream << value;
-        return *this;
-    }
-    ~INFO_Logger()
-    {
-        if(enable)
-            std::cout<<stream.str()<<std::endl;
-    }
+        m_debug.noquote().nospace();
 
-    INFO_Logger(const INFO_Logger&)=delete;
-    INFO_Logger& operator=(const INFO_Logger&)=delete;
-
-private:
-    bool enable;
-    bool specific;
-    std::ostringstream stream;
-};
-#define INFO_LOG INFO_Logger(__FILE__,__LINE__)
-
-
-class WARNNING_Logger
-{
-public:
-    WARNNING_Logger(const char *file,const int line,const std::string& prefix = "[WARNNING]")
-        : enable(true)
-        , specific(false)
-    {
-        if(specific==true)
-            stream << prefix << "["<<file<<":"<<line<<"]------->";
-        else
-            stream << prefix<<"--->";
-    }
-    template<typename T>
-    WARNNING_Logger& operator<<(const T& value)
-    {
-        if(enable)
-            stream << value;
-        return *this;
-    }
-    ~WARNNING_Logger()
-    {
-        if(enable)
-            std::cout<<stream.str()<<std::endl;
-    }
-
-    WARNNING_Logger(const WARNNING_Logger&)=delete;
-    WARNNING_Logger& operator=(const WARNNING_Logger&)=delete;
-
-private:
-    bool enable;
-    bool specific;
-    std::ostringstream stream;
-};
-#define WARNNING_LOG WARNNING_Logger(__FILE__,__LINE__)
-
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <locale>
-#include <codecvt>
-
-class NECTWORK_Logger
-{
-public:
-    NECTWORK_Logger(const char *file, const int line, const std::string& prefix = "[NECTWORK]")
-        : enable(true), specific(false)
-    {
-        if (specific == true)
-            stream << prefix << "[" << file << ":" << line << "]---->";
-        else
-            stream << prefix << "--->";
-    }
-
-    template<typename T>
-    NECTWORK_Logger& operator<<(const T& value)
-    {
-        if (enable)
-            stream << value;
-        return *this;
-    }
-
-    // 专门处理输出宽字符
-    NECTWORK_Logger& operator<<(const std::wstring& wvalue)
-    {
-        if (enable)
+        QString header;
+        if(showData)
         {
-            // 转换宽字符为UTF-8，然后输出
-            std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-            std::string str = converter.to_bytes(wvalue);
-            stream << str;
+            header += QDateTime::currentDateTime()
+            .toString("hh:mm:ss.zzz");
         }
+        if (showDetail)
+        {
+            header += QString("[%1:%2]").arg(file).arg(line);
+        }
+        header += ("[" + levelToString(level) + "]")
+                             .leftJustified(12, ' ');
+
+        if(showThreadId)
+        {
+            header += QString("[T:%1]")
+            .arg((quintptr)QThread::currentThreadId())
+                .leftJustified(10, ' ');
+        }
+
+        header += " ---> ";
+        m_debug << header;
+    }
+
+    template<typename T>
+    Logger& operator<<(const T& value)
+    {
+        m_debug << value;
         return *this;
     }
 
-    ~NECTWORK_Logger()
-    {
-        if (enable)
-            std::cout << stream.str() << std::endl;
-    }
-
-    NECTWORK_Logger(const NECTWORK_Logger&) = delete;
-    NECTWORK_Logger& operator=(const NECTWORK_Logger&) = delete;
+    ~Logger() = default;
 
 private:
-    bool enable;
-    bool specific;
-    std::ostringstream stream;
+    static QtMsgType levelToQtType(Level level)
+    {
+        switch (level)
+        {
+        case Level::Warning:
+            return QtWarningMsg;
+        default:
+            return QtDebugMsg;
+        }
+    }
+
+    static QString levelToString(Level level)
+    {
+        switch (level)
+        {
+        case Level::Client:  return "CLIENT";
+        case Level::Info:    return "INFO";
+        case Level::Warning: return "WARNING";
+        case Level::Network: return "NETWORK";
+        case Level::Config:  return "CONFIG";
+        }
+        return "UNKNOWN";
+    }
+
+private:
+    QDebug m_debug;
 };
 
-#define NECTWORK_LOG NECTWORK_Logger(__FILE__, __LINE__)
+
+#define CLIENT_LOG   Logger(Logger::Level::Client,  __FILE__, __LINE__)
+#define INFO_LOG     Logger(Logger::Level::Info,    __FILE__, __LINE__)
+#define WARNING_LOG  Logger(Logger::Level::Warning, __FILE__, __LINE__)
+#define NETWORK_LOG  Logger(Logger::Level::Network, __FILE__, __LINE__)
+#define CONFIG_LOG   Logger(Logger::Level::Config,  __FILE__, __LINE__)
 
 
 #include <QString>
 #ifdef _WIN32
 #include <dxgiformat.h>
 #endif
-
 //=====================Global Parameters Or DataStruct===============//
 struct Oran7AppData
 {

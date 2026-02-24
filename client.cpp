@@ -4,6 +4,7 @@
 #include "globalhelper.h"
 #include "appjsonconfigmanager.h"
 #include "applicationcontext.h"
+#include "d3d11deviceprovider.h"
 
 #include <thread>
 #include <functional>
@@ -97,22 +98,42 @@ int Client::InitSignalsAndSlots()
     QPointer<Client> self(this);
     //============[Oran7MediaPlayer]============
     connections << connect(this,&Client::SigPlayOrPause,this,[=](){
-        qDebug()<<"SigPlayOrPause Reveived";
+        CLIENT_LOG<<"SigPlayOrPause Reveived";
         this->OnPlayOrPause();
-    },Qt::QueuedConnection);
+        },Qt::QueuedConnection);
     connections << connect(this,&Client::sigStop,this,[=](){
         this->OnStop();
-    },Qt::QueuedConnection);
+        },Qt::QueuedConnection);
     connections << connect(this->Progress_SliderPos_ReqUpdateTimer,&QTimer::timeout,this,[=](){
         reqUpdateCurrentPosition();
-    },Qt::QueuedConnection);
+        },Qt::QueuedConnection);
+
     this->Progress_SliderPos_ReqUpdateTimer->start(100);//启动触发前端播放进度条更新的定时器,间隔10ms
 
     connections << connect(this,&Client::reOrder_localMusicList,this,[self](const QVariantList reOrdered_list){
         QMutexLocker locker(&self->client_mutex);
         self->appData.Custom_LocalMusic_playOrder = reOrdered_list;//reset
         // this->refreshLocalMusicList();
-    },Qt::QueuedConnection);
+        },Qt::QueuedConnection);
+
+    //Get d3dDev from D3D11DeviceProvider
+    //传递·D3D11 Device from Qt device
+    connections << connect(D3D11DeviceProvider::instance(), &D3D11DeviceProvider::deviceReady,
+        this, [this](/**dev*/){
+            CLIENT_LOG << "Client received ID3D11Device.";
+            // -->从 provider acquire，确保 AddRef 生命周期正确
+            m_qtDevice.Attach(D3D11DeviceProvider::instance()->acquireDevice());
+            // 如果 mp_ 已经存在,可以立即 set
+            if (mp_) {
+                setD3D11Device(m_qtDevice.Get());
+            }
+            //Set Oran7ScreenCaptureController D3D11Device
+        },Qt::QueuedConnection);
+    //Oran7ScreenCapture error info
+    connections << connect(m_screenCap,&Oran7ScreenCaptureController::errorOccurred,
+        this,[this](const QString &err){
+            WARNING_LOG<<err;
+        },Qt::QueuedConnection);
 
     return 0;
 }
@@ -128,7 +149,7 @@ QString Client::createAppDirectories()
     {
         if (!appDir.mkpath("."))
         {
-            qWarning() << "[Client::createAppDirectories:]Could not Create request Path:" << appData.appDirPath;
+            WARNING_LOG << "Client::createAppDirectories:Could not Create request Path:" << appData.appDirPath;
             return QString();
         }
     }
@@ -139,7 +160,7 @@ QString Client::createAppDirectories()
     {
         if (!audioDir.mkpath("."))
         {
-            qWarning() << "[Client::createAppDirectories:]Could not Create request Path:"  << appData.audioDirPath;
+            WARNING_LOG << "Client::createAppDirectories:Could not Create request Path:"  << appData.audioDirPath;
             return QString();
         }
     }
@@ -150,7 +171,7 @@ QString Client::createAppDirectories()
     {
         if(!audioCoverDir.mkdir("."))
         {
-            qWarning() << "[Client::createAppDirectories:]Could not Create request Path:"  << appData.audioCoverDirPath;
+            WARNING_LOG << "Client::createAppDirectories:Could not Create request Path:"  << appData.audioCoverDirPath;
             return QString();
         }
     }
@@ -170,7 +191,7 @@ void Client::loadConfig_lastCloseAppFocusedMusic()
     QMap<QString,QVariant> mediaInfo= this->analyzeMediaFileInfo(lastFilePath);
     if(mediaInfo["success"].toInt() !=0)
     {
-        qDebug()<<"[Client::loadLastCloseAppFocusedMusic:]mediaInfo extract Failed:"<<mediaInfo["success"].toInt();
+        CONFIG_LOG<<"Client::loadLastCloseAppFocusedMusic:mediaInfo extract Failed:"<<mediaInfo["success"].toInt();
         return;
     }
     /*编码封面路径*/
@@ -348,7 +369,7 @@ QMap<QString, QVariant> Client::analyzeMediaFileInfo(QString filepath)
         // qDebug() << "Starting FFprobe with arguments:";
         // qDebug() << "  Executable:" << ffprobe_exePath;
         // qDebug() << "  Working dir:" << ffprobe.workingDirectory();
-        qWarning() << "[Client::analyzeMediaFileInfo:]FFprobe timed out for file:" << fileInfo.absoluteFilePath();
+        WARNING_LOG << "Client::analyzeMediaFileInfo:FFprobe timed out for file:" << fileInfo.absoluteFilePath();
         ffprobe.kill(); // 强制终止进程
 
         //修改success标志并直接返回
@@ -358,7 +379,7 @@ QMap<QString, QVariant> Client::analyzeMediaFileInfo(QString filepath)
 
     if (ffprobe.exitCode() != 0)
     {
-        qWarning() << "[Client::analyzeMediaFileInfo:]FFprobe ERROR:" << ffprobe.readAllStandardError();
+        WARNING_LOG << "Client::analyzeMediaFileInfo:FFprobe ERROR:" << ffprobe.readAllStandardError();
         //修改success标志并直接返回
         mediaInfo["success"] = 2;
         return mediaInfo;
@@ -367,7 +388,7 @@ QMap<QString, QVariant> Client::analyzeMediaFileInfo(QString filepath)
     QByteArray output = ffprobe.readAllStandardOutput();
     if (output.isEmpty())
     {
-        qWarning() << "[Client::analyzeMediaFileInfo:]FFprobe returned empty output for file:" << fileInfo.absoluteFilePath();
+        WARNING_LOG << "Client::analyzeMediaFileInfo:FFprobe returned empty output for file:" << fileInfo.absoluteFilePath();
         //修改success标志并直接返回
         mediaInfo["success"] = 3;
         return mediaInfo;
@@ -377,7 +398,7 @@ QMap<QString, QVariant> Client::analyzeMediaFileInfo(QString filepath)
     QJsonDocument doc = QJsonDocument::fromJson(output,&parseError);
     if (parseError.error != QJsonParseError::NoError)
     {
-        qWarning() << "[Client::analyzeMediaFileInfo:]JSON parse error:" << parseError.errorString();
+        WARNING_LOG << "Client::analyzeMediaFileInfo:JSON parse error:" << parseError.errorString();
         //修改success标志并直接返回
         mediaInfo["success"] = 4;
         return mediaInfo;
@@ -410,7 +431,7 @@ QMap<QString, QVariant> Client::analyzeMediaFileInfo(QString filepath)
         //ffprobe parameters setting
         QStringList arguments02;
         arguments02 << "-i" << absFilePath
-                    << "-map" << "0:v"
+                    << "-map" << "0:v?"
                     << "-c" << "copy"
                     << coverPath;
         //ffmpeg.exec()
@@ -418,7 +439,7 @@ QMap<QString, QVariant> Client::analyzeMediaFileInfo(QString filepath)
         ffmpeg.start(ffmpegPath, arguments02);
         if (!ffmpeg.waitForFinished(30000))
         {
-            qWarning() << "[Client::analyzeMediaFileInfo:]Getting audioCover time out:" << absFilePath;
+            WARNING_LOG << "Client::analyzeMediaFileInfo:Getting audioCover time out:" << absFilePath;
             ffmpeg.kill();
             //修改success标志并直接返回
             mediaInfo["success"] = 6;
@@ -426,8 +447,8 @@ QMap<QString, QVariant> Client::analyzeMediaFileInfo(QString filepath)
         }
         if (ffmpeg.exitCode() != 0)
         {
-            qWarning() << "[Client::analyzeMediaFileInfo:]ffmpeg exit ERROR of" << absFilePath;
-            qDebug() << "[Client::analyzeMediaFileInfo:]ffmpeg exit ERROR:" << ffmpeg.readAllStandardError();
+            WARNING_LOG << "Client::analyzeMediaFileInfo:ffmpeg exit ERROR of" << absFilePath;
+            WARNING_LOG << "Client::analyzeMediaFileInfo:ffmpeg exit ERROR:" << ffmpeg.readAllStandardError();
             //修改success标志并直接返回
             mediaInfo["success"] = 7;
             return mediaInfo;
@@ -435,7 +456,7 @@ QMap<QString, QVariant> Client::analyzeMediaFileInfo(QString filepath)
         // 验证封面文件  小于1KB MayBe无效封面
         if (QFileInfo(coverPath).size() < 1024)
         {
-            qWarning() << "[Client::analyzeMediaFileInfo:]AudioCover file may be invalid:" << coverPath;
+            WARNING_LOG << "Client::analyzeMediaFileInfo:AudioCover file may be invalid:" << coverPath;
             QFile::remove(coverPath);
         }
     }
@@ -462,7 +483,7 @@ void Client::preparePlayingMedia(QString file_path)
     QMutexLocker locker(&client_mutex);
 
     if(file_path.isEmpty())return;
-    qDebug()<<"REQ For Prepare Play:"<<file_path;
+    INFO_LOG<<"REQ For Prepare Play:"<<file_path;
     if(!appData.CurMediaFilePath.isEmpty())
     {
         if(appData.CurMediaFilePath!=file_path)
@@ -472,7 +493,7 @@ void Client::preparePlayingMedia(QString file_path)
                 //播放中--->切换播放文件，防频繁点击事件
                 if (m_callTimer.elapsed() < CALL_INTERVAL_MS)//100ms
                 {
-                    qDebug() << "[Client::qmlClickedReqPreparePlayMusic:]The call is too frequent and the request has been ignored";
+                    INFO_LOG << "Client::qmlClickedReqPreparePlayMusic:The call is too frequent and the request has been ignored";
                     return;
                 }
                 m_callTimer.restart();
@@ -514,13 +535,13 @@ void Client::registerHandler_(quint8 opcode,Packedhandler_ handler)
 
 void Client::onConnected()
 {
-    qDebug() << "[Client:]connected Sever host:" << Client_socket->peerAddress()<<", port:"<<Client_socket->peerPort();
+    CLIENT_LOG << "connected Sever host:" << Client_socket->peerAddress()<<", port:"<<Client_socket->peerPort();
     connect(Client_socket,&QTcpSocket::readyRead,this,&Client::onReadReady);
 }
 
 void Client::onDisconnected()
 {
-    qDebug()<<"[Client:]Disconnected from server";
+    CLIENT_LOG<<"Disconnected from server";
 }
 
 void Client::onReadReady()
@@ -528,12 +549,12 @@ void Client::onReadReady()
     QTcpSocket *socket=qobject_cast<QTcpSocket*>(sender());
     //验证是同一客户端提示
     Q_ASSERT(socket==Client_socket);
-    qDebug()<<"[Client:]:"<<socket->peerAddress()<<"be responsed.";
+    CLIENT_LOG<<socket->peerAddress()<<"be responsed.";
 
     //向缓冲区读入数据
     responseFromSever.append(socket->readAll());
 
-    qDebug()<<"[CLIENT_BUFFER:]responseFromSever:"<<responseFromSever.toHex(' ');
+    CLIENT_LOG<<"[CLIENT_BUFFER:]responseFromSever:"<<responseFromSever.toHex(' ');
     while(responseFromSever.size()>=5)
     {
         QDataStream stream(responseFromSever);
@@ -544,18 +565,18 @@ void Client::onReadReady()
         if(responseFromSever.size()<totalLength)
         {
             //数据传输是分块发送的，如果缓冲区数据不完整，继续读取
-            qDebug()<<"[Client:]respons not enought.Expected:"<<totalLength<<" ,Actual:"<<responseFromSever.size();
-            qDebug()<<"[CLIENT_BUFFER:]responseFromSever:"<<responseFromSever.toHex(' ');
+            CLIENT_LOG<<"respons not enought.Expected:"<<totalLength<<" ,Actual:"<<responseFromSever.size();
+            CLIENT_LOG<<"CLIENT_BUFFER:responseFromSever:"<<responseFromSever.toHex(' ');
             break;
         }
         //数据完整，开始解析
-        qDebug()<<"[Client:]Data is already ";
+        CLIENT_LOG<<"Data is already ";
 
         // quint8 opcode=*reinterpret_cast<const quint8*>(&responseFromSever.constData()[4]);//用指针转换方法
         quint8 opcode=static_cast<quint8>(responseFromSever.at(4));
         if(opcode!=Login_&&opcode!=LoadingData_)
         {
-            qDebug()<<"[Client:]Opcode of Login is Error."<<"Comming Opcode:"<<opcode;
+            CLIENT_LOG<<"Opcode of Login is Error."<<"Comming Opcode:"<<opcode;
             return;
         }
 
@@ -573,7 +594,7 @@ void Client::onReadReady()
         }
         else
         {
-            qDebug()<<"[Client:]Unknown opcode:"<<opcode;
+            CLIENT_LOG<<"Unknown opcode:"<<opcode;
             break;
         }
     }
@@ -586,7 +607,7 @@ void Client::validateLogin(QString username,QString password)
 {
     if(username.size()!=11)//检查长度
     {
-        qDebug()<<"[Client:]Error username format.";
+        CLIENT_LOG<<"Error username format.";
         emit loginInputFormatValid(1);
         return;
     }
@@ -598,16 +619,16 @@ void Client::validateLogin(QString username,QString password)
             //账号中只能含有数字，否则格式错误
             if(!(x>='0'&&x<='9'))
             {
-                qDebug()<<"[Client:]Error username format.";
+                CLIENT_LOG<<"Error username format.";
                 emit loginInputFormatValid(1);
                 return;
             }
         }
     }
-    qDebug()<<"[Client:]password.size:"<<password.size();
+    CLIENT_LOG<<"password.size:"<<password.size();
     if(!(password.size()>=8&&password.size()<16))//检查长度
     {
-        qDebug()<<"[Client:]Error password format.";
+        CLIENT_LOG<<"Error password format.";
         emit loginInputFormatValid(2);
         return;
     }
@@ -619,14 +640,14 @@ void Client::validateLogin(QString username,QString password)
             //密码只能含有数字大小写字母和下滑线，否则格式错误
             if(!((x>='0'&&x<='9')||(x>='a'&&x<='z')||(x>='A'&&x<='Z')||(x=='_')))
             {
-                qDebug()<<"[Client:]Error password format.";
+                CLIENT_LOG<<"Error password format.";
                 emit loginInputFormatValid(2);
                 return;
             }
         }
     }
     emit loginInputFormatValid(0);
-    qDebug()<<"[Client:]Password right format.";
+    CLIENT_LOG<<"Password right format.";
     //基本格式正确,开始询问服务器
 
     //<构造传输协议>
@@ -648,8 +669,8 @@ void Client::validateLogin(QString username,QString password)
     // [password]
     query.append(password.toUtf8());
 
-    qDebug() << "[Client:]query size:" << query.size();
-    qDebug() << "[Client:]query:" << query.toHex(' ');
+    CLIENT_LOG << "query size:" << query.size();
+    CLIENT_LOG << "query:" << query.toHex(' ');
     Client_socket->write(query);
     Client_socket->flush();//强制刷新缓冲区快速获得回应
 }
@@ -688,7 +709,7 @@ void Client::loginResponse(quint32 totalLength, quint8 opcode, const QByteArray 
         break;
     case 0x02:emit loginInputFormatValid(5);
         break;
-    default:qDebug()<<"[Client:]Error statueCode:"<<statueCode;
+    default:CLIENT_LOG<<"Error statueCode:"<<statueCode;
         break;
     }
 }
@@ -713,8 +734,8 @@ void Client::loadingSeverUserDataQuery()
     query.append(static_cast<char>((UID >> 8) & 0xFF));
     query.append(static_cast<char>(UID & 0xFF));
     // qDebug()<<"[Client:]UID:"<<UID;
-    qDebug() << "[Client:]query size:" << query.size();
-    qDebug() << "[Client:]query:" << query.toHex(' ');
+    CLIENT_LOG << "query size:" << query.size();
+    CLIENT_LOG << "query:" << query.toHex(' ');
     Client_socket->write(query);
     Client_socket->flush();//强制刷新缓冲区快速获得回应
 }
@@ -734,7 +755,7 @@ void Client::explainSeverUserData(quint32 totalLength, quint8 opcode, const QByt
     in.setByteOrder(QDataStream::BigEndian);//大端序解析
     quint32 Song_Count;
     in>>totalLength>>opcode>>Song_Count;
-    qDebug()<<"[Client:]Song_Count:"<<Song_Count;
+    CLIENT_LOG<<"Song_Count:"<<Song_Count;
     QList<QList<QString>> list_musicList;
     for(quint32 i=0;i<Song_Count;i++)
     {
@@ -793,17 +814,17 @@ void Client::explainSeverUserData(quint32 totalLength, quint8 opcode, const QByt
         query.bindValue(":id",list_musicList[i][4]);
         if(!query.exec())
         {
-            qDebug()<<"[Client:]<explainSeverUserData>Failed to query for search id.";
+            CLIENT_LOG<<"<explainSeverUserData>Failed to query for search id.";
             return;
         }
         if(query.next()&&query.value(0).toInt()==0)
         {
-            qDebug()<<"[Client:]<explainSeverUserData>Not matched for id:"<<list_musicList[i][4];
-            qDebug()<<"[Client:]<explainSeverUserData>SureBegain to load new local music...";
+            CLIENT_LOG<<"<explainSeverUserData>Not matched for id:"<<list_musicList[i][4];
+            CLIENT_LOG<<"<explainSeverUserData>SureBegain to load new local music...";
         }
         else
         {
-            qDebug()<<"[Client:]<explainSeverUserData>Already have music of id:"<<list_musicList[i][4];
+            CLIENT_LOG<<"<explainSeverUserData>Already have music of id:"<<list_musicList[i][4];
             continue;
         }
 
@@ -829,12 +850,12 @@ void Client::explainSeverUserData(quint32 totalLength, quint8 opcode, const QByt
 
         // 执行并检查错误
         if (!query.exec()) {
-            qDebug() << "[Client:]<explainSeverUserData>Failed to insert music_data.";
-            qDebug() << "SQL Error:" << query.lastError().text();
-            qDebug() << "Failed Query:" << query.lastQuery();
+            CLIENT_LOG << "<explainSeverUserData>Failed to insert music_data.";
+            CLIENT_LOG << "SQL Error:" << query.lastError().text();
+            CLIENT_LOG << "Failed Query:" << query.lastQuery();
             return;
         } else {
-            qDebug() << "[Client:]<explainSeverUserData>Successfully inserted music_data.";
+            CLIENT_LOG << "<explainSeverUserData>Successfully inserted music_data.";
         }
     }
     for(int i=0;i<listSize;i++)
@@ -852,7 +873,7 @@ int Client::message_loop(void *arg)
 {
     Oran7MediaPlayer *mp = (Oran7MediaPlayer *)arg;
     // 线程循环
-    qDebug() << "[Client::message_loop:]message_loop into";
+    CLIENT_LOG << "Client::message_loop:message_loop into";
     while (1)
     {
         AVMessage msg;
@@ -863,15 +884,15 @@ int Client::message_loop(void *arg)
             break;
         switch (msg.value) {
         case FFP_MSG_FLUSH:
-            qDebug() << __FUNCTION__ << " FFP_MSG_FLUSH\n";
+            CLIENT_LOG << __FUNCTION__ << " FFP_MSG_FLUSH";
             break;
         case FFP_MSG_PREPARED:
-            qDebug() << __FUNCTION__ << " FFP_MSG_PREPARED";
+            CLIENT_LOG << __FUNCTION__ << " FFP_MSG_PREPARED";
             //准备就绪，通过oran7mp_start()发送FFP_REQ_START启动请求
             mp->oran7mp_start();
             break;
         case FFP_MSG_PLAY_FNISH:
-            qDebug() << __FUNCTION__ << "FFP_MSG_PLAY_FNISH";
+            CLIENT_LOG << __FUNCTION__ << "FFP_MSG_PLAY_FNISH";
             /*数据播放完毕，停止播放*/
             emit this->updataQmlTransforStopIcon();//更新qml前端暂停图标为停止
             emit this->sigStop();//停止并销毁Oran7MediaPlayer，以及其中内层的所有子线程，在安静时清空播放器运行资源
@@ -880,7 +901,7 @@ int Client::message_loop(void *arg)
             emit this->triggerPlayNext();
             break;
         case FFP_MSG_FIND_STREAM_INFO:
-            qDebug() << __FUNCTION__ << "FFP_MSG_FIND_STREAM_INFO";
+            CLIENT_LOG << __FUNCTION__ << "FFP_MSG_FIND_STREAM_INFO";
             /*获取当前媒体文件总播放时长*/
             getTotalDuration();
             break;
@@ -888,7 +909,7 @@ int Client::message_loop(void *arg)
             req_seeking_ = false;
             break;
         default:
-            qDebug()  << __FUNCTION__ << " default " << msg.value <<"\n";
+            CLIENT_LOG  << __FUNCTION__ << " default " << msg.value <<"";
             break;
         }
         msg_free_obj_res(&msg);
@@ -897,13 +918,13 @@ int Client::message_loop(void *arg)
         /*Ui请求播放进度条更新*/
         // reqUpdateCurrentPosition();
     }
-    qDebug() << "[Client::message_loop:]message_loop leave"<< "\n";
+    CLIENT_LOG << "Client::message_loop:message_loop leave"<< "";
     return 0;
 }
 
 void Client::OnPlayOrPause()
 {
-    qDebug() << "[Client::OnPlayOrPause:]OnPlayOrPause signal called.\n";
+    INFO_LOG << "Client::OnPlayOrPause:OnPlayOrPause signal called.";
     int ret = 0;
     // 先检测mp是否已经创建
     if(!mp_)
@@ -919,13 +940,13 @@ void Client::OnPlayOrPause()
         ret = mp_->oran7mp_create(std::bind(&Client::message_loop, this, std::placeholders::_1));
         if(ret<0)
         {
-            qDebug() << "[Client::OnPlayOrPause:]Oran7MediaPlayer create failed";
+            INFO_LOG << "Client::OnPlayOrPause:Oran7MediaPlayer create failed";
             delete mp_;
             mp_ = NULL;
             return;
         }
         mp_->AddVideoRefreshCallback(std::bind(&Client::OutputVideo, this,std::placeholders::_1,std::placeholders::_2));
-        setD3D11Device(this->m_qtDevice);//绑定QtScencGraphi正在使用的D3D11Device
+        setD3D11Device(this->m_qtDevice.Get());//绑定QtScencGraphi正在使用的D3D11Device
         //设置url播放资源
         {
             QMutexLocker locker(&client_mutex);
@@ -941,25 +962,25 @@ void Client::OnPlayOrPause()
         if(ret <0)
         {
             //出现异常，准备失败
-            qDebug() << "[Client::OnPlayOrPause:]Oran7MediaPlayer create failed";
+            INFO_LOG << "Client::OnPlayOrPause:Oran7MediaPlayer create failed";
             delete mp_;
             mp_ = NULL;
             return;
         }
-        qDebug()<<"[Client::OnPlayOrPause:]Successed create and prepare async of Oran7MediaPlayer.\n ";
+        INFO_LOG<<"Client::OnPlayOrPause:Successed create and prepare async of Oran7MediaPlayer. ";
         /*设置默认保存的音量条*/
     }
     else
     {
-        qDebug()<<"[Client::OnPlayOrPause:]All Already _ User Clicked PlayOrPause.\n ";
+        INFO_LOG<<"Client::OnPlayOrPause:All Already _ User Clicked PlayOrPause. ";
         if(mp_->oran7mp_get_state() == MP_STATE_STARTED)
         {
-            qDebug()<<"[Client::OnPlayOrPause:]Will be paused.\n ";
+            INFO_LOG<<"Client::OnPlayOrPause:Will be paused. ";
             mp_->oran7mp_pause();
         }
         else if(mp_->oran7mp_get_state() == MP_STATE_PAUSED)
         {
-            qDebug()<<"[Client::OnPlayOrPause:]Will be started.\n ";
+            INFO_LOG<<"Client::OnPlayOrPause:Will be started. ";
             mp_->oran7mp_start();
         }
     }
@@ -967,10 +988,10 @@ void Client::OnPlayOrPause()
 
 void Client::OnStop()
 {
-    qDebug() << "[Client::OnStop:]OnStop signal called.";
+    INFO_LOG << "Client::OnStop:OnStop signal called.";
     if(mp_)
     {
-        qDebug() << "[Client::OnStop:]Destorying FFPlayer.";
+        INFO_LOG << "Client::OnStop:Destorying FFPlayer.";
         delete mp_;
         mp_ = nullptr;
     }
@@ -979,7 +1000,7 @@ void Client::OnStop()
 int Client::progressSlider_Seek(int cur_valule)
 {
     //curvalue  单位s
-    qDebug()<<"[Client::ProgressSlider_Seek:]Client Request Progress Slider seet to:"<<cur_valule;
+    INFO_LOG<<"Client::ProgressSlider_Seek:Client Request Progress Slider seet to:"<<cur_valule;
     if(mp_)
     {
         req_seeking_=true;
@@ -1001,7 +1022,7 @@ void Client::reqChangeVolumeValue(int cur_valume)
 void Client::createVideoItem(const RenderObject key,QQuickItem *host)
 {
     if (!host) {
-        WARNNING_LOG << "createVideoItem: host is nullptr";
+        WARNING_LOG << "createVideoItem: host is nullptr";
         return;
     }
 
@@ -1012,18 +1033,6 @@ void Client::createVideoItem(const RenderObject key,QQuickItem *host)
         {
             //<----Successed create D3D11VideoItem
             s.item = item;
-            //传递·D3D11 Device from Qt device
-            connect(s.item, &D3D11VideoItem::d3d11DeviceReady,
-                    this, [this,key](ID3D11Device* dev){
-                        INFO_LOG << "Client received ID3D11Device.";
-                        m_qtDevice = dev;
-                        // 如果 mp_ 已经存在,可以立即 set
-                        if (mp_) {
-                            setD3D11Device(m_qtDevice);
-                        }
-                        //Set Oran7ScreenCaptureController D3D11Device
-                    },
-                    Qt::QueuedConnection);
             //传递 D3D11VideoItem::sourceVideoSize,回调syncVideoItemSize,设置VideoRenderItem中渲染大小
             connect(s.item, &D3D11VideoItem::sourceSizeChanged,
                     this, [this,key](int w, int h){ setVideoSourceSize(key,QSize(w,h)); },
@@ -1047,7 +1056,7 @@ void Client::createVideoItem(const RenderObject key,QQuickItem *host)
         }
         else
         {
-            WARNNING_LOG<<"Failed to create D3D11VideoItem !!!";
+            WARNING_LOG<<"Failed to create D3D11VideoItem !!!";
         }
     }
 
@@ -1066,9 +1075,10 @@ void Client::createVideoItem(const RenderObject key,QQuickItem *host)
         QQuickWindow *w = safeHost->window();
         if (!w)
         {
-            WARNNING_LOG<<"safeHost->window() return is nullptr!";
+            WARNING_LOG<<"safeHost->window() return is nullptr!";
             return false;
         }
+        D3D11DeviceProvider::instance()->attachWindow(w);//获取window d3d11Dev
         QMetaObject::invokeMethod(s.item, "update", Qt::QueuedConnection);
         return true;
     };
@@ -1086,23 +1096,25 @@ bool Client::attachVideoItem(const RenderObject key,QQuickItem *host)
     if (!host) return false;
 
     auto &s = m_d3d11Slots[key];
+    if(s.host == host)
+        return true;
     if (!s.item) {
         createVideoItem(key,host);
-        // if(key == RenderObject::ScreenCaptureRender)
-        // {
-        //     if(m_d3d11Slots[RenderObject::ScreenCaptureRender].item)
-        //     {
-        //         m_screenCap->setVideoItem(m_d3d11Slots[RenderObject::ScreenCaptureRender].item);
-        //         INFO_LOG<<"Successed set ScreenCaptureRender of d3d11VideoItem.";
-        //     }
-        //     else
-        //         WARNNING_LOG<<"Cannot set ScreenCaptureRender of d3d11VideoItem!";
-        //     if (m_qtDevice)
-        //         m_screenCap->setD3D11Device(m_qtDevice);
-        //     else
-        //         WARNNING_LOG<<"Cannot set ScreenCaptureRender of d3d11VideoItem d3d11device!";
-        // }
-        return true;
+    }
+
+    switch (key)
+    {
+    case RenderObject::ScreenCaptureRender:
+        if(s.item == m_screenCap->bindVideoItem())
+            break;
+        INFO_LOG<<"ScreenCapture new bind videoRenderItem.";
+        m_screenCap->setVideoItem(s.item);
+        m_screenCap->setOutputIndex(0);
+        m_screenCap->setFps(60);
+        m_screenCap->setDrawMouse(true);
+        break;
+    default:
+        break;
     }
 
     s.item->setParentItem(host);
@@ -1113,7 +1125,6 @@ bool Client::attachVideoItem(const RenderObject key,QQuickItem *host)
     //让视频 item 占满 host
     s.item->setSize(host->size());   //setWidth/Height
     s.item->setPosition({0, 0});     // x=0,y=0
-
     s.host = host;
     syncVideoItemSize(key);
 
@@ -1166,13 +1177,13 @@ void Client::reqUpdateCurrentPosition()
 int Client::OutputVideo(const Frame* frame, AVFrame* copy_frame)
 {
     if (!copy_frame) {
-        WARNNING_LOG<<"Client of OutputVideo - copy_frame is nullptr.";
+        WARNING_LOG<<"Client of OutputVideo - copy_frame is nullptr.";
         return -1;
     }
 
     if(shutting_down_.load(std::memory_order_relaxed) == true)
     {
-        WARNNING_LOG<<"shutting_down_ is true.";
+        WARNING_LOG<<"shutting_down_ is true.";
         //av_frame_free(&copy_frame);
         return 0;
     }
@@ -1249,7 +1260,7 @@ void Client::addNewLocalMusic(const QVariantList &fileList)
         QString destFile = appData.audioDirPath + "/" + fileInfo.fileName();
         if(appData.localMusic_fileSet.contains(destFile))
         {
-            qDebug()<<"[Client::addNewLocalMusic:]Already has file:"<<fileInfo.absoluteFilePath();
+            CLIENT_LOG<<"addNewLocalMusic:Already has file:"<<fileInfo.absoluteFilePath();
             break;
         }
 
@@ -1257,7 +1268,7 @@ void Client::addNewLocalMusic(const QVariantList &fileList)
 
         //拷贝文件到应用程序存储本地文件目录
         QFile::copy(fileInfo.absoluteFilePath(), destFile);
-        qDebug()<<"[Client::addNewLocalMusic:]Do copy for "<<fileInfo.absoluteFilePath() << " to "<<appData.audioDirPath;
+        CLIENT_LOG<<"addNewLocalMusic:Do copy for "<<fileInfo.absoluteFilePath() << " to "<<appData.audioDirPath;
     }
     //刷新
     refreshLocalMusicList();
@@ -1285,7 +1296,7 @@ void Client::refreshLocalMusicList()
 {
     emit flushClear_LocalMusicStackList();
 
-    qDebug()<<"[Client::refreshLocalMusicList:]";
+    CLIENT_LOG<<"refreshLocalMusicList...";
     //重遍历列表
     ApplicationContext::instance()->asyncWorker()->startSearchLocalMediaFiles_Task(this->appData.audioDirPath);
 }
@@ -1311,7 +1322,7 @@ void Client::loadConfig_AppWindowSize(const QQmlApplicationEngine &engine)
         AppWindow->setProperty("height",AppWindow_height);
     }
 
-    qDebug()<<"[Client::loadConfig:]Set AppWindow_width"<<AppWindow_width<<"; AppWindow_height"<<AppWindow_height;
+    CONFIG_LOG<<"LoadConfig of set AppWindow_width"<<AppWindow_width<<"; AppWindow_height"<<AppWindow_height;
 }
 
 void Client::loadConfig_AppWindowPosition(const QQmlApplicationEngine &engine)
@@ -1343,12 +1354,8 @@ QList<QFileInfo> Client::sortFileInfoList_byFilePaths(const QList<QFileInfo> &fi
     bool qVariantList_orderPaths_isEmpty=false;
     if(orderPaths.isEmpty())
     {
-        qDebug()<<"[Client::sortFileInfoList_byFilePaths:]Config of orderPaths is Empty";
+        CONFIG_LOG<<"in sortFileInfoList_byFilePaths : Config of orderPaths is Empty";
         qVariantList_orderPaths_isEmpty=true;
-    }
-    else
-    {
-        qDebug()<<"[Client::sortFileInfoList_byFilePaths:]Config of orderPaths is Valid.";
     }
 
     //1.copy QVariantList副本

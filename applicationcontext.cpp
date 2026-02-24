@@ -1,5 +1,6 @@
 #include "applicationcontext.h"
 #include "globalhelper.h"
+#include "oran7screencapture.h"
 
 ApplicationContext::ApplicationContext(QObject *parent) : QObject(parent)
 {
@@ -34,6 +35,12 @@ void ApplicationContext::AppContext_CreateClientObject()
         QQmlEngine::setObjectOwnership(m_client, QQmlEngine::CppOwnership);
         if(m_client ==nullptr)
             throw std::runtime_error("Failed to created Client Object.");
+
+        //Client source of ScreenCpature
+        if(!m_client->m_screenCap)
+        {
+            m_client->m_screenCap = new Oran7ScreenCaptureController(nullptr);
+        }
     }
     catch (const std::exception &e)
     {

@@ -61,6 +61,7 @@ qt_add_executable(Oran7MediaClient
     d3d11videoitem.h d3d11videoitem.cpp
     bilibliliveroomaddresscatch.h bilibliliveroomaddresscatch.cpp
     oran7screencapture.h oran7screencapture.cpp
+    d3d11deviceprovider.h d3d11deviceprovider.cpp
 )
 
 # ===================== ShaderEffect 自动编译 QSB =====================
@@ -71,6 +72,11 @@ qt_add_executable(Oran7MediaClient
 #         shaders/VideoPlayerRenderGLSL.frag
 # )
 # =====================================================================
+
+# ===================== HLSL -> CSO (bgra->rgba swizzle shaders) =====================
+
+
+#=============================================================
 
 # ===================== 运行时依赖自动拷贝 =====================
 if(WIN32)
@@ -128,11 +134,12 @@ target_link_libraries(Oran7MediaClient
     Qt6::OpenGLWidgets
     Qt6::ShaderTools
     Qt6::Multimedia
+    OpenGL::GL
   PRIVATE
     avcodec avformat avutil avdevice avfilter swresample swscale
   PRIVATE
     SDL2 SDL2main
-    OpenGL::GL
+    d3dcompiler dxgi
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.

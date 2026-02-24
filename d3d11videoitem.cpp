@@ -1,6 +1,8 @@
 // d3d11videoitem.cpp
 #include "d3d11videoitem.h"
 #include "globalhelper.h"
+#include "d3d11deviceprovider.h"
+
 #include <QMutexLocker>
 #include <QMetaObject>
 #include <QDebug>
@@ -69,7 +71,7 @@ void D3D11VideoItem::itemChange(ItemChange change, const ItemChangeData &data)
 
 void D3D11VideoItem::releaseResources()
 {
-    m_bgraTex.Reset();
+    m_rgbaTex.Reset();
     m_vp.Reset();
     m_vpEnum.Reset();
     // 可把 pendingFrame 清掉
@@ -80,38 +82,21 @@ void D3D11VideoItem::releaseResources()
     }
 }
 
-
-
-
 void D3D11VideoItem::hookWindow(QQuickWindow *w)
 {
     if (m_window == w) return;
     m_window = w;
-    INFO_LOG<<"New hookWindow.";
+    INFO_LOG<<"D3D11VideoItem New hookWindow.";
 
-    connect(w, &QQuickWindow::sceneGraphInitialized, this, [this, w](){
-        auto *ri = w->rendererInterface();
-        auto *dev = static_cast<ID3D11Device*>(ri->getResource(w, QSGRendererInterface::DeviceResource));
-        if (!dev) {
-            WARNNING_LOG<<"Cant get ID3D11Device from qt.";
-            return;
-        }
+    //D3D11DeviceProvider::instance()->attachWindow(w);//获取window d3d11Dev
 
-        m_dev = dev;
-        dev->GetImmediateContext(&m_ctx);
-
-        dev->QueryInterface(IID_ID3D11VideoDevice, (void**)&m_videoDev);
-        m_ctx->QueryInterface(IID_ID3D11VideoContext, (void**)&m_videoCtx);
-
-        emit d3d11DeviceReady(dev);
-    }, Qt::DirectConnection);
-
-    connect(w, &QQuickWindow::sceneGraphInvalidated, this, [this](){
-        m_ctx.Reset();
-        m_dev.Reset();
-        m_videoDev.Reset();
-        m_videoCtx.Reset();
-    }, Qt::DirectConnection);
+    connect(D3D11DeviceProvider::instance(), &D3D11DeviceProvider::deviceLost,
+            this, [this](){
+                m_ctx.Reset();
+                m_dev.Reset();
+                m_videoDev.Reset();
+                m_videoCtx.Reset();
+            }, Qt::DirectConnection);
 }
 
 bool D3D11VideoItem::initD3D11Resources()
@@ -132,12 +117,12 @@ bool D3D11VideoItem::initD3D11Resources()
     return true;
 }
 
-bool D3D11VideoItem::ensureBgraTarget(int w, int h,DXGI_FORMAT fmt)
+bool D3D11VideoItem::ensureRgbaTarget(int w, int h,DXGI_FORMAT fmt)
 {
-    if (m_bgraTex && m_bgraSize == QSize(w, h))
+    if (m_rgbaTex && m_bgraSize == QSize(w, h)&& m_targetFmt == fmt)
         return false; // 没重建
 
-    m_bgraTex.Reset();
+    m_rgbaTex.Reset();
     m_bgraSize = QSize(w, h);
     m_targetFmt = fmt;
 
@@ -151,8 +136,17 @@ bool D3D11VideoItem::ensureBgraTarget(int w, int h,DXGI_FORMAT fmt)
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
-    HRESULT hr = m_dev->CreateTexture2D(&desc, nullptr, &m_bgraTex);
-    return SUCCEEDED(hr) && m_bgraTex;
+    HRESULT hr = m_dev->CreateTexture2D(&desc, nullptr, &m_rgbaTex);
+    UINT sup = 0;
+
+    // HRESULT hr2 = m_dev->CheckFormatSupport(DXGI_FORMAT_B8G8R8A8_UNORM, &sup);
+    // INFO_LOG << QString("CheckFormatSupport BGRA8 hr=0x%1 sup=0x%2")
+    //                 .arg(uint32_t(hr2),8,16,QChar('0'))
+    //                 .arg(uint32_t(sup),8,16,QChar('0'));
+    // const bool canSample = (sup & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0;
+    // INFO_LOG << "BGRA8 shader sample: " << canSample;
+
+    return SUCCEEDED(hr) && m_rgbaTex;
 }
 
 
@@ -162,10 +156,12 @@ bool D3D11VideoItem::ensureVideoProcessor(int srcW, int srcH)
     m_vpEnum.Reset();
 
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC c{};
-    c.InputWidth = srcW;
+    c.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+    c.InputWidth  = srcW;
     c.InputHeight = srcH;
-    c.OutputWidth = srcW;
+    c.OutputWidth  = srcW;
     c.OutputHeight = srcH;
+    c.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
 
     HRESULT hr = m_videoDev->CreateVideoProcessorEnumerator(&c, &m_vpEnum);
     if (FAILED(hr)) return false;
@@ -174,7 +170,7 @@ bool D3D11VideoItem::ensureVideoProcessor(int srcW, int srcH)
     return SUCCEEDED(hr);
 }
 
-bool D3D11VideoItem::blitNv12ToBgra(ID3D11Texture2D *srcTex, int srcW, int srcH, int slice)
+bool D3D11VideoItem::blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int srcH, int slice)
 {
     if (!srcTex || !m_vp || !m_vpEnum || !m_videoCtx) return false;
 
@@ -193,8 +189,8 @@ bool D3D11VideoItem::blitNv12ToBgra(ID3D11Texture2D *srcTex, int srcW, int srcH,
 
     ComPtr<ID3D11VideoProcessorOutputView> outView;
     hr = m_videoDev->CreateVideoProcessorOutputView(
-        m_bgraTex.Get(), m_vpEnum.Get(), &outDesc, &outView);
-    if (FAILED(hr)) return false;
+        m_rgbaTex.Get(), m_vpEnum.Get(), &outDesc, &outView);
+    if (FAILED(hr)) { WARNING_LOG << "CreateVPOutputView failed hr="<<hr; return false; }
 
     RECT srcRect{0, 0, srcW, srcH};
     RECT dstRect{0, 0, srcW, srcH};
@@ -207,6 +203,7 @@ bool D3D11VideoItem::blitNv12ToBgra(ID3D11Texture2D *srcTex, int srcW, int srcH,
     stream.pInputSurface = inView.Get();
 
     hr = m_videoCtx->VideoProcessorBlt(m_vp.Get(), outView.Get(), 0, 1, &stream);
+    if (FAILED(hr)) { WARNING_LOG << "VideoProcessorBlt failed hr="<<hr; return false; }
     return SUCCEEDED(hr);
 }
 
@@ -256,8 +253,7 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
         int w = int(width());
         int h = int(height());
         if (w > 0 && h > 0) {
-            const bool recreated = ensureBgraTarget(w, h,DXGI_FORMAT_R8G8B8A8_UNORM);
-
+            const bool recreated = ensureRgbaTarget(w, h,DXGI_FORMAT_R8G8B8A8_UNORM);
             // 确保这张纹理是可 RTV 的
             ComPtr<ID3D11RenderTargetView> rtv;
             D3D11_RENDER_TARGET_VIEW_DESC desc = {};
@@ -265,19 +261,19 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
             desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
             desc.Texture2D.MipSlice = 0;
 
-            HRESULT hr = m_dev->CreateRenderTargetView(m_bgraTex.Get(), &desc, rtv.GetAddressOf());
+            HRESULT hr = m_dev->CreateRenderTargetView(m_rgbaTex.Get(), &desc, rtv.GetAddressOf());
             if (SUCCEEDED(hr) && rtv) {
                 const float color[4] = {0.f, 0.f, 0.f, 1.f};
                 m_ctx->ClearRenderTargetView(rtv.Get(), color);
                 m_ctx->Flush();
             } else {
-                WARNNING_LOG << "CreateRenderTargetView failed hr=" << QString::number(hr, 16).toStdString();
+                WARNING_LOG << "CreateRenderTargetView failed hr=" << QString::number(hr, 16).toStdString();
             }
 
             // 确保 node 有纹理 wrapper
             if (recreated || node->texture() == nullptr) {
                 QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
-                    m_bgraTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
+                    m_rgbaTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
                 if (tex) node->setTexture(tex);
             }
         }
@@ -302,7 +298,7 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
         if (!initD3D11Resources()) {
             av_frame_free(&cur);
             node->setRect(boundingRect());
-            WARNNING_LOG<<"Failed to initD3D11Resources().";
+            WARNING_LOG<<"Failed to initD3D11Resources().";
             delete node;
             return nullptr;
         }
@@ -320,7 +316,7 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
         emit sourceSizeChanged(srcW, srcH);
     }
 
-    const bool recreated = ensureBgraTarget(srcW, srcH,DXGI_FORMAT_R8G8B8A8_UNORM);
+    const bool recreated = ensureRgbaTarget(srcW, srcH,DXGI_FORMAT_R8G8B8A8_UNORM);
     if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
         if (!m_vp || !m_vpEnum)
         {
@@ -328,9 +324,13 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
                 av_frame_free(&cur);
                 return node;
             }
+            if(!isFormatSupported(m_vpEnum.Get(),DXGI_FORMAT_R8G8B8A8_UNORM))
+                WARNING_LOG<<"DXGI_FORMAT_R8G8B8A8_UNORM not Supported";
+            else
+                INFO_LOG<<"DXGI_FORMAT_R8G8B8A8_UNORM is Supported.";
         }
         int slice = (int)(intptr_t)cur->data[1];
-        if (!blitNv12ToBgra(srcTex, srcW, srcH, slice))
+        if (!blitNv12ToRgba(srcTex, srcW, srcH, slice))
         {
             av_frame_free(&cur);
             return node;
@@ -339,7 +339,7 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
     else if (sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
              sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
         //RGBA -> RGBA，直接拷贝
-        m_ctx->CopyResource(m_bgraTex.Get(), srcTex);
+        m_ctx->CopyResource(m_rgbaTex.Get(), srcTex);
     }
     else {
         // 其他格式先不处理
@@ -349,11 +349,14 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
 
     // 只有当 BGRA 纹理重建，才需要创建新的 QSGTexture wrapper 并 setTexture
     if (recreated || node->texture() == nullptr) {
+        INFO_LOG<<"QSGTexture wrapper recreated.";
         QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
-            m_bgraTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
+            m_rgbaTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
 
         if (tex)
             node->setTexture(tex);
+        else
+            WARNING_LOG<<"QSGTexture ERROR.";
     }
     node->setRect(boundingRect());
 

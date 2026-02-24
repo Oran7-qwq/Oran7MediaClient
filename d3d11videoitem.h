@@ -34,7 +34,7 @@ public:
     void renderBlackFrame();
 
 signals:
-    void d3d11DeviceReady(ID3D11Device* dev);
+
     void sourceSizeChanged(int w, int h);
     void sendVideoFrameInfo(Oran7VideoInfo info);
 
@@ -47,9 +47,9 @@ protected:
 private:
     void hookWindow(QQuickWindow *window);
     bool initD3D11Resources();
-    bool ensureBgraTarget(int w, int h,DXGI_FORMAT fmt);
+    bool ensureRgbaTarget(int w, int h,DXGI_FORMAT fmt);
     bool ensureVideoProcessor(int srcW, int srcH);
-    bool blitNv12ToBgra(ID3D11Texture2D *srcTex, int srcW, int srcH, int slice);
+    bool blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int srcH, int slice);
     bool ensureSwizzlePipeline();
 
     QMutex m_mutex;
@@ -58,7 +58,7 @@ private:
     ComPtr<ID3D11DeviceContext> m_ctx;
     ComPtr<ID3D11VideoDevice> m_videoDev;
     ComPtr<ID3D11VideoContext> m_videoCtx;
-    ComPtr<ID3D11Texture2D> m_bgraTex;
+    ComPtr<ID3D11Texture2D> m_rgbaTex;
 
     ComPtr<ID3D11VertexShader> m_vs;//swizzle渲染管线
     ComPtr<ID3D11PixelShader>  m_psBgraToRgba;
@@ -75,3 +75,9 @@ private:
 
     QQuickWindow *m_window = nullptr;
 };
+
+static bool isFormatSupported(ID3D11VideoProcessorEnumerator* e, DXGI_FORMAT fmt) {
+    UINT flags = 0;
+    if (FAILED(e->CheckVideoProcessorFormat(fmt, &flags))) return false;
+    return (flags & D3D11_VIDEO_PROCESSOR_FORMAT_SUPPORT_OUTPUT) != 0;
+}

@@ -101,6 +101,12 @@ FFPlayer::FFPlayer()
  */
 FFPlayer::~FFPlayer()
 {
+    this->abort_request = 1;
+
+    if (ic && ic->pb)
+        avio_closep(&ic->pb);
+    if (read_thread_ && read_thread_->joinable())
+        read_thread_->join();
     delete read_thread_;      // 释放内存
     read_thread_ = nullptr;
 
@@ -328,7 +334,7 @@ int FFPlayer::read_thread()
         // ---------------- 主循环：读包入队 ----------------
         while (1)
         {
-            if(abort_request)
+            if(abort_request.load())
                 break;
             /*req_seeking*/
             if(seek_req)
@@ -454,7 +460,7 @@ int FFPlayer::read_thread()
 int FFPlayer::video_refresh_thread()
 {
     double remaining_time = 0.0;
-    while (!abort_request)
+    while (!abort_request.load())
     {
         if (remaining_time > 0.0)
             av_usleep((int)(int64_t)(remaining_time * 1000000.0));
@@ -520,7 +526,7 @@ void FFPlayer::video_refresh(double *remaining_time)
                 {
                     Video_EOF=true;//视频播放结束
                 }
-                av_log(NULL, AV_LOG_WARNING,":-->Video frame queue now remaining of frame is Empty!!!!%d\n\n",(int)run_times);
+                av_log(NULL, AV_LOG_WARNING,"[AV_LOG_WARNING:]-->Video frame queue now remaining of frame is Empty! InRunTime:%d\n\n",(int)run_times);
                 *remaining_time = FFMIN(*remaining_time, 0.01); // 10ms
                 return;
             }
@@ -530,7 +536,7 @@ void FFPlayer::video_refresh(double *remaining_time)
             if(vp->serial!=videoq.serial)
             {
                 frame_queue_next(&pictq);   // 当前vp帧出队列，在内部已调用av_frame_unref
-                std::cout<<"[VIdeoRefresh:]Discard video frame because serial not same.\nvp->serial:"<<vp->serial<<"\nvideo.pkt_serial_:"<<viddec.pkt_serial_<<std::endl;
+                INFO_LOG<<"VideoRefresh:Discard video frame because serial not same.-->vp->serial:"<<vp->serial<<"-video.pkt_serial_:"<<viddec.pkt_serial_;
                 discard_pkt_num++;
                 continue;
             }
@@ -582,7 +588,7 @@ void FFPlayer::video_refresh(double *remaining_time)
                 {
                     frame_drops_late++;
                     frame_queue_next(&pictq);
-                    INFO_LOG<<"Frame Drop.";
+                    INFO_LOG<<"Frame Drop. in RunTime:"<<run_times;
                     continue;
                 }
 
@@ -605,7 +611,7 @@ void FFPlayer::video_refresh(double *remaining_time)
          *///
         if(video_refresh_callback_ == nullptr)
         {
-            WARNNING_LOG<<"FFPlayer of video_refresh_callback_ is nullptr.";
+            WARNING_LOG<<"FFPlayer of video_refresh_callback_ is nullptr.";
         }
         if(video_refresh_callback_ && vp)
         {
@@ -643,13 +649,13 @@ void FFPlayer::video_refresh(double *remaining_time)
             }
         }
         else
-            WARNNING_LOG<< "Attention video_refresh_callback_ function is NULL !!";
+            WARNING_LOG<< "Attention video_refresh_callback_ function is NULL !!";
         // std::cout << "[Queue] Before next: size=" << pictq.size << std::endl;
         frame_queue_next(&pictq);
         // std::cout << "[Queue] After next: size=" << pictq.size << std::endl;
     }
     else
-        WARNNING_LOG<<"video_refresh_thread->:video_stream no exist.";
+        WARNING_LOG<<"video_refresh_thread->:video_stream no exist.";
     return;
 }
 
@@ -760,7 +766,6 @@ int FFPlayer::ffp_start_l()
  */
 int FFPlayer::ffp_pause_l()
 {
-    std::cout << __FUNCTION__;
     toggle_pause_(1);
     return 0;
 }
@@ -1491,7 +1496,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
     */
     while (len > 0)
     {
-        if(is->abort_request==1)break;
+        if(is->abort_request.load()==1)break;
         if(is->Audio_EOF==true)
         {
             /*检测是否播放结束*/
@@ -1971,7 +1976,7 @@ int Decoder::get_video_frame(AVFrame *frame)
                 static bool logged = false;
                 if (!logged) {
                     logged = true;
-                    av_log(NULL, AV_LOG_INFO, "[AV_LOG_INFO::Decoder::get_video_frame:]Decoded frame format=%s\n",
+                    av_log(NULL, AV_LOG_INFO, "[AV_LOG_INFO:]-->Decoder::get_video_frame:decoded frame format=%s\n",
                            av_get_pix_fmt_name((AVPixelFormat)frame->format));
                 }
                 return 1;//返回1------>成功获取一帧硬件帧

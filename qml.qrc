@@ -28,6 +28,6 @@
         <file>Src/Components/Oran7ESelectRect.qml</file>
         <file>Src/Components/Oran7FileDialog.qml</file>
         <file>Src/Components/Oran7PlayerVolumeComponent.qml</file>
-        <file>Src/Components/Oran7ScreenCapture.qml</file>
+        <file>Src/Components/Oran7ScreenCaptureComponent.qml</file>
     </qresource>
 </RCC>

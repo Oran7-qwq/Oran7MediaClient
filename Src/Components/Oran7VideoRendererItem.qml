@@ -68,7 +68,6 @@ Rectangle {
         return true
     }
 
-
     //在onVisibleChanged或外部beagining of play video 时调用
     function tryAttachDelayed() {
         if (attachTimer)
@@ -101,9 +100,9 @@ Rectangle {
     }
 
     Component.onCompleted: {
-        console.log("Component onCompleted")
+        //console.log("Component onCompleted")
         if (!videoHost) return false
-        console.log("--->Client.attachVideoItem() : ",videoHost)
+        //console.log("--->Client.attachVideoItem() : ",videoHost)
         Client.attachVideoItem(root.renderObject,videoHost)
     }
     Component.onDestruction: {
