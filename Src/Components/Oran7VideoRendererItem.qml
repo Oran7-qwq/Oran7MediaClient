@@ -18,7 +18,6 @@ Rectangle {
 
     Rectangle {
         id: videoHost
-
         width: root.width
         height: root.height
         color:"transparent"

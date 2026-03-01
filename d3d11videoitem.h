@@ -67,6 +67,8 @@ private:
     ComPtr<ID3D11RasterizerState> m_rs;
     ComPtr<ID3D11DepthStencilState> m_dss;
 
+    int   m_lastSrcW = 0;
+    int   m_lastSrcH = 0;
     QSize m_bgraSize;
     DXGI_FORMAT m_targetFmt = DXGI_FORMAT_UNKNOWN;
     ComPtr<ID3D11VideoProcessorEnumerator> m_vpEnum;

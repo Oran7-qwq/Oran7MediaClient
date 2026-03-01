@@ -40,7 +40,7 @@ static QString ffErrStr(int err)
     return QString::fromUtf8(buf);
 }
 
-static constexpr int kPool = 2;
+static constexpr int kPool = 3;
 
 //static QMutex g_ffmpegD3DMutex; //Discard 2026/2/24
 
@@ -80,7 +80,7 @@ signals:
     void stopped();
     void errorOccurred(const QString& err);
 
-    void sharedHandlesReady(int w, int h, quintptr h0, quintptr h1, quintptr h2);
+    void sharedHandlesReady(int w, int h, const QVector<quintptr>& hs);
     void newFrameReady(int idx);
 
 private:
@@ -92,7 +92,9 @@ private:
     bool ensureSwizzlePipeline(QString* err);//Create BGRA to RGBA of SwizzlePipeline Used by bgra2rgba_vs.hlsl and bgra2rgba_ps.hlsl
 
     bool vpNv12ToRgbaShared(int idx, ID3D11Texture2D* srcTex, int w, int h, int slice);//NV12/P010 to RGBA
-    bool blitBgraToRgbaShared(int idx, ID3D11Texture2D* srcTex, int w, int h);//BGRA to RGBA
+    bool blitBgraToRgbaShared(int idx, ID3D11Texture2D* srcTex, int w, int h);//BGRA to RGBA、
+
+    bool vpBgraToNv12Shared(int idx,ID3D11Texture2D* srcTex,int w, int h,int slice);//BGRA ->NV12
 
     /**
      * @brief blitToShared Make BGRA or NV12 or P010 Transfor RGBA
@@ -185,7 +187,7 @@ signals:
 private slots:
     void onProviderReady();
     void onProviderLost();
-    void onSharedHandlesReady(int w, int h,quintptr h0, quintptr h1, quintptr h2); //Win8+D3DRHI
+    void onSharedHandlesReady(int w, int h,const QVector<quintptr>& hs); //Win8+D3DRHI
     void onNewFrameIndex(int idx);
 
 private:

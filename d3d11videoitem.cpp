@@ -310,9 +310,9 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
     int srcW = (int)sdesc.Width;
     int srcH = (int)sdesc.Height;
 
-    static int lastW = 0, lastH = 0;
-    if (srcW != lastW || srcH != lastH) {
-        lastW = srcW; lastH = srcH;
+    if (srcW != m_lastSrcW || srcH != m_lastSrcH) {
+        m_lastSrcW = srcW; m_lastSrcH = srcH;
+        INFO_LOG<<"emitSourceSizeChanged"<<srcW<<"/"<<srcH;
         emit sourceSizeChanged(srcW, srcH);
     }
 
@@ -340,6 +340,7 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* 
              sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
         //RGBA -> RGBA，直接拷贝
         m_ctx->CopyResource(m_rgbaTex.Get(), srcTex);
+        //INFO_LOG<<"Oran7ScreenCapture srcW:"<<srcW<<"-srcH:"<<srcH;
     }
     else {
         // 其他格式先不处理

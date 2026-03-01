@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import "../../Components"
+import Client 1.0
 
 Item {
     id:root_parent
@@ -9,6 +10,7 @@ Item {
         anchors.fill: parent
         Oran7ScreenCaptureComponent {
             anchors.fill: parent
+            renderObject: Client.ScreenCaptureRender
         }
         ELoader{
             size: 100

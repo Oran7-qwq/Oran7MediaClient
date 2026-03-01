@@ -56,7 +56,6 @@ qt_add_executable(Oran7MediaClient
     client.cpp client.h
     asyncmanagers.h asyncmanagers.cpp
     applicationcontext.h applicationcontext.cpp
-
     filehelper.h filehelper.cpp
     d3d11videoitem.h d3d11videoitem.cpp
     bilibliliveroomaddresscatch.h bilibliliveroomaddresscatch.cpp
@@ -72,11 +71,6 @@ qt_add_executable(Oran7MediaClient
 #         shaders/VideoPlayerRenderGLSL.frag
 # )
 # =====================================================================
-
-# ===================== HLSL -> CSO (bgra->rgba swizzle shaders) =====================
-
-
-#=============================================================
 
 # ===================== 运行时依赖自动拷贝 =====================
 if(WIN32)

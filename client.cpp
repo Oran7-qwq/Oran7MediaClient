@@ -1038,9 +1038,10 @@ void Client::createVideoItem(const RenderObject key,QQuickItem *host)
                     this, [this,key](int w, int h){ setVideoSourceSize(key,QSize(w,h)); },
                     Qt::QueuedConnection);
             //传递 D3D11VideoItem中updatePaintNode 获取到的VideoInfo
-            connect(s.item,&D3D11VideoItem::sendVideoFrameInfo,this,[this,s](Oran7VideoInfo info){
+            connect(s.item,&D3D11VideoItem::sendVideoFrameInfo,this,[this,key](Oran7VideoInfo info){
                 //加入ScaleMode信息
-                switch (s.scaleMode) {
+                const auto mode = m_d3d11Slots[key].scaleMode;
+                switch (mode) {
                 case ScaleMode::Fit:
                     info.fillModeName = "Fit";
                     break;
@@ -1066,20 +1067,15 @@ void Client::createVideoItem(const RenderObject key,QQuickItem *host)
 
     QPointer<QQuickItem> safeHost(host);
 
-    auto tryHook = [this, safeHost,s]() {
-        if (!safeHost)
-        {
-            INFO_LOG<<"Host allReady destory.";
-            return false;               // host 已销毁
-        }
+    auto tryHook = [this, safeHost, key]() {
+        if (!safeHost) return false;
         QQuickWindow *w = safeHost->window();
-        if (!w)
-        {
-            WARNING_LOG<<"safeHost->window() return is nullptr!";
-            return false;
-        }
-        D3D11DeviceProvider::instance()->attachWindow(w);//获取window d3d11Dev
-        QMetaObject::invokeMethod(s.item, "update", Qt::QueuedConnection);
+        if (!w) return false;
+
+        D3D11DeviceProvider::instance()->attachWindow(w);
+
+        auto item = m_d3d11Slots[key].item;
+        if (item) QMetaObject::invokeMethod(item, "update", Qt::QueuedConnection);
         return true;
     };
 
@@ -1091,55 +1087,47 @@ void Client::createVideoItem(const RenderObject key,QQuickItem *host)
     }
 }
 
-bool Client::attachVideoItem(const RenderObject key,QQuickItem *host)
+bool Client::attachVideoItem(const RenderObject key, QQuickItem *host)
 {
     if (!host) return false;
 
     auto &s = m_d3d11Slots[key];
-    if(s.host == host)
-        return true;
-    if (!s.item) {
-        createVideoItem(key,host);
-    }
+    if (!s.item) createVideoItem(key, host);
 
-    switch (key)
-    {
-    case RenderObject::ScreenCaptureRender:
-        if(s.item == m_screenCap->bindVideoItem())
-            break;
-        INFO_LOG<<"ScreenCapture new bind videoRenderItem.";
+    // ScreenCapture
+    if (key == RenderObject::ScreenCaptureRender) {
         m_screenCap->setVideoItem(s.item);
         m_screenCap->setOutputIndex(0);
         m_screenCap->setFps(60);
         m_screenCap->setDrawMouse(true);
-        break;
-    default:
-        break;
+    }
+
+    if (s.host == host) {
+        syncVideoItemSize(key);
+        return true;
     }
 
     s.item->setParentItem(host);
-    s.item->setParent(host);
+    // s.item->setParent(host);
     s.item->setVisible(true);
 
-    //==========VideoRender 缩放宽度调整===========
-    //让视频 item 占满 host
-    s.item->setSize(host->size());   //setWidth/Height
-    s.item->setPosition({0, 0});     // x=0,y=0
+    s.item->setSize(host->size());
+    s.item->setPosition({0, 0});
     s.host = host;
     syncVideoItemSize(key);
 
-    if(s.cW) QObject::disconnect(s.cW);
-    if(s.cH) QObject::disconnect(s.cH);
-    QObject::connect(host, &QQuickItem::widthChanged,this, [this,key]{
+    if (s.cW) QObject::disconnect(s.cW);
+    if (s.cH) QObject::disconnect(s.cH);
+    s.cW = QObject::connect(host, &QQuickItem::widthChanged, this, [this, key]{
         this->scheduleSyncVideoItemSize(key);
     });
-    QObject::connect(host, &QQuickItem::heightChanged,this, [this,key]{
-         this->scheduleSyncVideoItemSize(key);
-     });
+    s.cH = QObject::connect(host, &QQuickItem::heightChanged, this, [this, key]{
+        this->scheduleSyncVideoItemSize(key);
+    });
 
-    QMetaObject::invokeMethod(s.item, "update", Qt::QueuedConnection);
     return true;
 }
+
 
 
 void Client::setD3D11Device(ID3D11Device *dev)
@@ -1201,7 +1189,7 @@ int Client::OutputVideo(const Frame* frame, AVFrame* copy_frame)
     if (!s.item) { av_frame_free(&copy_frame); return 0; }
     AVFrame* safe = av_frame_clone(copy_frame); // clone 会 ref 内部 buffer
     av_frame_free(&copy_frame);
-    s.item->submitFrame(safe); // submitFrame 接管所有权：以后由 item 释放
+    s.item->submitFrame(safe); // submitFrame 接管所有权-->由 item 释放
 
     return 0;
 }
@@ -1214,8 +1202,8 @@ void Client::syncVideoItemSize(const RenderObject &key)
     const QSizeF hostSize(s.host->width(), s.host->height());
     if (hostSize.isEmpty()) return;
 
-    // 没拿到源尺寸前：先铺满
     if (s.srcSize.isEmpty()) {
+        //WARNING_LOG << "sync key="<<int(key)<<" srcSize EMPTY -> force fill host";
         s.item->setX(0);
         s.item->setY(0);
         s.item->setWidth(hostSize.width());

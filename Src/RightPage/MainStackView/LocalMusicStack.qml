@@ -1099,6 +1099,12 @@ Item {
                         height: root.musicElementRectangleHeight
                         radius: 10
                         color:"transparent"
+                        // Behavior on color {
+                        //     NumberAnimation{
+                        //         duration: 100
+                        //         easing.type: Easing.OutCubic
+                        //     }
+                        // }
                         // 控制动画的状态
                         property bool animationEnabled: true
                         property bool isAnimating: false

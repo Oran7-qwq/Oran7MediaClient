@@ -143,10 +143,12 @@ void Oran7ScreenCaptureController::onProviderLost()
     if (m_item) QMetaObject::invokeMethod(m_item, "renderBlackFrame", Qt::QueuedConnection);
 }
 
-void Oran7ScreenCaptureController::onSharedHandlesReady(int w, int h,quintptr h0, quintptr h1, quintptr h2)
+void Oran7ScreenCaptureController::onSharedHandlesReady(int w, int h,const QVector<quintptr>& hs)
 {
     m_texW = w; m_texH = h;
-    m_handle[0]=h0; m_handle[1]=h1; m_handle[2]=h2;
+    for (int i=0;i<kPool;i++) {
+        m_handle[i] = (i < hs.size()) ? hs[i] : 0;
+    }
 
     ID3D11Device* qtDev = m_d3dqtDev.Get();
     if (!qtDev) return;
@@ -175,6 +177,19 @@ void Oran7ScreenCaptureController::onNewFrameIndex(int idx)
 
     AVFrame* frame = makeD3D11FrameFromTexture(m_qtTex[idx].Get(), m_texW, m_texH);
     if (!frame) return;
+
+#if 0
+    static int frame_count1 = 0;
+    static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
+    frame_count1++;
+    auto now1 = QDateTime::currentMSecsSinceEpoch();
+    if (now1 - t01 >= 1000)//1000ms
+    {
+        INFO_LOG<<"submitFrame:"<<frame_count1<<" per second. format"<<dxgiFormatName(frame->format);
+        frame_count1 = 0;
+        t01 = now1;
+    }
+#endif
 
     m_item->submitFrame(frame);
 }
@@ -382,7 +397,7 @@ bool DdaGrabWorker::ensureSharedPoolRGBA(int w, int h)
     desc.Height = h;
     desc.MipLevels = 1;
     desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format = DXGI_FORMAT_NV12;
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
@@ -403,10 +418,11 @@ bool DdaGrabWorker::ensureSharedPoolRGBA(int w, int h)
         m_sharedHandle[i] = hShared;
     }
 
-    emit sharedHandlesReady(m_poolW, m_poolH,
-                            (quintptr)m_sharedHandle[0],
-                            (quintptr)m_sharedHandle[1],
-                            (quintptr)m_sharedHandle[2]);
+    QVector<quintptr> hs;
+    for (int i=0;i<kPool;i++) hs.push_back((quintptr)m_sharedHandle[i]);
+    hs.reserve(kPool);
+    emit sharedHandlesReady(m_poolW, m_poolH, hs);
+
     return true;
 }
 
@@ -603,14 +619,21 @@ bool DdaGrabWorker::blitToShared(int idx,
         return false;
     }
 
-    // 0) BGRA -> RGBA
+    //BGRA -> RGBA
+    // if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+    //     sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
+    // {
+    //     return blitBgraToRgbaShared(idx, srcTex, (int)sdesc.Width, (int)sdesc.Height);
+    // }
+
+    //BGRA -> NV12
     if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
         sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
     {
-        return blitBgraToRgbaShared(idx, srcTex, (int)sdesc.Width, (int)sdesc.Height);
+        return vpBgraToNv12Shared(idx,srcTex,(int)sdesc.Width,(int)sdesc.Height,slice);
     }
 
-    // 1) RGBA -> RGBA: 直接拷贝
+    //RGBA -> RGBA: 直接拷贝
     if (sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
         sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)
     {
@@ -618,7 +641,7 @@ bool DdaGrabWorker::blitToShared(int idx,
         return true;
     }
 
-    // 2) NV12/P010 -> RGBA: 用 VideoProcessor
+    //NV12/P010 -> RGBA: 用 VideoProcessor
     if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010)
     {
         return vpNv12ToRgbaShared(idx, srcTex, (int)sdesc.Width, (int)sdesc.Height, slice);
@@ -771,3 +794,49 @@ bool DdaGrabWorker::blitBgraToRgbaShared(int idx, ID3D11Texture2D* srcTex, int w
 
     return true;
 }
+
+bool DdaGrabWorker::vpBgraToNv12Shared(int idx,ID3D11Texture2D* srcTex,
+                                      int w, int h,int slice)
+{
+    if (!srcTex) return false;
+    if (idx < 0 || idx >= kPool) return false;
+    if (!m_sharedTex[idx]) return false;
+    if (!m_capVideoDev || !m_capVideoCtx) return false;
+
+    if (!ensureVideoProcessor(w, h)) return false;
+    if (!m_vp || !m_vpEnum) return false;
+
+    // input view
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inDesc{};
+    inDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+    inDesc.Texture2D.ArraySlice = (UINT)slice;
+
+    ComPtr<ID3D11VideoProcessorInputView> inView;
+    HRESULT hr = m_capVideoDev->CreateVideoProcessorInputView(
+        srcTex, m_vpEnum.Get(), &inDesc, &inView);
+    if (FAILED(hr) || !inView) return false;
+
+    // output view (NV12)
+    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outDesc{};
+    outDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+    outDesc.Texture2D.MipSlice = 0;
+
+    ComPtr<ID3D11VideoProcessorOutputView> outView;
+    hr = m_capVideoDev->CreateVideoProcessorOutputView(
+        m_sharedTex[idx].Get(), m_vpEnum.Get(), &outDesc, &outView);
+    if (FAILED(hr) || !outView) return false;
+
+    RECT srcRect{0, 0, w, h};
+    RECT dstRect{0, 0, w, h};
+
+    m_capVideoCtx->VideoProcessorSetStreamSourceRect(m_vp.Get(), 0, TRUE, &srcRect);
+    m_capVideoCtx->VideoProcessorSetStreamDestRect(m_vp.Get(), 0, TRUE, &dstRect);
+
+    D3D11_VIDEO_PROCESSOR_STREAM stream{};
+    stream.Enable = TRUE;
+    stream.pInputSurface = inView.Get();
+
+    hr = m_capVideoCtx->VideoProcessorBlt(m_vp.Get(), outView.Get(), 0, 1, &stream);
+    return SUCCEEDED(hr);
+}
+
