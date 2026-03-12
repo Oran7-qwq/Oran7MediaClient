@@ -207,13 +207,6 @@ bool D3D11VideoItem::blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int srcH,
     return SUCCEEDED(hr);
 }
 
-bool D3D11VideoItem::ensureSwizzlePipeline()
-{
-    if(m_vs && m_psBgraToRgba && m_sampler && m_blendOff && m_rs && m_dss)
-        return true;
-
-}
-
 QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* data)
 {
     if (!m_window && window()) {

@@ -94,7 +94,7 @@ private:
     bool vpNv12ToRgbaShared(int idx, ID3D11Texture2D* srcTex, int w, int h, int slice);//NV12/P010 to RGBA
     bool blitBgraToRgbaShared(int idx, ID3D11Texture2D* srcTex, int w, int h);//BGRA to RGBA、
 
-    bool vpBgraToNv12Shared(int idx,ID3D11Texture2D* srcTex,int w, int h,int slice);//BGRA ->NV12
+    bool vpBgraToNv12Shared(int idx,ID3D11Texture2D* srcTex,int w, int h,int slice);//BGRA ->NV12 <------NOW MIAN USED
 
     /**
      * @brief blitToShared Make BGRA or NV12 or P010 Transfor RGBA
@@ -159,10 +159,6 @@ public:
     explicit Oran7ScreenCaptureController(QObject *parent = nullptr);
     ~Oran7ScreenCaptureController() override;
 
-    void setVideoItem(QObject* item);
-    const QObject * bindVideoItem()const {return m_item;}
-    void setD3D11Device(ID3D11Device* dev);
-
     // 启停抓屏
     Q_INVOKABLE bool start();
     Q_INVOKABLE void stop();
@@ -178,6 +174,13 @@ public:
     // 设置期望 fps（会插入 fps filter，尽量稳定输出）
     Q_INVOKABLE void setFps(int fps);
     Q_INVOKABLE int fps() const { return m_fps; }
+
+    // ========================= Render ==========================//
+    void setVideoItem(QObject* item);
+    const QObject * bindVideoItem()const {return m_item;}
+    void setD3D11Device(ID3D11Device* dev);
+
+    //========================= DataStreamCatch ===================//
 
 signals:
     void started();
@@ -195,6 +198,13 @@ private:
     void teardownWorker();
 
 private:
+    // config
+    int  m_outputIndex = 0;
+    bool m_drawMouse = true;
+    int  m_fps = 60;
+    std::atomic_bool m_running{false};//running state
+
+    // ========================= Render ==========================//
     QPointer<D3D11VideoItem> m_item;
 #ifdef _WIN32
     ComPtr<ID3D11Device> m_d3dqtDev;
@@ -202,20 +212,13 @@ private:
     ComPtr<ID3D11Texture2D> m_qtTex[kPool];
     quintptr m_handle[kPool]{};
     int m_texW=0, m_texH=0;
-    //==========================
-#endif
-    // config
-    int  m_outputIndex = 0;
-    bool m_drawMouse = true;
-    int  m_fps = 60;
-
-    // state
-    std::atomic_bool m_running{false};
     bool m_deviceReady = false;
 
     // worker thread
     QThread* m_thread = nullptr;
     QObject* m_workerObj = nullptr;
+    //==========================
+#endif
 };
 
 static void d3d11_tex_release(void* opaque, uint8_t* /*data*/)

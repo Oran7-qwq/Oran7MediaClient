@@ -454,6 +454,12 @@ Rectangle{
             width: parent.width
             handle:Rectangle{
                 id:musicProgressHandle
+                Behavior on x{
+                    NumberAnimation{
+                        duration:   200
+                        easing.type: Easing.OutCubic
+                    }
+                }
                 width:12
                 height: width
                 radius: width/2
@@ -468,6 +474,12 @@ Rectangle{
                 color: "#4d4d56"
                 clip: true
                 property real visibleProgressX: 0.0
+                Behavior on visibleProgressX{
+                    NumberAnimation{
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
+                }
                 property string visibleColor:musicProgressRectanle.sliderColor_themeItems[musicProgressRectanle.sliderColor_themeIndex].default_Color
                 Rectangle{
                     id:visibleRectangle

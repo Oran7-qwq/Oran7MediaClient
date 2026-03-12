@@ -26,11 +26,21 @@ find_package(Qt6 REQUIRED COMPONENTS
 # 查找OpenGL
 find_package(OpenGL REQUIRED)
 
+#添加全局单例GlobalSingleton 配置路径
+set(GLOBAL_SIGNALTON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/GlobalSingleton")
+
 # 添加FFmpeg路径配置
 set(FFMPEG_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg6.0")
-message(STATUS "FFmpeg路径: ${FFMPEG_ROOT_DIR}")
+#添加Oran7MediaPlayer模块配置路径
+set(ORAN7_PLAYER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7MediaPlayer")
+#添加Oran7ScreenPlayer模块配置路径
+set(ORAN7_SCREEN_CAPTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7ScreenCapture")
+#添加Oran7VideoGPURender模块配置路径
+set(ORAN7_VIDEO_GPU_RENDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7VideoGPURender")
+#添加Oran7Sever模块配置路径
+set(ORAN7_SEVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7Sever")
 
-set(PROJECT_SOURCES
+set(PROJECT_MAIN_SOURCES
     main.cpp
     qml.qrc
     res.qrc
@@ -38,39 +48,69 @@ set(PROJECT_SOURCES
 
 qt_add_executable(Oran7MediaClient
     MANUAL_FINALIZATION
-    ${PROJECT_SOURCES}
-    app.rc
-    sever.cpp sever.h sonic.cpp sonic.h
-    database.cpp database.h
-    ffmsg.h
-    ffmsgqueue.cpp ffmsgqueue.h
-    ffplay_def.cpp ffplay_def.h
-    ffplayer.cpp ffplayer.h
-    globalhelper.cpp globalhelper.h
-    ImageScaler.h
-    loadingdatahandler.cpp loadingdatahandler.h
-    loginhandler.cpp loginhandler.h
-    oran7mediaplayer.cpp oran7mediaplayer.h
-    protocolhandler.cpp protocolhandler.h
-    appjsonconfigmanager.cpp appjsonconfigmanager.h
-    client.cpp client.h
-    asyncmanagers.h asyncmanagers.cpp
-    applicationcontext.h applicationcontext.cpp
-    filehelper.h filehelper.cpp
-    d3d11videoitem.h d3d11videoitem.cpp
-    bilibliliveroomaddresscatch.h bilibliliveroomaddresscatch.cpp
-    oran7screencapture.h oran7screencapture.cpp
-    d3d11deviceprovider.h d3d11deviceprovider.cpp
+    ${PROJECT_MAIN_SOURCES}
+
+    filehelper.h filehelper.cpp #USED BY QML
+
+    #GlobalSingleton
+    code/GlobalSingleton/appjsonconfigmanager.h
+    code/GlobalSingleton/appjsonconfigmanager.cpp
+    code/GlobalSingleton/asyncmanagers.h
+    code/GlobalSingleton/asyncmanagers.cpp
+    code/GlobalSingleton/applicationcontext.h
+    code/GlobalSingleton/applicationcontext.cpp
+    code/GlobalSingleton/globalhelper.h
+    code/GlobalSingleton/globalhelper.cpp
+    code/GlobalSingleton/client.h
+    code/GlobalSingleton/client.cpp
+
+    #Oran7MediaPlayer
+    code/Oran7MediaPlayer/ImageScaler.h
+    code/Oran7MediaPlayer/ffmsg.h
+    code/Oran7MediaPlayer/ffmsgqueue.h
+    code/Oran7MediaPlayer/ffmsgqueue.cpp
+    code/Oran7MediaPlayer/ffplay_def.h
+    code/Oran7MediaPlayer/ffplay_def.cpp
+    code/Oran7MediaPlayer/ffplayer.h
+    code/Oran7MediaPlayer/ffplayer.cpp
+    code/Oran7MediaPlayer/oran7mediaplayer.h
+    code/Oran7MediaPlayer/oran7mediaplayer.cpp
+    code/Oran7MediaPlayer/sonic.h
+    code/Oran7MediaPlayer/sonic.cpp
+    code/Oran7MediaPlayer/bilibliliveroomaddresscatch.h
+    code/Oran7MediaPlayer/bilibliliveroomaddresscatch.cpp
+
+    #Oran7ScreenCapture
+    code/Oran7ScreenCapture/oran7screencapture.h
+    code/Oran7ScreenCapture/oran7screencapture.cpp
+
+    #Oran7VideoGPURender
+    code/Oran7VideoGPURender/d3d11videoitem.h
+    code/Oran7VideoGPURender/d3d11videoitem.cpp
+    code/Oran7VideoGPURender/d3d11deviceprovider.h
+    code/Oran7VideoGPURender/d3d11deviceprovider.cpp
+
+    #Oran7Sever
+    code/Oran7Sever/sever.h
+    code/Oran7Sever/sever.cpp
+    code/Oran7Sever/database.h
+    code/Oran7Sever/database.cpp
+    code/Oran7Sever/protocolhandler.h
+    code/Oran7Sever/protocolhandler.cpp
+    code/Oran7Sever/loadingdatahandler.h
+    code/Oran7Sever/loadingdatahandler.cpp
+    code/Oran7Sever/loginhandler.h
+    code/Oran7Sever/loginhandler.cpp
 )
 
-# ===================== ShaderEffect 自动编译 QSB =====================
+# ===================== ShaderEffect 自动编译 QSB ================
 # qt_add_shaders(Oran7MediaClient "VideoShaders"
 #     PREFIX "/"
 #     FILES
 #         shaders/VideoPlayerRenderGLSL.vert
 #         shaders/VideoPlayerRenderGLSL.frag
 # )
-# =====================================================================
+# =======================================================
 
 # ===================== 运行时依赖自动拷贝 =====================
 if(WIN32)
@@ -87,32 +127,38 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E echo "Copying runtime deps to: ${APP_OUT_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${APP_OUT_DIR}"
 
-        # 1 拷贝 ffmpeg6.0/bin 下所有内容到 exe 目录
+        #拷贝 ffmpeg6.0/bin 下所有内容到 exe 目录
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${FFMPEG_BIN_DIR}" "${APP_OUT_DIR}"
 
-        # 2 拷贝 SQLite 文件夹到 exe 目录
+        #拷贝 SQLite 文件夹到 exe 目录
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${SQLITE_DIR}" "${APP_OUT_DIR}/SQLite"
     )
 endif()
-# ===============================================================
+# ========================================================
 
-
-
-# 在qt_add_executable之后立即添加FFmpeg的配置
+# 在qt_add_executable之后添加模块配置文件路径
 target_include_directories(Oran7MediaClient
-    PRIVATE ${FFMPEG_ROOT_DIR}/include
+    PRIVATE
+    ${GLOBAL_SIGNALTON_DIR}
+
+    ${FFMPEG_ROOT_DIR}/include
+    ${FFMPEG_ROOT_DIR}/include/SDL2
+    ${FFMPEG_ROOT_DIR}/lib
+
+    ${ORAN7_PLAYER_DIR}
+    ${ORAN7_SCREEN_CAPTURE_DIR}
+    ${ORAN7_VIDEO_GPU_RENDER_DIR}
+    ${ORAN7_SEVER_DIR}
+
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# 添加SDL2头文件路径
-target_include_directories(Oran7MediaClient
-    PRIVATE ${FFMPEG_ROOT_DIR}/include/SDL2
-)
-
-# 添加库文件搜索路径
+# FFMPEG库目录
 target_link_directories(Oran7MediaClient
-    PRIVATE ${FFMPEG_ROOT_DIR}/lib
+    PRIVATE
+        ${FFMPEG_ROOT_DIR}/lib
 )
 
 # target_link_libraries，添加Sql和QuickControls2模块

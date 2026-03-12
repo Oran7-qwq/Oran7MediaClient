@@ -1,3 +1,0 @@
-set(__QT_DEPLOY_TARGET_Oran7MediaClient_FILE C:/Users/funny/QtProject.doc/Oran7MediaClient/out/build/x64-Debug/Oran7MediaClient.exe)
-set(__QT_DEPLOY_TARGET_Oran7MediaClient_TYPE EXECUTABLE)
-set(__QT_DEPLOY_TARGET_Oran7MediaClient_RUNTIME_DLLS D:/Qt/6.7.2/mingw_64/bin/Qt6Sql.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6QuickControls2.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6OpenGLWidgets.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6ShaderTools.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6Multimedia.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6Quick.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6QmlModels.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6Qml.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6OpenGL.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6Widgets.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6Gui.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6Network.dll;D:/Qt/6.7.2/mingw_64/bin/Qt6Core.dll)

@@ -21,8 +21,20 @@ Rectangle{
     property color progressHandleColor: "white"
 
     property real visibleProgressX: 0.0
-    property string visibleColor:root.sliderColor_themeItems[root.sliderColor_themeIndex].default_Color
+    Behavior on visibleProgressX{
+        NumberAnimation{
+            duration:   200 //10ms
+            easing.type: Easing.OutCubic
+        }
+    }
     property real progressHandleX: 0-progressHandle.width/2
+    Behavior on progressHandleX {
+        NumberAnimation{
+            duration:200
+            easing.type:Easing.OutCubic
+        }
+    }
+    property string visibleColor:root.sliderColor_themeItems[root.sliderColor_themeIndex].default_Color
 
     property int allSecondTime:0          //单位s
     property int nowSecondTime: 0     //单位s

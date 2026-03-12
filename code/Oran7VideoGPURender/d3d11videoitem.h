@@ -50,7 +50,6 @@ private:
     bool ensureRgbaTarget(int w, int h,DXGI_FORMAT fmt);
     bool ensureVideoProcessor(int srcW, int srcH);
     bool blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int srcH, int slice);
-    bool ensureSwizzlePipeline();
 
     QMutex m_mutex;
     AVFrame *m_pendingFrame = nullptr;
@@ -59,13 +58,6 @@ private:
     ComPtr<ID3D11VideoDevice> m_videoDev;
     ComPtr<ID3D11VideoContext> m_videoCtx;
     ComPtr<ID3D11Texture2D> m_rgbaTex;
-
-    ComPtr<ID3D11VertexShader> m_vs;//swizzle渲染管线
-    ComPtr<ID3D11PixelShader>  m_psBgraToRgba;
-    ComPtr<ID3D11SamplerState> m_sampler;
-    ComPtr<ID3D11BlendState>   m_blendOff;
-    ComPtr<ID3D11RasterizerState> m_rs;
-    ComPtr<ID3D11DepthStencilState> m_dss;
 
     int   m_lastSrcW = 0;
     int   m_lastSrcH = 0;

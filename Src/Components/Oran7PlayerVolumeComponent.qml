@@ -115,6 +115,12 @@ Item{
                 orientation: Qt.Vertical
 
                 property real volumeSlider_progressValue: BasicConfig.playerVolume
+                Behavior on volumeSlider_progressValue{
+                    NumberAnimation{
+                        duration:200
+                        easing.type:Easing.OutCubic
+                    }
+                }
                 property real volumeSliderVisibleRectangle_posY: (volumeSlider.volumeSlider_progressValue / 100 ) * volumeSlider.height
                                                                  - volumeSliderHandleRectangle.width/2
                 background: Rectangle{
