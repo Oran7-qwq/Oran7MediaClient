@@ -65,5 +65,7 @@
         <file>shaders/NOTE.txt</file>
         <file>shaders/bgra2rgba_vs.hlsl</file>
         <file>shaders/bgra2rgba_ps.hlsl</file>
+        <file>shaders/video.vert</file>
+        <file>shaders/video.frag</file>
     </qresource>
 </RCC>

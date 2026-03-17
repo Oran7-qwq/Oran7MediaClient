@@ -73,7 +73,10 @@ public:
 public slots:
     void start();
 
-    void stop(){m_running.store(false);}
+    void stop(){
+        INFO_LOG <<"Oran7ScreenCapture WorkerObject thread stop.";
+        m_running.store(false);
+    }
 
 signals:
     void started();

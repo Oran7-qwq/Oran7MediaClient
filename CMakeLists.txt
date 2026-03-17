@@ -44,6 +44,7 @@ set(PROJECT_MAIN_SOURCES
     main.cpp
     qml.qrc
     res.qrc
+    app.rc
 )
 
 qt_add_executable(Oran7MediaClient
@@ -89,6 +90,8 @@ qt_add_executable(Oran7MediaClient
     code/Oran7VideoGPURender/d3d11videoitem.cpp
     code/Oran7VideoGPURender/d3d11deviceprovider.h
     code/Oran7VideoGPURender/d3d11deviceprovider.cpp
+    code/Oran7VideoGPURender/d3d11videorendernode.h
+    code/Oran7VideoGPURender/d3d11videorendernode.cpp
 
     #Oran7Sever
     code/Oran7Sever/sever.h
@@ -104,12 +107,12 @@ qt_add_executable(Oran7MediaClient
 )
 
 # ===================== ShaderEffect 自动编译 QSB ================
-# qt_add_shaders(Oran7MediaClient "VideoShaders"
-#     PREFIX "/"
-#     FILES
-#         shaders/VideoPlayerRenderGLSL.vert
-#         shaders/VideoPlayerRenderGLSL.frag
-# )
+qt_add_shaders(Oran7MediaClient "shaders"
+    PREFIX "/"
+    FILES
+        shaders/video.vert
+        shaders/video.frag
+)
 # =======================================================
 
 # ===================== 运行时依赖自动拷贝 =====================
@@ -175,6 +178,7 @@ target_link_libraries(Oran7MediaClient
     Qt6::ShaderTools
     Qt6::Multimedia
     OpenGL::GL
+    Qt6::GuiPrivate
   PRIVATE
     avcodec avformat avutil avdevice avfilter swresample swscale
   PRIVATE

@@ -185,13 +185,17 @@ void Oran7ScreenCaptureController::onNewFrameIndex(int idx)
     auto now1 = QDateTime::currentMSecsSinceEpoch();
     if (now1 - t01 >= 1000)//1000ms
     {
-        INFO_LOG<<"submitFrame:"<<frame_count1<<" per second. format"<<dxgiFormatName(frame->format);
+        INFO_LOG<<"submitFrame:"<<frame_count1<<" per second.";
         frame_count1 = 0;
         t01 = now1;
     }
 #endif
 
-    m_item->submitFrame(frame);
+    if(!m_item){av_frame_free(&frame);return;}
+    AVFrame* safe = av_frame_clone(frame);
+    av_frame_free(&frame);
+
+    m_item->submitFrame(safe);
 }
 
 #ifdef _WIN32
@@ -256,13 +260,14 @@ void Oran7ScreenCaptureController::teardownWorker()
 {
     if (!m_thread) return;
 
-    // 先请求 worker stop（通过 stopped 信号连接）
-    if (m_workerObj) {
-        QMetaObject::invokeMethod(m_workerObj, "stop", Qt::BlockingQueuedConnection);
-    }
+    // 先请求 worker stop
+    DdaGrabWorker *worker  = static_cast<DdaGrabWorker*>(m_workerObj);
+    worker->stop();
 
     m_thread->quit();
     m_thread->wait();
+
+    m_thread->deleteLater();
 
     m_thread = nullptr;
     m_workerObj = nullptr;
@@ -290,27 +295,6 @@ void DdaGrabWorker::start()
 QString DdaGrabWorker::initGraph()
 {
     if (!m_item) return "D3D11VideoItem is null.";
-    //if (!m_d3dqtDev) return "ID3D11Device is null.";
-
-    // 1) Create hwdevice ctx from Qt's ID3D11Device //Discard 2026/2/24
-    // m_hwdev = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D11VA);//Discard 2026/2/24
-    // if (!m_hwdev) return "av_hwdevice_ctx_alloc(D3D11VA) failed.";//Discard 2026/2/24
-
-    //auto* hw = reinterpret_cast<AVHWDeviceContext*>(m_hwdev->data);//Discard 2026/2/24
-    //auto* d3d11 = reinterpret_cast<AVD3D11VADeviceContext*>(hw->hwctx);//Discard 2026/2/24
-
-    // mandatory: set device//Discard 2026/2/24
-    // m_d3dqtDev->AddRef();              // FFmpeg will hold it//Discard 2026/2/24
-    // d3d11->device = m_d3dqtDev.Get();//Discard 2026/2/24
-
-    //add lock/unlock to serialize FFmpeg internal D3D calls
-    // d3d11->lock_ctx = &g_ffmpegD3DMutex;
-    // d3d11->lock = [](void* ctx) {
-    //     static_cast<QMutex*>(ctx)->lock();
-    // };
-    // d3d11->unlock = [](void* ctx) {
-    //     static_cast<QMutex*>(ctx)->unlock();
-    // };
 
     int ret = av_hwdevice_ctx_create(&m_hwdev, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0);
     if (ret < 0) return "av_hwdevice_ctx_create(D3D11VA) failed: " + ffErrStr(ret);
@@ -380,6 +364,7 @@ QString DdaGrabWorker::initGraph()
 
     return {};
 }
+
 bool DdaGrabWorker::ensureSharedPoolRGBA(int w, int h)
 {
     if (m_poolW == w && m_poolH == h && m_sharedTex[0]) return true;
@@ -442,9 +427,10 @@ void DdaGrabWorker::grabLoop()
         }
 
         // 从 sink 非阻塞取出“已经到达”的帧（可能一次取多帧）
+        AVFrame* f = av_frame_alloc();
         while (m_running.load())
         {
-            AVFrame* f = av_frame_alloc();
+            av_frame_unref(f);//unref old frame
             if (!f) { emit errorOccurred("av_frame_alloc failed"); return; }
 
             int ret = av_buffersink_get_frame_flags(m_sink, f, AV_BUFFERSINK_FLAG_NO_REQUEST);
@@ -490,12 +476,22 @@ void DdaGrabWorker::grabLoop()
                     return;
                 }
                 //INFO_LOG<<"newFrameReady -idx:"<<idx;
+#if 0
+    static int frame_count1 = 0;
+    static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
+    frame_count1++;
+    auto now1 = QDateTime::currentMSecsSinceEpoch();
+    if (now1 - t01 >= 1000)//1000ms
+    {
+        INFO_LOG<<"grabLoop:"<<frame_count1<<" per second.";
+        frame_count1 = 0;
+        t01 = now1;
+    }
+#endif
                 emit newFrameReady(idx);
             }
-
-            av_frame_free(&f);
         }
-        QThread::msleep(1);
+        av_frame_free(&f);
     }
     INFO_LOG<<"Oran7ScreenCapture grabLopp thread leave.";
 }

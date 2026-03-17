@@ -2,6 +2,7 @@
 #include "d3d11videoitem.h"
 #include "globalhelper.h"
 #include "d3d11deviceprovider.h"
+#include "d3d11videorendernode.h"
 
 #include <QMutexLocker>
 #include <QMetaObject>
@@ -22,15 +23,7 @@ D3D11VideoItem::D3D11VideoItem(QQuickItem *parent)
 
 void D3D11VideoItem::submitFrame(AVFrame *frameRef)
 {
-    AVFrame *old = nullptr;
-    {
-        QMutexLocker locker(&m_mutex);
-        old = m_pendingFrame;
-        if (old == frameRef) {
-            return;
-        }
-        m_pendingFrame = frameRef;
-    }
+    AVFrame* old = m_latestFrame.exchange(frameRef, std::memory_order_acq_rel);
     if (old) av_frame_free(&old);
 
     QMetaObject::invokeMethod(this, "update", Qt::QueuedConnection);
@@ -75,10 +68,14 @@ void D3D11VideoItem::releaseResources()
     m_vp.Reset();
     m_vpEnum.Reset();
     // 可把 pendingFrame 清掉
-    QMutexLocker locker(&m_mutex);
-    if (m_pendingFrame) {
-        av_frame_free(&m_pendingFrame);
-        m_pendingFrame = nullptr;
+    // QMutexLocker locker(&m_mutex);
+    // if (m_pendingFrame) {
+    //     av_frame_free(&m_pendingFrame);
+    //     m_pendingFrame = nullptr;
+    // }
+    AVFrame* frame = m_latestFrame.exchange(nullptr, std::memory_order_acq_rel);
+    if (frame) {
+        av_frame_free(&frame);
     }
 }
 
@@ -87,8 +84,6 @@ void D3D11VideoItem::hookWindow(QQuickWindow *w)
     if (m_window == w) return;
     m_window = w;
     INFO_LOG<<"D3D11VideoItem New hookWindow.";
-
-    //D3D11DeviceProvider::instance()->attachWindow(w);//获取window d3d11Dev
 
     connect(D3D11DeviceProvider::instance(), &D3D11DeviceProvider::deviceLost,
             this, [this](){
@@ -207,181 +202,252 @@ bool D3D11VideoItem::blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int srcH,
     return SUCCEEDED(hr);
 }
 
-QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* data)
+// QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* data)
+// {
+//     if (!m_window && window()) {
+//         hookWindow(window());
+//         INFO_LOG<<"By D3D11VideoItem::updatePaintNode hookWindow.";
+//     }
+
+//     auto *node = static_cast<QSGSimpleTextureNode*>(oldNode);
+//     if (!node) {
+//         node = new QSGSimpleTextureNode();
+//         node->setOwnsTexture(true);  // 节点管理纹理生命周期
+//     }
+
+//     AVFrame *cur = m_latestFrame.exchange(nullptr);;
+//     //=======================Render Black======================
+//     const bool needBlack = m_needClearBlack.exchange(false, std::memory_order_acq_rel);
+//     if (needBlack) {
+//         // 如果拿到了新视频帧，丢掉它，避免覆盖黑屏
+//         if (cur) {
+//             av_frame_free(&cur);
+//             cur = nullptr;
+//         }
+
+//         if (!m_dev) {
+//             if (!initD3D11Resources()) {
+//                 node->setRect(boundingRect());
+//                 delete node;
+//                 return nullptr;
+//             }
+//         }
+//         // 用当前 item 尺寸来建黑屏纹理
+//         int w = int(width());
+//         int h = int(height());
+//         if (w > 0 && h > 0) {
+//             const bool recreated = ensureRgbaTarget(w, h,DXGI_FORMAT_R8G8B8A8_UNORM);
+//             // 确保这张纹理是可 RTV 的
+//             ComPtr<ID3D11RenderTargetView> rtv;
+//             D3D11_RENDER_TARGET_VIEW_DESC desc = {};
+//             desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+//             desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+//             desc.Texture2D.MipSlice = 0;
+
+//             HRESULT hr = m_dev->CreateRenderTargetView(m_rgbaTex.Get(), &desc, rtv.GetAddressOf());
+//             if (SUCCEEDED(hr) && rtv) {
+//                 const float color[4] = {0.f, 0.f, 0.f, 1.f};
+//                 m_ctx->ClearRenderTargetView(rtv.Get(), color);
+//                 m_ctx->Flush();
+//             } else {
+//                 WARNING_LOG << "CreateRenderTargetView failed hr=" << QString::number(hr, 16).toStdString();
+//             }
+
+//             // 确保 node 有纹理 wrapper
+//             if (recreated || node->texture() == nullptr) {
+//                 QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
+//                     m_rgbaTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
+//                 if (tex) node->setTexture(tex);
+//             }
+//         }
+//         node->setRect(boundingRect());
+//         return node;
+//     }
+//     //=============================================================
+
+//     if (!cur) {
+//         if (node && node->texture()) {
+//             node->setRect(boundingRect());
+//             return node;
+//         }
+//         else
+//         {
+//             delete node;
+//             return nullptr;
+//         }
+//     }
+
+//     if (!m_dev) {
+//         if (!initD3D11Resources()) {
+//             av_frame_free(&cur);
+//             node->setRect(boundingRect());
+//             WARNING_LOG<<"Failed to initD3D11Resources().";
+//             delete node;
+//             return nullptr;
+//         }
+//     }
+
+//     auto *srcTex = reinterpret_cast<ID3D11Texture2D*>(cur->data[0]);
+//     D3D11_TEXTURE2D_DESC sdesc{};
+//     srcTex->GetDesc(&sdesc);
+//     int srcW = (int)sdesc.Width;
+//     int srcH = (int)sdesc.Height;
+
+//     if (srcW != m_lastSrcW || srcH != m_lastSrcH) {
+//         m_lastSrcW = srcW; m_lastSrcH = srcH;
+//         INFO_LOG<<"emitSourceSizeChanged"<<srcW<<"/"<<srcH;
+//         emit sourceSizeChanged(srcW, srcH);
+//     }
+
+//     const bool recreated = ensureRgbaTarget(srcW, srcH,DXGI_FORMAT_R8G8B8A8_UNORM);
+//     if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
+//         if (!m_vp || !m_vpEnum)
+//         {
+//             if (!ensureVideoProcessor(srcW, srcH)) {
+//                 av_frame_free(&cur);
+//                 return node;
+//             }
+//             if(!isFormatSupported(m_vpEnum.Get(),DXGI_FORMAT_R8G8B8A8_UNORM))
+//                 WARNING_LOG<<"DXGI_FORMAT_R8G8B8A8_UNORM not Supported";
+//             else
+//                 INFO_LOG<<"DXGI_FORMAT_R8G8B8A8_UNORM is Supported.";
+//         }
+//         int slice = (int)(intptr_t)cur->data[1];
+//         if (!blitNv12ToRgba(srcTex, srcW, srcH, slice))
+//         {
+//             av_frame_free(&cur);
+//             return node;
+//         }
+//     }
+//     else if (sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+//              sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
+//         //RGBA -> RGBA，直接拷贝
+//         m_ctx->CopyResource(m_rgbaTex.Get(), srcTex);
+//         //INFO_LOG<<"Oran7ScreenCapture srcW:"<<srcW<<"-srcH:"<<srcH;
+//     }
+//     else {
+//         // 其他格式先不处理
+//         av_frame_free(&cur);
+//         return node;
+//     }
+
+//     // 只有当 BGRA 纹理重建，才需要创建新的 QSGTexture wrapper 并 setTexture
+//     if (recreated || node->texture() == nullptr) {
+//         INFO_LOG<<"QSGTexture wrapper recreated.";
+//         QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
+//             m_rgbaTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
+
+//         if (tex)
+//             node->setTexture(tex);
+//         else
+//             WARNING_LOG<<"QSGTexture ERROR.";
+//     }
+//     node->setRect(boundingRect());
+
+// #if 0
+//     static int frame_count1 = 0;
+//     static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
+//     frame_count1++;
+//     auto now1 = QDateTime::currentMSecsSinceEpoch();
+//     if (now1 - t01 >= 1000)//1000ms
+//     {
+//         INFO_LOG<<"d3d11VideoItem updataPaintNode frameCount:"<<frame_count1<<" per second.";
+//         frame_count1 = 0;
+//         t01 = now1;
+//     }
+// #endif
+
+//     //==============  static video info ================//
+//     static int frame_count = 0;
+//     static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+//     frame_count++;
+//     auto now = QDateTime::currentMSecsSinceEpoch();
+//     if (now - t0 >= 1000)//1000ms
+//     {
+//         Oran7VideoInfo info;
+//         info.srcSize = QSize(cur->width,cur->height);
+//         info.srcFormat = cur->format;
+//         info.srcFormatName = QString(av_get_pix_fmt_name(static_cast<AVPixelFormat>(cur->format)));
+//         info.renderSize =QSize(boundingRect().width(),boundingRect().height());
+//         info.dxgiFormat = sdesc.Format;
+//         info.dxgiFormatName =dxgiFormatName(sdesc.Format);
+//         info.fps = frame_count;
+//         info.isFromHardWare = true;
+//         info.decodeDevice = "d3d11va";
+//         info.renderDevice = "d3d11va";
+
+//         emit sendVideoFrameInfo(info);
+
+//         frame_count = 0;
+//         t0 = now;
+//     }
+
+//     av_frame_free(&cur);
+
+//     return node;
+// }
+
+QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
-    if (!m_window && window()) {
-        hookWindow(window());
-        INFO_LOG<<"By D3D11VideoItem::updatePaintNode hookWindow.";
-    }
+    auto *node = static_cast<D3D11VideoRenderNode*>(oldNode);
+    if (!node)
+        node = new D3D11VideoRenderNode(window());
 
-    auto *node = static_cast<QSGSimpleTextureNode*>(oldNode);
-    if (!node) {
-        node = new QSGSimpleTextureNode();
-        node->setOwnsTexture(true);  // 节点管理纹理生命周期
-    }
-
-    AVFrame *cur = nullptr;
-    {
-        QMutexLocker locker(&m_mutex);
-        cur = m_pendingFrame;
-        m_pendingFrame = nullptr;
-    }
-    //=======================Render Black======================
-    const bool needBlack = m_needClearBlack.exchange(false, std::memory_order_acq_rel);
-    if (needBlack) {
-        // 如果拿到了新视频帧，丢掉它，避免覆盖黑屏
-        if (cur) {
-            av_frame_free(&cur);
-            cur = nullptr;
-        }
-
-        if (!m_dev) {
-            if (!initD3D11Resources()) {
-                node->setRect(boundingRect());
-                delete node;
-                return nullptr;
-            }
-        }
-        // 用当前 item 尺寸来建黑屏纹理
-        int w = int(width());
-        int h = int(height());
-        if (w > 0 && h > 0) {
-            const bool recreated = ensureRgbaTarget(w, h,DXGI_FORMAT_R8G8B8A8_UNORM);
-            // 确保这张纹理是可 RTV 的
-            ComPtr<ID3D11RenderTargetView> rtv;
-            D3D11_RENDER_TARGET_VIEW_DESC desc = {};
-            desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-            desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-            desc.Texture2D.MipSlice = 0;
-
-            HRESULT hr = m_dev->CreateRenderTargetView(m_rgbaTex.Get(), &desc, rtv.GetAddressOf());
-            if (SUCCEEDED(hr) && rtv) {
-                const float color[4] = {0.f, 0.f, 0.f, 1.f};
-                m_ctx->ClearRenderTargetView(rtv.Get(), color);
-                m_ctx->Flush();
-            } else {
-                WARNING_LOG << "CreateRenderTargetView failed hr=" << QString::number(hr, 16).toStdString();
-            }
-
-            // 确保 node 有纹理 wrapper
-            if (recreated || node->texture() == nullptr) {
-                QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
-                    m_rgbaTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
-                if (tex) node->setTexture(tex);
-            }
-        }
-        node->setRect(boundingRect());
-        return node;
-    }
-    //=============================================================
-
-    if (!cur) {
-        if (node && node->texture()) {
-            node->setRect(boundingRect());
-            return node;
-        }
-        else
-        {
-            delete node;
-            return nullptr;
-        }
-    }
-
-    if (!m_dev) {
-        if (!initD3D11Resources()) {
-            av_frame_free(&cur);
-            node->setRect(boundingRect());
-            WARNING_LOG<<"Failed to initD3D11Resources().";
-            delete node;
-            return nullptr;
-        }
-    }
-
-    auto *srcTex = reinterpret_cast<ID3D11Texture2D*>(cur->data[0]);
-    D3D11_TEXTURE2D_DESC sdesc{};
-    srcTex->GetDesc(&sdesc);
-    int srcW = (int)sdesc.Width;
-    int srcH = (int)sdesc.Height;
-
-    if (srcW != m_lastSrcW || srcH != m_lastSrcH) {
-        m_lastSrcW = srcW; m_lastSrcH = srcH;
-        INFO_LOG<<"emitSourceSizeChanged"<<srcW<<"/"<<srcH;
-        emit sourceSizeChanged(srcW, srcH);
-    }
-
-    const bool recreated = ensureRgbaTarget(srcW, srcH,DXGI_FORMAT_R8G8B8A8_UNORM);
-    if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
-        if (!m_vp || !m_vpEnum)
-        {
-            if (!ensureVideoProcessor(srcW, srcH)) {
-                av_frame_free(&cur);
-                return node;
-            }
-            if(!isFormatSupported(m_vpEnum.Get(),DXGI_FORMAT_R8G8B8A8_UNORM))
-                WARNING_LOG<<"DXGI_FORMAT_R8G8B8A8_UNORM not Supported";
-            else
-                INFO_LOG<<"DXGI_FORMAT_R8G8B8A8_UNORM is Supported.";
-        }
-        int slice = (int)(intptr_t)cur->data[1];
-        if (!blitNv12ToRgba(srcTex, srcW, srcH, slice))
-        {
-            av_frame_free(&cur);
-            return node;
-        }
-    }
-    else if (sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
-             sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
-        //RGBA -> RGBA，直接拷贝
-        m_ctx->CopyResource(m_rgbaTex.Get(), srcTex);
-        //INFO_LOG<<"Oran7ScreenCapture srcW:"<<srcW<<"-srcH:"<<srcH;
-    }
-    else {
-        // 其他格式先不处理
-        av_frame_free(&cur);
-        return node;
-    }
-
-    // 只有当 BGRA 纹理重建，才需要创建新的 QSGTexture wrapper 并 setTexture
-    if (recreated || node->texture() == nullptr) {
-        INFO_LOG<<"QSGTexture wrapper recreated.";
-        QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
-            m_rgbaTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
-
-        if (tex)
-            node->setTexture(tex);
-        else
-            WARNING_LOG<<"QSGTexture ERROR.";
-    }
     node->setRect(boundingRect());
 
+    if (m_needClearBlack.exchange(false, std::memory_order_acq_rel))
+        node->setNeedBlack(true);
+
+    AVFrame *cur = m_latestFrame.exchange(nullptr, std::memory_order_acq_rel);
+    if (cur)
+        node->setFrame(cur);
+    else return node;
+
+    int w = 0, h = 0;
+    if (node->takePendingSourceSizeChanged(w, h))
+        emit sourceSizeChanged(w, h);
+
     //==============  static video info ================//
-    static int frame_count = 0;
-    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-    frame_count++;
-    auto now = QDateTime::currentMSecsSinceEpoch();
-    if (now - t0 >= 1000)//1000ms
-    {
-        Oran7VideoInfo info;
-        info.srcSize = QSize(cur->width,cur->height);
-        info.srcFormat = cur->format;
-        info.srcFormatName = QString(av_get_pix_fmt_name(static_cast<AVPixelFormat>(cur->format)));
-        info.renderSize =QSize(boundingRect().width(),boundingRect().height());
-        info.dxgiFormat = sdesc.Format;
-        info.dxgiFormatName =dxgiFormatName(sdesc.Format);
-        info.fps = frame_count;
-        info.isFromHardWare = true;
-        info.decodeDevice = "d3d11va";
-        info.renderDevice = "d3d11va";
+    // static int frame_count = 0;
+    // static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+    // frame_count++;
+    // auto now = QDateTime::currentMSecsSinceEpoch();
+    // if (now - t0 >= 1000)//1000ms
+    // {
+    //     Oran7VideoInfo info;
+    //     info.srcSize = QSize(cur->width,cur->height);
+    //     info.srcFormat = cur->format;
+    //     info.srcFormatName = QString(av_get_pix_fmt_name(static_cast<AVPixelFormat>(cur->format)));
+    //     info.renderSize =QSize(boundingRect().width(),boundingRect().height());
+    //     node->takePendingDxgifromat(info.dxgiFormat);
+    //     info.dxgiFormatName =dxgiFormatName(info.dxgiFormat);
+    //     info.fps = frame_count;
+    //     info.isFromHardWare = true;
+    //     info.decodeDevice = "d3d11va";
+    //     info.renderDevice = "d3d11va";
 
-        emit sendVideoFrameInfo(info);
+    //     emit sendVideoFrameInfo(info);
 
-        frame_count = 0;
-        t0 = now;
-    }
+    //     frame_count = 0;
+    //     t0 = now;
+    // }
 
-    av_frame_free(&cur);
+    #if 1
+        static int frame_count1 = 0;
+        static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
+        frame_count1++;
+        auto now1 = QDateTime::currentMSecsSinceEpoch();
+        if (now1 - t01 >= 1000)//1000ms
+        {
+            INFO_LOG<<"d3d11VideoItem updataPaintNode frameCount:"<<frame_count1<<" per second.";
+            frame_count1 = 0;
+            t01 = now1;
+        }
+    #endif
 
     return node;
 }
+
+
 
 

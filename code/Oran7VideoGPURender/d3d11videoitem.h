@@ -51,8 +51,8 @@ private:
     bool ensureVideoProcessor(int srcW, int srcH);
     bool blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int srcH, int slice);
 
-    QMutex m_mutex;
-    AVFrame *m_pendingFrame = nullptr;
+    //QMutex m_mutex;
+    //AVFrame *m_pendingFrame = nullptr;
     ComPtr<ID3D11Device> m_dev;
     ComPtr<ID3D11DeviceContext> m_ctx;
     ComPtr<ID3D11VideoDevice> m_videoDev;
@@ -67,6 +67,7 @@ private:
     ComPtr<ID3D11VideoProcessor> m_vp;
     std::atomic_bool m_needClearBlack{false};
 
+    std::atomic<AVFrame*> m_latestFrame{nullptr};
     QQuickWindow *m_window = nullptr;
 };
 

@@ -155,7 +155,7 @@ public:
     QString srcFormatName;
 
     QSize renderSize;
-    int dxgiFormat = 0;
+    DXGI_FORMAT dxgiFormat = DXGI_FORMAT_UNKNOWN;
     QString dxgiFormatName;
 
     int fps = 0;
@@ -167,7 +167,7 @@ public:
 
 //============= tools function ==============//
 
-static QString dxgiFormatName(int fmt)
+static QString dxgiFormatName(DXGI_FORMAT fmt)
 {
 #ifdef _WIN32
     switch (static_cast<DXGI_FORMAT>(fmt)) {

@@ -65,6 +65,7 @@ int main(int argc, char *argv[])
 
     //threaded 渲染循环
     qputenv("QSG_RENDER_LOOP", "basic");
+    qputenv("QSG_NO_VSYNC", "1");
     //qputenv("QSG_RHI_BACKEND", "opengl");
     //qputenv("QSG_RHI_PROFILE", "false");
     //qputenv("QSG_INFO", "1");
