@@ -1098,7 +1098,7 @@ bool Client::attachVideoItem(const RenderObject key, QQuickItem *host)
     if (key == RenderObject::ScreenCaptureRender) {
         m_screenCap->setVideoItem(s.item);
         m_screenCap->setOutputIndex(0);
-        m_screenCap->setFps(120);
+        m_screenCap->setFps(60);
         m_screenCap->setDrawMouse(true);
     }
 

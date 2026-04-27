@@ -109,10 +109,10 @@ Rectangle{
         anchors.fill: parent
         start: Qt.point(0, 0)
         end: Qt.point(width, height)
-        property color begainColor: "#96fbc4"
-        property color middleColor: "#7ed321"
-        property color endColor: "#f9f586"
-        property int currentColorIndex: 0
+        property color begainColor: gradientLayer.colorItems[gradientLayer.currentColorIndex].begainColorValue
+        property color middleColor: gradientLayer.colorItems[gradientLayer.currentColorIndex].middleColorValue
+        property color endColor: gradientLayer.colorItems[gradientLayer.currentColorIndex].endColorValue
+        property int currentColorIndex: 3
         onCurrentColorIndexChanged: {
             gradientLayerColorAnimationTImer.start()
         }
@@ -174,6 +174,8 @@ Rectangle{
     Rectangle{
         id:topBarRect
         height:root.topBarHeight
+        property bool haideUI: false
+        // height:0
         Behavior on height{
             NumberAnimation{
                 duration: 300
@@ -187,6 +189,7 @@ Rectangle{
         color: "transparent"
         TopRightBar{
             id:rightTopMenuItem
+            visible: topBarRect.haideUI
             anchors.top: parent.top
             anchors.right: parent.right
             height:70
@@ -196,6 +199,7 @@ Rectangle{
         //--------------------------------
         TopMiddleMenuBar{
             id:middleTopMenuItem
+            visible: topBarRect.haideUI
             anchors.top: parent.top
             anchors.right: rightTopMenuItem.left
             height:70
@@ -203,6 +207,7 @@ Rectangle{
         //--------------------------------
         TopLeftBar{
             id:leftTopMenuItem
+            visible: topBarRect.haideUI
             anchors.top: parent.top
             anchors.left: parent.left
             height:70
@@ -397,7 +402,7 @@ Rectangle{
         Component.onCompleted: {
             BasicConfig.myFavoriteMusicListModel = myFavoriteMusicListModel
             BasicConfig.localMusicListModel = localMusicListModel
-            start_gradientLayerColorAnimation = true
+            start_gradientLayerColorAnimation = false
         }
     }
 

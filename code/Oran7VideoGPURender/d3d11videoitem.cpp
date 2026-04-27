@@ -1,8 +1,5 @@
 // d3d11videoitem.cpp
 #include "d3d11videoitem.h"
-#include "globalhelper.h"
-#include "d3d11deviceprovider.h"
-#include "d3d11videorendernode.h"
 
 #include <QMutexLocker>
 #include <QMetaObject>
@@ -23,10 +20,37 @@ D3D11VideoItem::D3D11VideoItem(QQuickItem *parent)
 
 void D3D11VideoItem::submitFrame(AVFrame *frameRef)
 {
+#if 0
+    static int submitCount = 0;
+    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+    submitCount++;
+    auto now = QDateTime::currentMSecsSinceEpoch();
+    if (now - t0 >= 1000) {
+        INFO_LOG << "submitFrame fps =" << submitCount;
+        submitCount = 0;
+        t0 = now;
+    }
+#endif
     AVFrame* old = m_latestFrame.exchange(frameRef, std::memory_order_acq_rel);
     if (old) av_frame_free(&old);
 
-    QMetaObject::invokeMethod(this, "update", Qt::QueuedConnection);
+    bool expected = false;
+    /*if (m_updatePending.compare_exchange_strong(expected, true, std::memory_order_acq_rel))*/ {
+        QMetaObject::invokeMethod(this, [this]{
+#if 1
+            static int submitCount = 0;
+            static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+            submitCount++;
+            auto now = QDateTime::currentMSecsSinceEpoch();
+            if (now - t0 >= 1000) {
+                INFO_LOG << "update fps =" << submitCount;
+                submitCount = 0;
+                t0 = now;
+            }
+#endif
+            update();
+        }, Qt::QueuedConnection);
+    }
 }
 
 void D3D11VideoItem::renderBlackFrame()
@@ -36,6 +60,31 @@ void D3D11VideoItem::renderBlackFrame()
     update(); // 让渲染线程尽快跑 updatePaintNode
 }
 
+void D3D11VideoItem::onBeforeRendering()
+{
+    if (m_renderNode) {
+        AVFrame *cur = m_latestFrame.exchange(nullptr, std::memory_order_acq_rel);
+        if (cur) {
+            m_renderNode->setFrame(cur);
+#if 0
+            static int frame_count1 = 0;
+            static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
+            frame_count1++;
+            auto now1 = QDateTime::currentMSecsSinceEpoch();
+            if (now1 - t01 >= 1000)//1000ms
+            {
+                INFO_LOG<<"d3d11VideoItem updataPaintNode frameCount:"<<frame_count1<<" per second.";
+                frame_count1 = 0;t01 = now1;
+            }
+#endif
+        }
+    }
+
+    if (window())
+        window()->update();
+}
+
+
 void D3D11VideoItem::componentComplete()
 {
     QQuickItem::componentComplete();
@@ -43,9 +92,8 @@ void D3D11VideoItem::componentComplete()
     {
         hookWindow(window());
         INFO_LOG<<"By D3D11VideoItem::componentComplete hookWindow.";
-        return;
     }
-    INFO_LOG<<"Cannot hookWindow, because of in 'ComponentComplete' window() is nullptr.";
+    else INFO_LOG<<"Cannot hookWindow, because of in 'ComponentComplete' window() is nullptr.";
 }
 
 void D3D11VideoItem::itemChange(ItemChange change, const ItemChangeData &data)
@@ -92,6 +140,32 @@ void D3D11VideoItem::hookWindow(QQuickWindow *w)
                 m_videoDev.Reset();
                 m_videoCtx.Reset();
             }, Qt::DirectConnection);
+
+    // static QMetaObject::Connection beforeConn1;
+    // if (beforeConn1)
+    //     disconnect(beforeConn1);
+    // beforeConn1 = connect(w, &QQuickWindow::beforeRendering,
+    //                      this, &D3D11VideoItem::onBeforeRendering,
+    //                      Qt::DirectConnection);
+
+    // static QMetaObject::Connection beforeConn2;
+    // if (beforeConn2)
+    //     disconnect(beforeConn2);
+    // beforeConn2 = connect(w, &QQuickWindow::frameSwapped, this, [](){
+    //     static int count = 0;
+    //     static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+    //     count++;
+    //     auto now = QDateTime::currentMSecsSinceEpoch();
+    //     if (now - t0 >= 1000) {
+    //         INFO_LOG << "frameSwapped fps =" << count;
+    //         count = 0;
+    //         t0 = now;
+    //     }
+    // });
+
+
+    w->setPersistentSceneGraph(true);
+    w->setPersistentGraphics(true);
 }
 
 bool D3D11VideoItem::initD3D11Resources()
@@ -390,8 +464,11 @@ bool D3D11VideoItem::blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int srcH,
 QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
     auto *node = static_cast<D3D11VideoRenderNode*>(oldNode);
-    if (!node)
+    if (!node) {
         node = new D3D11VideoRenderNode(window());
+    }
+
+    m_renderNode = node;
 
     node->setRect(boundingRect());
 
@@ -399,9 +476,21 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *
         node->setNeedBlack(true);
 
     AVFrame *cur = m_latestFrame.exchange(nullptr, std::memory_order_acq_rel);
-    if (cur)
+    if (cur){
+#if 1
+    static int count = 0;
+    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+    count++;
+    auto now = QDateTime::currentMSecsSinceEpoch();
+    if (now - t0 >= 1000) {
+        INFO_LOG << "setFrame fps =" << count;
+        count = 0;
+        t0 = now;
+    }
+#endif
         node->setFrame(cur);
-    else return node;
+        m_updatePending.store(false, std::memory_order_release);
+    }
 
     int w = 0, h = 0;
     if (node->takePendingSourceSizeChanged(w, h))
@@ -432,17 +521,16 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *
     //     t0 = now;
     // }
 
-    #if 1
-        static int frame_count1 = 0;
-        static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
-        frame_count1++;
-        auto now1 = QDateTime::currentMSecsSinceEpoch();
-        if (now1 - t01 >= 1000)//1000ms
-        {
-            INFO_LOG<<"d3d11VideoItem updataPaintNode frameCount:"<<frame_count1<<" per second.";
-            frame_count1 = 0;
-            t01 = now1;
-        }
+    #if 0
+    static int count = 0;
+    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+    count++;
+    auto now = QDateTime::currentMSecsSinceEpoch();
+    if (now - t0 >= 1000) {
+        INFO_LOG << "updatePaintNode fps =" << count;
+        count = 0;
+        t0 = now;
+    }
     #endif
 
     return node;

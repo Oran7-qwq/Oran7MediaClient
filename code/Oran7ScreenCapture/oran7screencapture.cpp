@@ -42,7 +42,6 @@ void Oran7ScreenCaptureController::setVideoItem(QObject* item)
     m_item = vi;
 }
 
-
 bool Oran7ScreenCaptureController::start()
 {
     INFO_LOG<<"Oran7ScreenCaptureController request for start().";
@@ -191,11 +190,11 @@ void Oran7ScreenCaptureController::onNewFrameIndex(int idx)
     }
 #endif
 
-    if(!m_item){av_frame_free(&frame);return;}
-    AVFrame* safe = av_frame_clone(frame);
-    av_frame_free(&frame);
+    // if(!m_item){av_frame_free(&frame);return;}
+    // AVFrame* safe = av_frame_clone(frame);
+    // av_frame_free(&frame);
 
-    m_item->submitFrame(safe);
+    m_item->submitFrame(frame);
 }
 
 #ifdef _WIN32
@@ -220,12 +219,13 @@ void Oran7ScreenCaptureController::startWorkerIfPossible()
 
     if (m_thread) return; // already running
 
-    m_thread = new QThread();
+    this->m_thread = new QThread();
 #ifdef _WIN32
-    auto* worker = new DdaGrabWorker(m_item, m_outputIndex, m_drawMouse, m_fps);
+    DdaGrabWorker* worker = new DdaGrabWorker(m_item, m_outputIndex, m_drawMouse, m_fps);
 #else
     auto* worker = nullptr;
 #endif
+    worker->bind_DdaGrab_d3dqtDev(m_d3dqtDev.Get());
     m_workerObj = worker;
     worker->moveToThread(m_thread);
 
@@ -278,6 +278,7 @@ void DdaGrabWorker::start()
     if (m_running.exchange(true)) return;
 
     const QString err = initGraph();
+    INFO_LOG<<err;
     if (!err.isEmpty()) {
         m_running.store(false);
         emit errorOccurred(err);
@@ -294,21 +295,28 @@ void DdaGrabWorker::start()
 
 QString DdaGrabWorker::initGraph()
 {
+    int ret  = 0;
     if (!m_item) return "D3D11VideoItem is null.";
 
-    int ret = av_hwdevice_ctx_create(&m_hwdev, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0);
+    ret = av_hwdevice_ctx_create(&m_hwdev, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0);
     if (ret < 0) return "av_hwdevice_ctx_create(D3D11VA) failed: " + ffErrStr(ret);
 
+    //m_hwdev = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D11VA);
+    if (!m_hwdev) return "av_hwdevice_ctx_alloc failed.";
+
     // 从 hwdev 取出 capture device 指针（后续创建共享纹理、CopyResource 都用它）
-    auto* hw = reinterpret_cast<AVHWDeviceContext*>(m_hwdev->data);
-    auto* d3d11 = reinterpret_cast<AVD3D11VADeviceContext*>(hw->hwctx);
+    AVHWDeviceContext* hw = reinterpret_cast<AVHWDeviceContext*>(m_hwdev->data);
+    AVD3D11VADeviceContext* d3d11 = reinterpret_cast<AVD3D11VADeviceContext*>(hw->hwctx);
 
-    m_capDev = d3d11->device;
+     m_capDev = d3d11->device;
     if (!m_capDev) return "capture d3d11 device is null";
+    //d3d11->device = m_capDev.Get();
+    d3d11->device->AddRef();
 
-    m_capDev->AddRef();
+    // ret  = av_hwdevice_ctx_init(m_hwdev);
+    // if(ret<0) return "av_hwdevice_ctx_init Failed.";
+
     m_capDev->GetImmediateContext(&m_capCtx);
-
     m_capDev->QueryInterface(IID_ID3D11VideoDevice, (void**)&m_capVideoDev);
     m_capCtx->QueryInterface(IID_ID3D11VideoContext, (void**)&m_capVideoCtx);
 
@@ -369,7 +377,7 @@ bool DdaGrabWorker::ensureSharedPoolRGBA(int w, int h)
 {
     if (m_poolW == w && m_poolH == h && m_sharedTex[0]) return true;
 
-    // 释放旧的（老式共享 handle 不要 CloseHandle）
+    // 释放旧的
     for (int i=0;i<kPool;i++) {
         m_sharedHandle[i] = nullptr;
         m_sharedTex[i].Reset();
@@ -382,7 +390,7 @@ bool DdaGrabWorker::ensureSharedPoolRGBA(int w, int h)
     desc.Height = h;
     desc.MipLevels = 1;
     desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_NV12;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;//<--
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
@@ -417,7 +425,9 @@ void DdaGrabWorker::grabLoop()
 
     while (m_running.load()) {
         //主动请求上游产一帧（驱动 ddagrab）
+        //INFO_LOG << "Before avfilter_graph_request_oldest: m_graph=" << m_graph << ", m_sink=" << m_sink;
         int r = avfilter_graph_request_oldest(m_graph);
+        //INFO_LOG << "After avfilter_graph_request_oldest, ret=" << r;
         //INFO_LOG<<"avfilter_graph_request_oldest of ret:"<<r;
         if (r < 0 && r != AVERROR(EAGAIN))
         {
@@ -428,6 +438,10 @@ void DdaGrabWorker::grabLoop()
 
         // 从 sink 非阻塞取出“已经到达”的帧（可能一次取多帧）
         AVFrame* f = av_frame_alloc();
+        if (!f) {
+            emit errorOccurred("av_frame_alloc failed");
+            return;
+        }
         while (m_running.load())
         {
             av_frame_unref(f);//unref old frame
@@ -476,18 +490,6 @@ void DdaGrabWorker::grabLoop()
                     return;
                 }
                 //INFO_LOG<<"newFrameReady -idx:"<<idx;
-#if 0
-    static int frame_count1 = 0;
-    static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
-    frame_count1++;
-    auto now1 = QDateTime::currentMSecsSinceEpoch();
-    if (now1 - t01 >= 1000)//1000ms
-    {
-        INFO_LOG<<"grabLoop:"<<frame_count1<<" per second.";
-        frame_count1 = 0;
-        t01 = now1;
-    }
-#endif
                 emit newFrameReady(idx);
             }
         }
@@ -621,6 +623,14 @@ bool DdaGrabWorker::blitToShared(int idx,
     // {
     //     return blitBgraToRgbaShared(idx, srcTex, (int)sdesc.Width, (int)sdesc.Height);
     // }
+
+    //BGRA -> BGRA  --- NOW
+    if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+        sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
+    {
+        m_capCtx->CopyResource(m_sharedTex[idx].Get(), srcTex);
+        return true;
+    }
 
     //BGRA -> NV12
     if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||

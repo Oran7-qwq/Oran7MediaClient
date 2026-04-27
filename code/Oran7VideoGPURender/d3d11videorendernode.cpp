@@ -187,13 +187,13 @@ void D3D11VideoRenderNode::clearBlack()
         const int h = int(m_rect.height());
         if (w <= 0 || h <= 0)
             return;
-        if (!ensureRgbaTarget(w, h, DXGI_FORMAT_R8G8B8A8_UNORM))
+        if (!ensureRgbaTarget(w, h, DXGI_FORMAT_B8G8R8A8_UNORM))
             return;
     }
 
     ComPtr<ID3D11RenderTargetView> rtv;
     D3D11_RENDER_TARGET_VIEW_DESC desc = {};
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
     desc.Texture2D.MipSlice = 0;
 
@@ -211,7 +211,6 @@ void D3D11VideoRenderNode::clearBlack()
     m_importDirty = true;
     m_srbDirty = true;
 }
-
 
 
 void D3D11VideoRenderNode::prepare()
@@ -237,9 +236,32 @@ void D3D11VideoRenderNode::prepare()
         return;
     }
 
+#if 0
+    static int count = 0;
+    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+    count++;
+    auto now = QDateTime::currentMSecsSinceEpoch();
+    if (now - t0 >= 1000) {
+        INFO_LOG << "prepare fps =" << count;
+        count = 0;
+        t0 = now;
+    }
+#endif
 
-    if (!cur)
+    if (!cur){
+#if 0
+        static int count = 0;
+        static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+        count++;
+        auto now = QDateTime::currentMSecsSinceEpoch();
+        if (now - t0 >= 1000) {
+            INFO_LOG << "drop fps =" << count;
+            count = 0;
+            t0 = now;
+        }
+#endif
         return;
+    }
 
     auto *srcTex = reinterpret_cast<ID3D11Texture2D *>(cur->data[0]);
     if (!srcTex) {
@@ -267,7 +289,7 @@ void D3D11VideoRenderNode::prepare()
         INFO_LOG<<"DXGI_FORMAT_NAME:"<<dxgiFormatName(sdesc.Format);
     }
 
-    ensureRgbaTarget(srcW, srcH, DXGI_FORMAT_R8G8B8A8_UNORM);
+    ensureRgbaTarget(srcW, srcH, DXGI_FORMAT_B8G8R8A8_UNORM);
 
     if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
         if (!m_vp || !m_vpEnum) {
@@ -278,13 +300,13 @@ void D3D11VideoRenderNode::prepare()
         }
         const int slice = int(reinterpret_cast<intptr_t>(cur->data[1]));
         blitNv12ToRgba(srcTex, srcW, srcH, slice);
-    } else if (sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
-               sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
+    } else if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+               sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) {
         m_ctx->CopyResource(m_rgbaTex.Get(), srcTex);
     }
+
     av_frame_free(&cur);
 }
-
 
 void D3D11VideoRenderNode::render(const RenderState *)
 {
@@ -323,8 +345,55 @@ void D3D11VideoRenderNode::render(const RenderState *)
     cb->draw(4);
 }
 
+// void D3D11VideoRenderNode::prepare()
+// {
+//     AVFrame* cur = m_latestFrame.exchange(nullptr, std::memory_order_acq_rel);
+//     if (!cur)
+//         return;
 
+//     auto* srcTex = reinterpret_cast<ID3D11Texture2D*>(cur->data[0]);
+//     if (!srcTex) {
+//         av_frame_free(&cur);
+//         return;
+//     }
 
+//     // 如果纹理还没 wrap，或者源 texture 改变了，创建 QRhiTexture
+//     if (!m_rhiTex || m_lastImportedTex != srcTex) {
+//         QRhiTexture::NativeTexture nt{};
+//         nt.object = quint64(srcTex);
+
+//         const QSize size(cur->width, cur->height);
+//         m_rhiTex.reset(m_rhi->newTexture(QRhiTexture::BGRA8, size, 1, QRhiTexture::Flags{}));
+//         if (!m_rhiTex->createFrom(nt)) {
+//             m_rhiTex.reset();
+//             m_lastImportedTex = nullptr;
+//             av_frame_free(&cur);
+//             return;
+//         }
+
+//         m_lastImportedTex = srcTex;
+//         m_srbDirty = true;
+//     }
+
+//     av_frame_free(&cur);
+// }
+
+// void D3D11VideoRenderNode::render(const RenderState*)
+// {
+//     if (!m_rhiTex || !m_ps || !m_srb)
+//         return;
+
+//     QRhiCommandBuffer* cb = commandBuffer();
+//     cb->setGraphicsPipeline(m_ps.get());
+//     cb->setViewport(QRhiViewport(0, 0,
+//                                  renderTarget()->pixelSize().width(),
+//                                  renderTarget()->pixelSize().height()));
+//     cb->setShaderResources(m_srb.get());
+
+//     const QRhiCommandBuffer::VertexInput vb(m_vbuf.get(), 0);
+//     cb->setVertexInput(0, 1, &vb);
+//     cb->draw(4);
+// }
 
 void D3D11VideoRenderNode::releaseResources()
 {

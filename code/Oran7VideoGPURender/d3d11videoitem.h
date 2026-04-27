@@ -2,6 +2,8 @@
 #pragma once
 
 #include "globalhelper.h"
+#include "d3d11videorendernode.h"
+#include "d3d11deviceprovider.h"
 
 #include <QQuickItem>
 #include <QMutex>
@@ -37,6 +39,8 @@ signals:
 
     void sourceSizeChanged(int w, int h);
     void sendVideoFrameInfo(Oran7VideoInfo info);
+private slots:
+    void onBeforeRendering();
 
 protected:
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) override;
@@ -67,7 +71,9 @@ private:
     ComPtr<ID3D11VideoProcessor> m_vp;
     std::atomic_bool m_needClearBlack{false};
 
+    std::atomic_bool m_updatePending{false};
     std::atomic<AVFrame*> m_latestFrame{nullptr};
+    D3D11VideoRenderNode *m_renderNode = nullptr;
     QQuickWindow *m_window = nullptr;
 };
 

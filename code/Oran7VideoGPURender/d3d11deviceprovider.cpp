@@ -49,7 +49,12 @@ bool D3D11DeviceProvider::isReady() const
 #endif
 }
 
-ID3D11Device *D3D11DeviceProvider::acquireDevice() const
+/**
+ * @brief D3D11DeviceProvider::acquireDevice
+ * @note !!! must be by Attach() Get reference for ComPtr
+ * @return
+ */
+ID3D11Device *D3D11DeviceProvider::acquireDevice()
 {
     ID3D11Device* dev = m_dev.Get();
     if (dev) dev->AddRef();
@@ -111,7 +116,7 @@ void D3D11DeviceProvider::tryInitFromWindow(QQuickWindow* w)
     m_dev = dev;
     m_ctx.Reset();
     dev->GetImmediateContext(&m_ctx);
-    ComPtr<ID3D10Multithread> mt;//线程安全
+    ComPtr<ID3D10Multithread> mt;
     if (SUCCEEDED(m_ctx.As(&mt)) && mt) {
         mt->SetMultithreadProtected(TRUE);
     }

@@ -1,6 +1,5 @@
 #include "ffplayer.h"
 
-#include <iostream>
 #include <string.h>
 #include <atomic>
 #include <d3d10_1.h> // for ID3D10Multithread
@@ -80,7 +79,7 @@ static void safe_join(std::thread* t, const char* name)
 
     if (t->get_id() == std::this_thread::get_id()) {
         INFO_LOG << "[safe_join] refuse to join self: " << name;
-        return; // 绝对不能 join 自己
+        return; // must can't join itself
     }
 
     INFO_LOG << "[safe_join] joining: " << name;
@@ -107,7 +106,7 @@ FFPlayer::~FFPlayer()
         avio_closep(&ic->pb);
     if (read_thread_ && read_thread_->joinable())
         read_thread_->join();
-    delete read_thread_;      // 释放内存
+    delete read_thread_;      // 释放thread内存
     read_thread_ = nullptr;
 
     if (m_qtDevice) m_qtDevice->Release();
@@ -194,20 +193,22 @@ int FFPlayer::read_thread()
         ic->interrupt_callback.callback = decode_interrupt_cb;
         ic->interrupt_callback.opaque   = this;
 
-        // --------- 网络流参数 ---------
+        // --------- 网络流参数  BiliBili---------
         //b站网络连接头部构造
         av_dict_set(&opts, "user_agent",
            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
            0);
         av_dict_set(&opts, "referer", "https://live.bilibili.com/", 0);
-        //断流重连（直播加）
+        //断流重连-直播
         av_dict_set(&opts, "reconnect", "1", 0);
         av_dict_set(&opts, "reconnect_streamed", "1", 0);
         av_dict_set(&opts, "reconnect_delay_max", "2", 0);
 
-        //超时（避免卡死）
+        //超时检测-避免卡死
         av_dict_set(&opts, "stimeout", "5000000", 0);
         av_dict_set(&opts, "rw_timeout", "5000000", 0);
+
+        // ---------------------------------------
 
         /*打开文件，主要是探测协议类型，如果是网络文件则创建网络链接等 */
         err = avformat_open_input(&ic, input_filename_ , NULL, &opts);
@@ -264,7 +265,7 @@ int FFPlayer::read_thread()
              (codecpar->codec_id == AV_CODEC_ID_HEVC ||codecpar->codec_id == AV_CODEC_ID_AV1||codecpar->codec_id == AV_CODEC_ID_VP9))||
             // Condition-4 height of bit_rate 1080p video(>14Mbps)
             (codecpar->width >= 1920 && codecpar->height >= 1080 &&codecpar->bit_rate > 14000000);
-        Use_Hardware = true;
+        Use_Hardware = true;//<---此处强制启动硬件解码
 
         //* 直播流判定：不可 seek 基本就是 live *//
         bool is_live = false;
@@ -317,7 +318,7 @@ int FFPlayer::read_thread()
         {
             if (sureHaveVideo==true)
             {
-                //==非封面,并且视频流的duration!=AV_NOPTS_VALUE
+                //--->非封面,并且视频流的duration!=AV_NOPTS_VALUE
                 //--->创建视频刷新线程
                 video_refresh_thread_ = new std::thread([this]() {
                     this->video_refresh_thread();
@@ -886,7 +887,7 @@ void FFPlayer::stream_close()
  * @param hw_pix_fmt
  * @return
  */
-bool FFPlayer::initialize_hardware_acceleration(const AVCodec *codec)
+ bool FFPlayer::initialize_hardware_acceleration(const AVCodec *codec)
 {
     /*根据探测结果启用硬件加速*/
     for(int lib_index=0;Hardware_Support_Library[lib_index]!=nullptr; lib_index++)
@@ -969,7 +970,7 @@ bool FFPlayer::create_hw_device_ctx_from_qt_device()
     AVHWDeviceContext *hwctx = (AVHWDeviceContext*)hw->data;
     auto *d3d = (AVD3D11VADeviceContext*)hwctx->hwctx;
 
-    // 关键：把 Qt 的 device 填进去（必须由用户设置）:contentReference[oaicite:5]{index=5}
+    //把 Qt 的 device 填进去（必须由用户设置）:contentReference[oaicite:5]{index=5}
     d3d->device = m_qtDevice;
     d3d->device->AddRef();
 
@@ -1896,16 +1897,16 @@ int Decoder::decode_packet_to_frame(AVFrame *frame)
         {
             avcodec_flush_buffers(avctx_);//清空解码器缓存帧
             finished_=0;                            //重置数据包packet解码完成
-            next_pts = start_pts;     // 主要用在了audio
+            next_pts = start_pts;           // 主要用在了audio
             next_pts_tb = start_pts_tb;// 主要用在了audio
         }
         else
         {
             if(avctx_->codec_type == AVMEDIA_TYPE_SUBTITLE)
             {
-                //===
+                //--->字幕流分支
             }
-            else
+            else//否则就是video / audio packt
             {
                 if (avcodec_send_packet(avctx_, &pkt) == AVERROR(EAGAIN))
                 {

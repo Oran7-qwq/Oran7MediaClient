@@ -154,7 +154,7 @@ Rectangle{
     //"我的"
     Label{
         id:myTextLabel
-        text: "我的"
+        text: "我的Music"
         anchors.top: diveLine1.bottom
         anchors.topMargin: 14
         anchors.left: topColumn.left
@@ -294,30 +294,30 @@ Rectangle{
         height: 1
         color: "#fef2e8"
     }
-    //" 创建的歌单  num  ∨"TextLabel
-    property int musicListNum: 0
-    Label{
-        id:createdListLabel
-        text: "创建的歌单  "+musicListNum+"  ∨"
-        anchors.top: diveLine2.bottom
-        anchors.topMargin: 15
-        anchors.left: middleColumn.left
-        anchors.leftMargin: 2
-        font.pixelSize: 13
-        font.bold: true
-        font.family: "微软雅黑 Light"
-        color:"#fef2e8"
-    }
-    //分割线
-    Rectangle{
-        id:diveLine3
-        anchors.top: createdListLabel.bottom
-        anchors.left: topColumn.left
-        anchors.leftMargin: 4
-        anchors.topMargin: 15
-        width: 154
-        height: 1
-        color: "#fef2e8"
-    }
+    // //" 创建的歌单  num  ∨"TextLabel
+    // property int musicListNum: 0
+    // Label{
+    //     id:createdListLabel
+    //     text: "创建的歌单  "+musicListNum+"  ∨"
+    //     anchors.top: diveLine2.bottom
+    //     anchors.topMargin: 15
+    //     anchors.left: middleColumn.left
+    //     anchors.leftMargin: 2
+    //     font.pixelSize: 13
+    //     font.bold: true
+    //     font.family: "微软雅黑 Light"
+    //     color:"#fef2e8"
+    // }
+    // //分割线
+    // Rectangle{
+    //     id:diveLine3
+    //     anchors.top: createdListLabel.bottom
+    //     anchors.left: topColumn.left
+    //     anchors.leftMargin: 4
+    //     anchors.topMargin: 15
+    //     width: 154
+    //     height: 1
+    //     color: "#fef2e8"
+    // }
 }
 

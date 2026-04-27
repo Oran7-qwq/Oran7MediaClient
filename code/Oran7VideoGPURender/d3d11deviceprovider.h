@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QQuickWindow>
+#include <QMutex>
 
 #ifdef _WIN32
 #include <d3d11.h>
@@ -23,7 +24,7 @@ public:
     Q_INVOKABLE bool isReady() const;
 
     // 安全 getter-->返回带引用计数的指针，调用者负责 Release
-    ID3D11Device* acquireDevice() const;
+    ID3D11Device* acquireDevice();
 
 #ifdef _WIN32
     ID3D11Device* device() const { return m_dev.Get(); }

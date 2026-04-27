@@ -158,6 +158,5 @@ QList<QList<QString>> Database::getUserLikeMusicListData(quint32 UID)
         "IF OBJECT_ID(N'Loans', N'U') IS NOT NULL"
         "DROP TABLE Loans;");
 
-
     return list_musicList;
 }

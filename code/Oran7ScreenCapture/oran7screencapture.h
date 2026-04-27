@@ -70,6 +70,8 @@ public:
         // m_d3dDev = nullptr;//Discard
     }
 
+    void bind_DdaGrab_d3dqtDev(ID3D11Device *dev){m_capDev = dev;}
+
 public slots:
     void start();
 
@@ -110,6 +112,8 @@ private:
 
 private:
     QPointer<D3D11VideoItem> m_item;
+
+    QMutex m_d3dLock;//d3ddDev used recursive Locker
 
     // ComPtr<ID3D11Device> m_d3dqtDev = nullptr; //Discard 2026/2/24
 
