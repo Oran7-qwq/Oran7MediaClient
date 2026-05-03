@@ -145,7 +145,7 @@ Rectangle{
             width: parent.width
             height: parent.height
             scale: 0.8
-            visible: true
+            visible: !BasicConfig.isPlaying || BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex
             anchors.centerIn: parent
             mipmap: true
             asynchronous: false
@@ -161,7 +161,7 @@ Rectangle{
         Image{
             id:pauseImage
             source:"qrc:/image/pause.png"
-            visible: false
+            visible: BasicConfig.isPlaying && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex
             width: parent.width
             height: parent.height
             mipmap: true
@@ -225,9 +225,6 @@ Rectangle{
             target:Client
             function onUpdataQmlTransforStopIcon()
             {
-                playImage.visible = !playImage.visible
-                pauseImage.visible = !pauseImage.visible
-
                 BasicConfig.isPlaying=false
 
                 //停止时确保Handler走向尽头
@@ -258,39 +255,10 @@ Rectangle{
         //响应播放状态改变，播放图标对应改变
         Connections{
             target:BasicConfig
-            function onIsPlayingChanged()
-            {
-                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
-                    return;
-                if(BasicConfig.isPlaying === true)
-                {
-                    playImage.visible=false
-                    pauseImage.visible=true
-                }
-                else
-                {
-                    playImage.visible=true
-                    pauseImage.visible=false
-                }
-            }
             function onCurrentMediaCoverFilePathChanged(){
                 musicIconImage.source = BasicConfig.currentMediaCoverFilePath
                 musicNameTextLabel.text=BasicConfig.currentMediaName
                 singerNameTextLabel.text=BasicConfig.currentMediaArtistAuthor
-            }
-            // function onPlayingIndexChanged(){//====>Discard
-            //     //更新cpp端持有播放索引
-            //     Client.updataCurrentPlayingIndex(BasicConfig.playingIndex)
-            // }
-
-            function onPlayerFocusChanged()
-            {
-                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
-                {
-                    playImage.visible=true
-                    pauseImage.visible=false
-                    BasicConfig.resetAllPlayListHeadicon()
-                }
             }
         }
     }
@@ -371,11 +339,6 @@ Rectangle{
                 lastImage.layer.enabled=true
             }
             onClicked: {
-                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
-                {
-                    playImage.visible=false
-                    pauseImage.visible=true
-                }
                 Client.reqPlayLast(/*(BasicConfig.playingIndex - 1) < 0 ? BasicConfig.localMusicListModel.count-1 : BasicConfig.playingIndex - 1*/)
             }
         }
@@ -408,11 +371,6 @@ Rectangle{
                 nextImage.layer.enabled=true
             }
             onClicked: {
-                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
-                {
-                    playImage.visible=false
-                    pauseImage.visible=true
-                }
                 Client.reqPlayNext(/*(BasicConfig.playingIndex + 1)%BasicConfig.localMusicListModel.count*/)
             }
         }

@@ -65,5 +65,6 @@
         <file>shaders/bgra2rgba_ps.hlsl</file>
         <file>shaders/video.vert</file>
         <file>shaders/video.frag</file>
+        <file>image/themBackground1.png</file>
     </qresource>
 </RCC>

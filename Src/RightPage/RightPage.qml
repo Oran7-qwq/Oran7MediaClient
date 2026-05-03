@@ -11,6 +11,8 @@ Rectangle{
     property int topBarHeight : topBarDefultHeight
     property int topBarDefultHeight: 70
 
+
+
     //================background Color动态效果-未启用================//
     property real waveOffset: 0.0
 
@@ -102,17 +104,20 @@ Rectangle{
 
     onWaveOffsetChanged: canvas.requestPaint()
 
-    //===================background 动态渐变效果============
+    //===================background 动态渐变效果 - 在启用============
     // 创建渐变层
     LinearGradient {
         id: gradientLayer
+
+        visible: false
+
         anchors.fill: parent
         start: Qt.point(0, 0)
         end: Qt.point(width, height)
         property color begainColor: gradientLayer.colorItems[gradientLayer.currentColorIndex].begainColorValue
         property color middleColor: gradientLayer.colorItems[gradientLayer.currentColorIndex].middleColorValue
         property color endColor: gradientLayer.colorItems[gradientLayer.currentColorIndex].endColorValue
-        property int currentColorIndex: 3
+        property int currentColorIndex: 7
         onCurrentColorIndexChanged: {
             gradientLayerColorAnimationTImer.start()
         }

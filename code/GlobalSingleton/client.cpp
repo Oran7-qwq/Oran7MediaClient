@@ -898,7 +898,7 @@ int Client::message_loop(void *arg)
             emit this->sigStop();//停止并销毁Oran7MediaPlayer，以及其中内层的所有子线程，在安静时清空播放器运行资源
             shutting_down_ = false;//主动播放结束-->重置不拦截video frame
             /*触发自动播放下一首*/
-            emit this->triggerPlayNext();
+            this->reqPlayNext();
             break;
         case FFP_MSG_FIND_STREAM_INFO:
             CLIENT_LOG << __FUNCTION__ << "FFP_MSG_FIND_STREAM_INFO";
@@ -1249,7 +1249,7 @@ void Client::addNewLocalMusic(const QVariantList &fileList)
         if(appData.localMusic_fileSet.contains(destFile))
         {
             CLIENT_LOG<<"addNewLocalMusic:Already has file:"<<fileInfo.absoluteFilePath();
-            break;
+            continue;
         }
 
         //<---这里可以结合ffprobe深度分析文件是否重复

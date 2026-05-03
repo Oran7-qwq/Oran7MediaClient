@@ -8,9 +8,11 @@ FileDialog{
     nameFilters:["所有文件 (*)","mp3(*.mp3)","flac(*.flac)","mp4(*.mp4)","flv(*.flv)"]
     fileMode:FileDialog.OpenFile
     property string lastOpenFileDir: ""
-    property var filesArray: []
-    property bool selectReset: false
-    signal ready()
+
+    property var filesArray: [] //存储选择好的文件
+    property bool selectReset: true //下次选择文件是否清空上次的选择缓存
+
+    signal ready()//文件选择完成，发送给外部信号
     currentFolder:{
         if(root.lastOpenFileDir==="")
         {

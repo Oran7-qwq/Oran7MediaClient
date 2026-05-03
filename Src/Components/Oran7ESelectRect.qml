@@ -11,6 +11,15 @@ Rectangle{
     border.color: "#24161d"
     radius: 4
 
+    // --- define properties ---
+    property color checkedColor: "#fc3c55"
+    property color borderColor: "#24161d"
+    property string labelText: "undefined"
+    property bool labelTextEnable: true
+
+    // --- signal ---
+    signal clicked()
+
     // 外部控制选中状态
     property bool checked: false
     onCheckedChanged:{
@@ -25,10 +34,6 @@ Rectangle{
             ep_selectImage.visible = false
         }
     }
-
-    property string labelText: "undefined"
-
-    signal clicked()
 
     Image {
         id:ep_selectImage
@@ -52,7 +57,7 @@ Rectangle{
         layer.enabled: true
         layer.effect: ColorOverlay{
             source: ep_selectImage
-            color:"#fc3c55"
+            color:root.checkedColor
         }
     }
     MouseArea{
@@ -66,6 +71,8 @@ Rectangle{
         anchors.left: root.right
         anchors.leftMargin: 4
         anchors.verticalCenter: root.verticalCenter
+
+        visible: root.labelTextEnable
         font.pixelSize: 16
         font.family: "微软雅黑"
         font.italic: true

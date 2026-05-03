@@ -61,7 +61,8 @@ ApplicationWindow {
         anchors.fill: parent
         sourceSize.width: mainWindow.minimumWidth
         sourceSize.height: mainWindow.minimumHeight
-        source: "qrc:/image/themBackground.jpg"
+        //source: "qrc:/image/themBackground.jpg"
+        source: "qrc:/image/themBackground1.png"
         opacity: 0.999
 
         fillMode: Image.PreserveAspectCrop
@@ -229,6 +230,7 @@ ApplicationWindow {
                 id:leftPage
                 anchors.fill: parent
                 //color:"#c36c7c"
+                visible: openSemiCircle.openIngState
                 color:"transparent"
             }
         }
@@ -331,6 +333,7 @@ ApplicationWindow {
             anchors.top: parent.top
             anchors.topMargin: 18
             opacity: 1.0
+            visible: openSemiCircle.openIngState
             scale:1.0
             Rectangle {
                 id: oran7IconRectangle
@@ -439,7 +442,8 @@ ApplicationWindow {
             //anchors.bottom: parent.bottom
             anchors.right: parent.right
             // color:"#13131a"
-            color:"#f8c7c7"
+            property bool isTransparent: true
+            color:isTransparent ? "transparent" : "#f8c7c7"
             //clip: true
         }
     }

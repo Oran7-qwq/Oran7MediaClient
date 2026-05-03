@@ -29,5 +29,6 @@
         <file>Src/Components/Oran7FileDialog.qml</file>
         <file>Src/Components/Oran7PlayerVolumeComponent.qml</file>
         <file>Src/Components/Oran7ScreenCaptureComponent.qml</file>
+        <file>Src/Components/Oran7MusicPlaylistView.qml</file>
     </qresource>
 </RCC>

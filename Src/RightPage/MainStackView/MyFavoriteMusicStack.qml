@@ -16,6 +16,7 @@ Item {
         anchors.left: parent.left
         anchors.leftMargin: 40
         anchors.top: parent.top
+        anchors.topMargin: 14
         clip: true
 
         //====================  LocalMusicStack in MainStackView isActive ???  ==================///
@@ -254,8 +255,17 @@ Item {
             radius: height/2
             border.width: 1
             border.color: "#4d4d56"
+            Connections{
+                target: BasicConfig
+                function onClickedOutside()
+                {
+                    if(localSearchRectangleTextField.focus === true)
+                        localSearchRectangleTextField.focus = false
+                }
+            }
+
             TextField{
-                id:searchRectangleTextField
+                id:localSearchRectangleTextField
                 anchors.top: parent.top
                 anchors.topMargin: 2
                 anchors.bottom: parent.bottom
@@ -268,6 +278,12 @@ Item {
                 background: Rectangle{
                     anchors.fill: parent
                     color: "transparent"
+                }
+                onFocusChanged: {
+                    if(focus)
+                    {
+                        BasicConfig.newTextAreaFocused(localSearchRectangleTextField)
+                    }
                 }
             }
             ParallelAnimation{
@@ -301,7 +317,7 @@ Item {
                     // searchRectangle.forceActiveFocus()
                 }
                 onClicked: {
-                    searchRectangleTextField.forceActiveFocus()
+                    localSearchRectangleTextField.forceActiveFocus()
                 }
             }
         }
@@ -1083,7 +1099,12 @@ Item {
                         height: root.musicElementRectangleHeight
                         radius: 10
                         color:"transparent"
-
+                        // Behavior on color {
+                        //     NumberAnimation{
+                        //         duration: 100
+                        //         easing.type: Easing.OutCubic
+                        //     }
+                        // }
                         // 控制动画的状态
                         property bool animationEnabled: true
                         property bool isAnimating: false
@@ -1197,6 +1218,7 @@ Item {
                             Connections{
                                 target: BasicConfig
                                 function onIsPlayingChanged(){
+                                    if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)return;
                                     if(BasicConfig.isPlaying===true)
                                     {
                                         if(index ===musicListColum.playingIndex)
@@ -1262,7 +1284,7 @@ Item {
                                         //update playingIndex
                                         musicListColum.playingIndex=index
                                         BasicConfig.playingIndex = musicListColum.playingIndex
-                                        BasicConfig.playListFocus = 0
+                                        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_MusicPlayerIndex
                                         BasicConfig.currentMediaFilePath=filepath
                                         BasicConfig.currentMediaName=music_name
                                         BasicConfig.currentMediaArtistAuthor=music_artist
@@ -1278,7 +1300,7 @@ Item {
                                         musicListColum.clearAllMusicElementRectangleColorToTransparent(false)
                                         musicListColum.playingIndex=index
                                         BasicConfig.playingIndex = musicListColum.playingIndex
-                                        BasicConfig.playListFocus = 0
+                                        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_MusicPlayerIndex
                                         BasicConfig.currentMediaFilePath=filepath
                                         BasicConfig.currentMediaName=music_name
                                         BasicConfig.currentMediaArtistAuthor=music_artist
@@ -1287,6 +1309,12 @@ Item {
                                     Client.qmlClickedReqPreparePlayMusic(filepath)//发送到cpp
                                 }
                                 onClicked: {
+                                    //改为MusicPlayerFocus
+                                    if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
+                                    {
+                                        BasicConfig.isPlaying =false
+                                        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_MusicPlayerIndex
+                                    }
                                     headerPlaybuttonMouseArea.handleClicked()//调用封装成函数的点击事件处理逻辑
                                 }
                             }
@@ -1514,7 +1542,7 @@ Item {
                                     musicListFlickables.interactive = true
 
                                     root.showDragElementFloatTag = false
-                                    root.isDragging=true
+                                    root.isDragging=false
                                     insertLine.visible = false
                                     insertLine.y=localMusicDive1.y
                                     dragImage.usedColorOverlay_Color = dragImage.defaultColorOverlay_Color
@@ -1568,9 +1596,8 @@ Item {
                                     //更新全局变量
                                     musicListColum.playingIndex=index
                                     BasicConfig.playingIndex = musicListColum.playingIndex
-                                    BasicConfig.playListFocus = 0
                                     //如果是播放中的状态要设置head play icon 为 true
-                                    if(BasicConfig.isPlaying === true)
+                                    if(BasicConfig.isPlaying === true && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex)
                                     {
                                         localListIndexRectangPlayBtnImage.source = clearPauseIconURL
                                     }
@@ -1657,6 +1684,12 @@ Item {
                                 //console.log("PlayingIndex:",musicListColum.playingIndex)
                             }
                             onDoubleClicked: {
+                                //改为MusicPlayerFocus
+                                if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
+                                {
+                                    BasicConfig.isPlaying =false
+                                    BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_MusicPlayerIndex
+                                }
                                 //更新ui层播放状态
                                 if(BasicConfig.isPlaying==false || index !==musicListColum.playingIndex)
                                 {
@@ -1675,7 +1708,7 @@ Item {
                                     //update playingIndex
                                     musicListColum.playingIndex=index
                                     BasicConfig.playingIndex = musicListColum.playingIndex
-                                    BasicConfig.playListFocus = 0
+                                    BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_MusicPlayerIndex
                                     BasicConfig.currentMediaFilePath=filepath
                                     BasicConfig.currentMediaName=music_name
                                     BasicConfig.currentMediaArtistAuthor=music_artist
@@ -1690,7 +1723,7 @@ Item {
                                     musicListColum.clearAllMusicElementRectangleColorToTransparent(false)
                                     musicListColum.playingIndex=index
                                     BasicConfig.playingIndex = musicListColum.playingIndex
-                                    BasicConfig.playListFocus = 0
+                                    BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_MusicPlayerIndex
                                     BasicConfig.currentMediaFilePath=filepath
                                     BasicConfig.currentMediaName=music_name
                                     BasicConfig.currentMediaArtistAuthor=music_artist
