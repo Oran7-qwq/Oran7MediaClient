@@ -241,8 +241,7 @@ Rectangle{
         anchors.centerIn: parent
     }
 
-    //============================
-    //中间的主要大型栈界面
+    //=============  MainStackView  ===============
     MainStackView {
         id: mainStackView
         anchors.top: topBarRect.bottom
@@ -253,6 +252,9 @@ Rectangle{
 
         initialItem: Qt.createComponent("qrc:/Src/RightPage/MainStackView/VideoPlayerStack.qml")
                      .createObject(mainStackView, {"pageName": "VideoPlayerPage"})
+
+        property bool isSettingStack: false
+        signal upDateStack()
 
         function popPage()
         {
@@ -313,11 +315,6 @@ Rectangle{
                 }
             }
         });
-
-
-
-        property bool isSettingStack: false
-        signal upDateStack()
 
         Connections{
             target: BasicConfig

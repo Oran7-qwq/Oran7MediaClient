@@ -30,5 +30,6 @@
         <file>Src/Components/Oran7PlayerVolumeComponent.qml</file>
         <file>Src/Components/Oran7ScreenCaptureComponent.qml</file>
         <file>Src/Components/Oran7MusicPlaylistView.qml</file>
+        <file>Src/Components/Oran7WaveBarChart.qml</file>
     </qresource>
 </RCC>

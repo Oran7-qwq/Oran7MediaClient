@@ -17,7 +17,6 @@ Item {
     property bool showMultiSelect: true
     property bool allowDragReorder: true
     property bool showDuration: true
-    property var stackView_rootItemContainer: null //包含此组件的外部作为stackViewItem的根项
 
     property bool isPlaying: false //bind  property
     // ===== 模型数据 =====
@@ -67,6 +66,13 @@ Item {
 
     signal addNewItemOfFiles(var filesArray)
 
+    // ===== 功能函数 =====
+
+    //从指定索引开始触发所有 playlistItem 的 animateIn 动画
+    function animateItemsFromIndex(startIndex) {
+        playlistFlickable.animateRecentItems(startIndex)
+    }
+
     // ===== 根容器 =====
     Item {
         id: container
@@ -74,61 +80,6 @@ Item {
         anchors.leftMargin: root.leftMargin
         anchors.rightMargin: root.rightMargin
         clip: true
-
-        // StackView 活动状态检测
-        property bool isActive: false
-        property var _myStackView: null
-
-        function findAndSetupStackView() {
-            if (StackView.view) {
-                _myStackView = StackView.view;
-            } else {
-                var parent = container.parent;
-                var depth = 0;
-                while (parent && depth < 20) {
-                    if (typeof parent.push === "function" && typeof parent.pop === "function") {
-                        _myStackView = parent;
-                        break;
-                    }
-                    parent = parent.parent;
-                    depth++;
-                }
-            }
-
-            if (_myStackView) {
-                _myStackView.currentItemChanged.connect(updateActiveState);
-                updateActiveState();
-            }
-        }
-
-        function updateActiveState() {
-            if (!_myStackView || !_myStackView.currentItem) {
-                container.isActive = false;
-                return;
-            }
-
-            container.isActive = (_myStackView.currentItem === root.stackView_rootItemContainer);
-            if (container.isActive) {
-                //Page被激活 -> touch 业务
-                container.activeResponseTask()
-            }
-        }
-
-        //Page被激活 -> touch 业务
-        function activeResponseTask(){
-            //-->Focus item
-            root.focus_current_playlistItem()
-        }
-
-        Component.onCompleted: {
-            Qt.callLater(findAndSetupStackView);
-        }
-
-        Component.onDestruction: {
-            if (_myStackView) {
-                _myStackView.currentItemChanged.disconnect(updateActiveState);
-            }
-        }
 
         // ===== 标题栏 =====
         Flow {
@@ -1011,6 +962,9 @@ Item {
                 // HoverHandler 不会拦截事件，也不会被子元素影响
                 onHoveredChanged:{
                     root.mouseInPlaylist = playlistHoverHandler.hovered
+                    if (!playlistHoverHandler.hovered) {
+                        playlistColumn.itemHovered_index = -1
+                    }
                 }
             }
 
@@ -1035,6 +989,10 @@ Item {
                 property int titleLeftMargin: 45
                 property int albumLeftMargin: titleLeftMargin + titleWidth + 10
                 property int timeLeftMargin: albumLeftMargin + albumWidth + 20
+
+                function opacityAnimate_fromIndex(index){
+
+                }
 
                 Repeater {
                     id:playListRepeater
@@ -1148,7 +1106,7 @@ Item {
 
                             Label {
                                 id: indexLabel
-                                visible: !root.isMultiSelected && (!playlistItem.itemIsHovered || !root.mouseInPlaylist)
+                                visible: !root.isMultiSelected && (!playlistItem.itemIsHovered || !root.mouseInPlaylist) && !playlistItem.itemIsSelected
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.left: parent.left
                                 anchors.leftMargin: 5
@@ -1175,6 +1133,17 @@ Item {
                                     color: "#FF8F6E"
                                 }
                             }
+                            Oran7WaveBarChart{
+                                id:waveBarChart
+                                anchors.top: playIcon.top
+                                anchors.topMargin: 0
+                                anchors.horizontalCenter: playIcon.horizontalCenter
+
+                                visible: !playlistItem.itemIsHovered && playlistItem.itemIsSelected
+
+                                animationEnabled:playlistItem.itemIsPlaying
+                            }
+
                             MouseArea{
                                 anchors.fill: parent
                                 onClicked: {
