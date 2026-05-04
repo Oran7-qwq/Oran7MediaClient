@@ -9,6 +9,30 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 设置Qt路径（如果没有通过CMAKE_PREFIX_PATH设置）
+if(NOT CMAKE_PREFIX_PATH)
+    if(WIN32)
+        # 尝试常见的Qt安装路径
+        set(POSSIBLE_QT_PATHS
+            "D:/Qt/6.7.2/mingw_64"
+            "C:/Qt/6.7.2/mingw_64"
+            "$ENV{QTDIR}"
+        )
+
+        foreach(QT_PATH ${POSSIBLE_QT_PATHS})
+            if(EXISTS "${QT_PATH}")
+                set(CMAKE_PREFIX_PATH "${QT_PATH}")
+                message(STATUS "Found Qt installation at: ${QT_PATH}")
+                break()
+            endif()
+        endforeach()
+    endif()
+endif()
+
+# 显示CMake前缀路径用于调试
+message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+message(STATUS "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
+
 # 查找Qt6组件
 find_package(Qt6 REQUIRED COMPONENTS
     Core
@@ -22,6 +46,10 @@ find_package(Qt6 REQUIRED COMPONENTS
     ShaderTools
     Multimedia
 )
+
+# 显示找到的Qt版本和路径
+message(STATUS "Qt6 version: ${Qt6_VERSION}")
+message(STATUS "Qt6 directories: ${Qt6_DIR}")
 
 # 查找OpenGL
 find_package(OpenGL REQUIRED)
@@ -39,6 +67,8 @@ set(ORAN7_SCREEN_CAPTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7ScreenCaptur
 set(ORAN7_VIDEO_GPU_RENDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7VideoGPURender")
 #添加Oran7Sever模块配置路径
 set(ORAN7_SEVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7Sever")
+#添加QtQuicCppExtend模块配置路径
+set(QtQuicCppExtend_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/QtQuicCppExtend")
 
 set(PROJECT_MAIN_SOURCES
     main.cpp
@@ -51,7 +81,7 @@ qt_add_executable(Oran7MediaClient
     MANUAL_FINALIZATION
     ${PROJECT_MAIN_SOURCES}
 
-    filehelper.h filehelper.cpp #USED BY QML
+    #USED BY QML
 
     #GlobalSingleton
     code/GlobalSingleton/appjsonconfigmanager.h
@@ -104,6 +134,12 @@ qt_add_executable(Oran7MediaClient
     code/Oran7Sever/loadingdatahandler.cpp
     code/Oran7Sever/loginhandler.h
     code/Oran7Sever/loginhandler.cpp
+
+    #QtQuicCppExtend
+    code/QtQuicCppExtend/filehelper.h
+    code/QtQuicCppExtend/filehelper.cpp
+    code/QtQuicCppExtend/FramelessWindow.h
+    code/QtQuicCppExtend/FramelessWindow.cpp
 )
 
 # ===================== ShaderEffect 自动编译 QSB ================
@@ -154,7 +190,7 @@ target_include_directories(Oran7MediaClient
     ${ORAN7_SCREEN_CAPTURE_DIR}
     ${ORAN7_VIDEO_GPU_RENDER_DIR}
     ${ORAN7_SEVER_DIR}
-
+    ${QtQuicCppExtend_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -183,7 +219,7 @@ target_link_libraries(Oran7MediaClient
     avcodec avformat avutil avdevice avfilter swresample swscale
   PRIVATE
     SDL2 SDL2main
-    d3dcompiler dxgi
+    d3dcompiler dxgi dwmapi
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.

@@ -4,10 +4,9 @@
         <file>Src/Basic/BasicConfig.qml</file>
         <file>Src/Basic/qmldir</file>
         <file>Src/BottomPage/BottomPage.qml</file>
-        <file>Src/Components/AuthorBriefItem.qml</file>
-        <file>Src/Components/EAnimatedWindow.qml</file>
-        <file>Src/Components/EBlurCard.qml</file>
-        <file>Src/Components/ETheme.qml</file>
+        <file>Src/Components/Oran7AuthorBriefItem.qml</file>
+        <file>Src/Components/Oran7AnimatedWindow.qml</file>
+        <file>Src/Components/Oran7BlurCard.qml</file>
         <file>Src/LeftPage/LeftPage.qml</file>
         <file>Src/RightPage/RightPage.qml</file>
         <file>Src/RightPage/MainStackView/LocalMusicStack.qml</file>
@@ -21,7 +20,7 @@
         <file>Src/RightPage/TopMenuBar/TopLeftBar.qml</file>
         <file>Src/RightPage/TopMenuBar/TopMiddleMenuBar.qml</file>
         <file>Src/RightPage/TopMenuBar/TopRightBar.qml</file>
-        <file>Src/Components/ELoader.qml</file>
+        <file>Src/Components/Oran7Loader.qml</file>
         <file>Src/RightPage/MainStackView/ScreenCaptureStack.qml</file>
         <file>Src/Components/Oran7VideoRendererItem.qml</file>
         <file>Src/Components/Oran7ProgressSlider.qml</file>
@@ -31,5 +30,7 @@
         <file>Src/Components/Oran7ScreenCaptureComponent.qml</file>
         <file>Src/Components/Oran7MusicPlaylistView.qml</file>
         <file>Src/Components/Oran7WaveBarChart.qml</file>
+        <file>Src/Settings/PagesSettings/Oran7MediaPlayerSetting.qml</file>
+        <file>Src/Settings/GlobalSettings/Oran7MainUiSetting.qml</file>
     </qresource>
 </RCC>

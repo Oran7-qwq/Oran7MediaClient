@@ -1,1 +1,2 @@
 singleton BasicConfig BasicConfig.qml
+singleton Oran7MainUiSetting ../Settings/GlobalSettings/Oran7MainUiSetting.qml

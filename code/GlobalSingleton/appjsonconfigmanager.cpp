@@ -18,8 +18,8 @@ AppConfigManager::AppConfigManager(QObject* parent) : QObject(parent)
     // 设置默认配置
     m_defaultConfig = QJsonObject({
         {"window", QJsonObject({
-                       {"width", 1056},
-                       {"height", 750},
+                       {"width", 1180},
+                       {"height", 680},
                        {"maximized", false},
                        {"position", QJsonObject({
                                             {"x", 800},

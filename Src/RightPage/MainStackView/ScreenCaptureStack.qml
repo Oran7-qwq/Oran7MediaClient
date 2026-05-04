@@ -12,13 +12,5 @@ Item {
             anchors.fill: parent
             renderObject: Client.ScreenCaptureRender
         }
-        ELoader{
-            size: 100
-            color: "white"
-            opacity: 0
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            speed: 0.8
-        }
     }
 }

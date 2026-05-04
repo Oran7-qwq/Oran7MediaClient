@@ -1295,7 +1295,7 @@ void Client::loadConfig_localMusicList_playOrder()
     this->appData.Custom_LocalMusic_playOrder=AppConfigManager::instance().getLocalMusicList_palyOrder();
 }
 
-void Client::loadConfig_AppWindowSize(const QQmlApplicationEngine &engine)
+void Client::loadConfig_AppWindowSize(QQmlApplicationEngine &engine)
 {
     int AppWindow_width = AppConfigManager::instance().getValueQVariant("window.width").toInt();
     int AppWindow_height = AppConfigManager::instance().getValueQVariant("window.height").toInt();
@@ -1313,7 +1313,7 @@ void Client::loadConfig_AppWindowSize(const QQmlApplicationEngine &engine)
     CONFIG_LOG<<"LoadConfig of set AppWindow_width"<<AppWindow_width<<"; AppWindow_height"<<AppWindow_height;
 }
 
-void Client::loadConfig_AppWindowPosition(const QQmlApplicationEngine &engine)
+void Client::loadConfig_AppWindowPosition(QQmlApplicationEngine &engine)
 {
     int AppWindow_PosX = AppConfigManager::instance().getValueQVariant("window.position.x").toInt();
     int AppWindow_PosY = AppConfigManager::instance().getValueQVariant("window.position.y").toInt();
@@ -1405,16 +1405,20 @@ void Client::saveConfig_localMusicList_playOrder()
     AppConfigManager::instance().saveLocalMusicList_playOrder(appData.Custom_LocalMusic_playOrder);
 }
 
-void Client::saveConfig_AppWindowSize(const QQmlApplicationEngine &engine)
+void Client::saveConfig_AppWindowSize(QQmlApplicationEngine &engine)
 {
-    auto rootObjects = engine.rootObjects();
-    if (rootObjects.isEmpty()) return;
+    int typeId = qmlTypeId("Oran7MainUiSetting", 1, 0, "Oran7MainUiSetting");
 
-    QObject* AppWindow = rootObjects.first();
+    QQmlEngine* qmlEngine = static_cast<QQmlApplicationEngine*>(&engine);
+    QObject* singleton = qmlEngine->singletonInstance<QObject*>(typeId);
 
-    int width = AppWindow->property("savedNormalWidth").toInt();
-    int height = AppWindow->property("savedNormalHeight").toInt();
-
+    if(!singleton)
+    {
+        CONFIG_LOG<<"Failed to get singleton instance of Oran7MainUiSetting for saveConfig_AppWindowSize.";
+        return;
+    }
+    int width = singleton->property("savedNormalWidth").toInt();
+    int height = singleton->property("savedNormalHeight").toInt();
 
     if (width > 0 && height > 0)
     {
@@ -1423,15 +1427,21 @@ void Client::saveConfig_AppWindowSize(const QQmlApplicationEngine &engine)
     }
 }
 
-void Client::saveConfig_AppWindowPosition(const QQmlApplicationEngine &engine)
+void Client::saveConfig_AppWindowPosition(QQmlApplicationEngine &engine)
 {
-    auto rootObjects = engine.rootObjects();
-    if(rootObjects.isEmpty())return;
+    int typeId = qmlTypeId("Oran7MainUiSetting", 1, 0, "Oran7MainUiSetting");
 
-    QObject* AppWindow = rootObjects.first();
+    QQmlEngine* qmlEngine = static_cast<QQmlApplicationEngine*>(&engine);
+    QObject* singleton = qmlEngine->singletonInstance<QObject*>(typeId);
 
-    int posX = AppWindow->property("savedNormalX").toInt();
-    int posY = AppWindow->property("savedNormalY").toInt();
+    if(!singleton)
+    {
+        CONFIG_LOG<<"Failed to get singleton instance of Oran7MainUiSetting for saveConfig_AppWindowPosition.";
+        return;
+    }
+
+    int posX = singleton->property("savedNormalX").toInt();
+    int posY = singleton->property("savedNormalY").toInt();
 
     if(posX >= 0 && posY >=0)
     {

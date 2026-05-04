@@ -84,9 +84,9 @@ public:
     //加载提取config文件中保存的loaclMusicStack-->play_order，协商排列顺序
     void loadConfig_localMusicList_playOrder();
     //加载ApplicationWindow的width和height
-    void loadConfig_AppWindowSize(const QQmlApplicationEngine &engine);
+    void loadConfig_AppWindowSize(QQmlApplicationEngine &engine);
     //加载ApplicationWindow的x和y
-    void loadConfig_AppWindowPosition(const QQmlApplicationEngine &engine);
+    void loadConfig_AppWindowPosition(QQmlApplicationEngine &engine);
     //加载App的保存的音量设置
     void loadConfig_AppSetPlayerVolume();
 
@@ -95,9 +95,9 @@ public:
     //保存loaclMusicStack-->play_order到config文件中，用于下次打开Application时协商排序加载
     void saveConfig_localMusicList_playOrder();
     //保存ApplicationWindow的width和height
-    void saveConfig_AppWindowSize(const QQmlApplicationEngine &engine);
+    void saveConfig_AppWindowSize(QQmlApplicationEngine &engine);
     //保存ApplicationWindow的x和y（Position）
-    void saveConfig_AppWindowPosition(const QQmlApplicationEngine &engine);
+    void saveConfig_AppWindowPosition(QQmlApplicationEngine &engine);
     //保存App的音量Config
     void saveConfig_AppSetPlayerVolume();
 

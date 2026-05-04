@@ -66,5 +66,6 @@
         <file>shaders/video.vert</file>
         <file>shaders/video.frag</file>
         <file>image/themBackground1.png</file>
+        <file>image/hugeicons_ai-setting.png</file>
     </qresource>
 </RCC>

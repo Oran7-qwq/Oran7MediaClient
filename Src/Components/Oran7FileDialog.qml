@@ -12,6 +12,8 @@ FileDialog{
     property var filesArray: [] //存储选择好的文件
     property bool selectReset: true //下次选择文件是否清空上次的选择缓存
 
+    property bool isOpen: visible //标记文件对话框是否正在打开中
+
     signal ready()//文件选择完成，发送给外部信号
     currentFolder:{
         if(root.lastOpenFileDir==="")

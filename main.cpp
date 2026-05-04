@@ -12,6 +12,7 @@
 #include "applicationcontext.h"
 #include "filehelper.h"
 #include "bilibliliveroomaddresscatch.h"
+#include "FramelessWindow.h"
 
 #include <QtGlobal>
 #include <QDebug>
@@ -51,7 +52,7 @@ enum ConfigRET{
 
 ConfigRET Config_AppConfigManager_RET = Config_NONE;
 ConfigRET Config_AppConfigManager_Load(QQmlApplicationEngine &engine);
-ConfigRET Config_AppConfigManager_Save();
+ConfigRET Config_AppConfigManager_Save(QQmlApplicationEngine &engine);
 
 #undef main
 int main(int argc, char *argv[])
@@ -115,11 +116,13 @@ int main(int argc, char *argv[])
 
     ApplicationContext::instance();
 
-    qmlRegisterSingletonType(QUrl("qrc:/Src/Basic/BasicConfig.qml"),
-                             "BasicConfig", 1, 0, "BasicConfig");
+    qmlRegisterSingletonType(QUrl("qrc:/Src/Basic/BasicConfig.qml"),"BasicConfig", 1, 0, "BasicConfig");
+    qmlRegisterSingletonType(QUrl("qrc:/Src/Settings/GlobalSettings/Oran7MainUiSetting.qml"),"Oran7MainUiSetting",1,0,"Oran7MainUiSetting");
+
     qmlRegisterType<FileHelper>("FileHelper", 1, 0, "FileHelper");
     qmlRegisterType<BilibiliRoomAddressCatch>("BilibiliRoomAddressCatch",1,0,"BilibiliRoomAddressCatch");
     qmlRegisterType<D3D11VideoItem>("D3D11VideoItem", 1, 0, "D3D11VideoItem");
+    qmlRegisterType<FramelessWindow>("FramelessWindow", 1, 0, "FramelessWindow");
 
     const QUrl url(QStringLiteral("qrc:/main.qml"));
     QObject::connect(
@@ -161,10 +164,7 @@ int main(int argc, char *argv[])
     QObject::connect(&app, &QGuiApplication::aboutToQuit, &app,[&engine]() mutable {
         ApplicationContext::instance()->client()->StopPlayerRuning();//先确保杀死Oran7MediaPlayer防止Video_refresh还在触发回调qml渲染对象
 
-        ApplicationContext::instance()->client()->saveConfig_AppWindowSize(engine);
-        ApplicationContext::instance()->client()->saveConfig_AppWindowPosition(engine);
-
-        Config_AppConfigManager_RET = Config_AppConfigManager_Save();
+        Config_AppConfigManager_RET = Config_AppConfigManager_Save(engine);
         if(Config_AppConfigManager_RET == ConfigRET::Config_SUCCESSED)
             CONFIG_LOG<<"[AppConfigManager:Successfully save user Config.";
     });
@@ -184,7 +184,7 @@ ConfigRET Config_AppConfigManager_Load(QQmlApplicationEngine &engine)
 
         QString SearchLocalMediaFiles_folderPath=ApplicationContext::instance()->client()->createAppDirectories();
         if(SearchLocalMediaFiles_folderPath.isEmpty())
-            throw std::runtime_error("AppData Temp folder in Oran7CloudMusic Could not be Created correctly");
+            throw std::runtime_error("AppData Temp folder in Oran7MediaClient Could not be Created correctly");
         ApplicationContext::instance()->client()->loadConfig_localMusicList_playOrder();//*加载localMusicList自定义排序Config配置
         ApplicationContext::instance()->asyncWorker()->startSearchLocalMediaFiles_Task(SearchLocalMediaFiles_folderPath); //*Load localMusic列表（Async）
         ApplicationContext::instance()->client()->loadConfig_lastCloseAppFocusedMusic();//*加载last focus music info
@@ -198,13 +198,16 @@ ConfigRET Config_AppConfigManager_Load(QQmlApplicationEngine &engine)
     return Config_SUCCESSED;
 }
 
-ConfigRET Config_AppConfigManager_Save()
+ConfigRET Config_AppConfigManager_Save(QQmlApplicationEngine &engine)
 {
     try
     {
         ApplicationContext::instance()->client()->saveConfig_lastCloseAppFocusedMusic();//* 保存客户端最近一次播放的文件
         ApplicationContext::instance()->client()->saveConfig_localMusicList_playOrder();//* 保存Custom自定义LocalMusicList_playOrder的Config配置
         ApplicationContext::instance()->client()->saveConfig_AppSetPlayerVolume();
+
+        ApplicationContext::instance()->client()->saveConfig_AppWindowSize(engine);
+        ApplicationContext::instance()->client()->saveConfig_AppWindowPosition(engine);
 
         AppConfigManager::instance().saveConfig();// 确保程序退出前保存配置
     }
