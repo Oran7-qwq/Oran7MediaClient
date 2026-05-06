@@ -9,7 +9,7 @@ import "./Src/RightPage"
 import "./Src/BottomPage"
 import "./Src/Basic"
 import "./Src/Components"
-import "./Src/Settings/GlobalSettings"
+import "./Src/Settings/SettingWindows"
 
 import Client 1.0
 import FramelessWindow 1.0
@@ -20,7 +20,7 @@ ApplicationWindow {
     width: 1180
     height: 680
     visible: true
-    color: "#c46d7c"
+    color: "transparent"
     title: "Oran7MediaClient"
     minimumWidth: 1180
     minimumHeight: 680
@@ -76,7 +76,13 @@ ApplicationWindow {
         transformOrigin: Item.Center
     }
 
-    // 性能监测
+    // --- MainWoindow functions ---
+    function restoreFocus() {// 恢复主窗口焦点
+        console.log("恢复主窗口焦点");
+        mainWindow.requestActivate();
+    }
+
+    // --- MainWoindow 性能监测 ---
     Text {
         id: fpsText
         anchors.top: parent.top
@@ -116,7 +122,21 @@ ApplicationWindow {
         }
     }
 
-    // 原生窗口控制按钮（覆盖在主UI上）
+    //  --- 无边框窗口处理器 ---
+    FramelessWindow {
+        id: framelessWindow
+        targetWindow: mainWindow
+        borderWidth: 6
+        borderHeight: 6
+        titleBarHeight: Oran7MainUiSetting.window_titleBarWidth
+
+        Component.onCompleted: {
+            setupWindow();
+        }
+    }
+
+    //====================== <Main ui> ========================//
+    // --- 右上角原生窗口控制按钮（覆盖在主UI上） ---
     Row {
         id: nativeWindowControls
         width: 140  // 三个按钮的总宽度
@@ -178,20 +198,7 @@ ApplicationWindow {
         }
     }
 
-    // 无边框窗口处理器
-    FramelessWindow {
-        id: framelessWindow
-        targetWindow: mainWindow
-        borderWidth: 6
-        borderHeight: 6
-        titleBarHeight: Oran7MainUiSetting.window_titleBarWidth
-
-        Component.onCompleted: {
-            setupWindow();
-        }
-    }
-
-    //====================== <Main ui> ========================//
+    // --- MainUi Rectangle Container ---
     Rectangle {
         id: mainRectangle
         anchors.top: parent.top
@@ -245,8 +252,7 @@ ApplicationWindow {
                 mouse.accepted = false;
             //使用Windows原生窗体drag
             // if(mainRectangleMouseArea.mouseIsPressed === false)return;
-            // // if(mouse.y >= 80)return;
-
+            // if(mouse.y >= 80)return;
             // let delta = Qt.point(mouse.x-clickPos.x,mouse.y-clickPos.y)
             // mainWindow.x+=delta.x
             // mainWindow.y+=delta.y
@@ -267,7 +273,21 @@ ApplicationWindow {
             }
         }
 
-        //主体底部
+        // -- 主体右部 --
+        RightPage {
+            id: rightRectangle
+            anchors.left: leftRectangle.right
+            anchors.top: parent.top
+            anchors.bottom: bottomRectangle.top
+            //anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            // color:"#13131a"
+            property bool isTransparent: true
+            color: isTransparent ? "transparent" : "#f8c7c7"
+            //clip: true
+        }
+
+        // -- 主体底部 --
         BottomPage {
             id: bottomRectangle
             anchors.left: parent.left
@@ -289,7 +309,7 @@ ApplicationWindow {
             }
         }
 
-        //主体左部
+        // -- 主体左部 --
         Oran7BlurCard {
             id: leftRectangle
             property real defaultWidth: 204
@@ -320,7 +340,7 @@ ApplicationWindow {
                 color: "transparent"
             }
         }
-        //左部打开关闭button
+        // -- 左部导航栏->打开关闭button --
         Shape {
             id: openSemiCircle
             width: height / 2
@@ -405,7 +425,7 @@ ApplicationWindow {
             }
         }
 
-        //最左上角关于开发者头像icon—Item
+        // -- 最左上角关于开发者头像icon—Item --
         Item {
             id: oran7IconAreaItem
             width: 40
@@ -492,7 +512,7 @@ ApplicationWindow {
             }
         }
 
-        //AnimatedWindow
+        //-- AnimatedWindow --
         Oran7AnimatedWindow {
             id: animatedWindowWarper
             buttonColor: "#f8c7c7"
@@ -533,19 +553,7 @@ ApplicationWindow {
             }
         }
 
-        //主体右部
-        RightPage {
-            id: rightRectangle
-            anchors.left: leftRectangle.right
-            anchors.top: parent.top
-            anchors.bottom: bottomRectangle.top
-            //anchors.bottom: parent.bottom
-            anchors.right: parent.right
-            // color:"#13131a"
-            property bool isTransparent: true
-            color: isTransparent ? "transparent" : "#f8c7c7"
-            //clip: true
-        }
+        //<-- MianUi Rectangle Container End -->
     }
 
     // 原生窗口控制按钮组件
@@ -643,50 +651,17 @@ ApplicationWindow {
         }
     }
 
-    // 设置弹窗 - 独立窗口，不受主窗口边界限制
-    Window {
-        id: oran7MainUiSettingWindow
-        visible: false
-        color: "transparent"
-        flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        modality: Qt.NonModal
-        width: 120
-        height: 200
+    // --- Setting windows ---
+    // Oran7MainUiSettingWindow {id: oran7MainUiSettingWindow}
+    // Oran7MediaPlayerSettingWindow{id: oran7MediaPlayerSettingWindow}
 
-        property point clickPos: Qt.point(0, 0)
-        property bool mouseIsPressed: false
+    // 全屏设置容器窗口
+    Oran7SettingsContainerWindow {
+        id: settingsContainer
 
-        Connections{
-            target: Oran7MainUiSetting
-            function onTriggleOpen_Oran7MainUiSetting_window(){
-                oran7MainUiSettingWindow.visible = ! oran7MainUiSettingWindow.visible
-            }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            color: "white"
-            radius: 20
-
-            // 拖动区域 - 整个窗口可拖动
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                onPressed: mouse => {
-                    oran7MainUiSettingWindow.mouseIsPressed = true;
-                    oran7MainUiSettingWindow.clickPos = Qt.point(mouse.x, mouse.y);
-                }
-                onReleased: {
-                    oran7MainUiSettingWindow.mouseIsPressed = false;
-                }
-                onPositionChanged: mouse => {
-                    if (oran7MainUiSettingWindow.mouseIsPressed === false)
-                        return;
-                    let delta = Qt.point(mouse.x - oran7MainUiSettingWindow.clickPos.x, mouse.y - oran7MainUiSettingWindow.clickPos.y);
-                    oran7MainUiSettingWindow.x += delta.x;
-                    oran7MainUiSettingWindow.y += delta.y;
-                }
-            }
+        // 监听设置窗口请求恢复焦点的信号
+        onRestoreMainWindowFocusRequested: {
+            mainWindow.restoreFocus();
         }
     }
 }

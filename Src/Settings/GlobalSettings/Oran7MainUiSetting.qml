@@ -24,5 +24,19 @@ Item {
     //MainUi背景图片路径
     property string backgroundImagePath: "file:///C:/Users/funny/QtProject.doc/Oran7MediaClient/image/themBackground1.png"
 
-    signal triggleOpen_Oran7MainUiSetting_window()
+    signal triggleOpen_Oran7MainUiSetting_window
+
+    //--- SettingUi_WindowProperty ---
+    property bool settingWin_isOpen: false
+    property real toggleOpenAniDuration: 400
+
+    property real textPixelSize: 16
+    property string fontFamily : "微软雅黑"
+
+    property bool isDarkMode: true
+    readonly property color backColor: isDarkMode ? "#030303" : "#ffffff"
+    readonly property color itemColor: isDarkMode ? "#101110" : "#d1d1d1"
+    readonly property color textColor: isDarkMode ? "#dadada" : "#5c5c5c"
+    readonly property color winShadowColor: isDarkMode ? "#80000000" : "#20000000"
+    property color themeColor: "#8cffff"
 }

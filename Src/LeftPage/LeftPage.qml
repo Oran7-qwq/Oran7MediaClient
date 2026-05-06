@@ -349,8 +349,15 @@ Rectangle {
         }
         MouseArea {
             anchors.fill: parent
+            hoverEnabled: true
             onClicked: {
                 Oran7MainUiSetting.triggleOpen_Oran7MainUiSetting_window()
+            }
+            onEntered: {
+                cursorShape = Qt.PointingHandCursor
+            }
+            onExited: {
+                cursorShape = Qt.ArrowCursor
             }
         }
     }

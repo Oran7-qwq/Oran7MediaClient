@@ -140,6 +140,8 @@ qt_add_executable(Oran7MediaClient
     code/QtQuicCppExtend/filehelper.cpp
     code/QtQuicCppExtend/FramelessWindow.h
     code/QtQuicCppExtend/FramelessWindow.cpp
+    code/GlobalSingleton/GlobalEventFilter.h
+    code/GlobalSingleton/GlobalEventFilter.cpp
 )
 
 # ===================== ShaderEffect 自动编译 QSB ================

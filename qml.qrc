@@ -30,7 +30,12 @@
         <file>Src/Components/Oran7ScreenCaptureComponent.qml</file>
         <file>Src/Components/Oran7MusicPlaylistView.qml</file>
         <file>Src/Components/Oran7WaveBarChart.qml</file>
-        <file>Src/Settings/PagesSettings/Oran7MediaPlayerSetting.qml</file>
+        <file>Src/Components/qmldir</file>
         <file>Src/Settings/GlobalSettings/Oran7MainUiSetting.qml</file>
+        <file>Src/Settings/PagesSettings/Oran7MediaPlayerSetting.qml</file>
+        <file>Src/Components/Oran7DelayTimer.qml</file>
+        <file>Src/Settings/SettingWindows/Oran7MainUiSettingWindow.qml</file>
+        <file>Src/Settings/SettingWindows/Oran7MediaPlayerSettingWindow.qml</file>
+        <file>Src/Settings/SettingWindows/Oran7SettingsContainerWindow.qml</file>
     </qresource>
 </RCC>

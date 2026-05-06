@@ -67,5 +67,7 @@
         <file>shaders/video.frag</file>
         <file>image/themBackground1.png</file>
         <file>image/hugeicons_ai-setting.png</file>
+        <file>sound/CloseSound.wav</file>
+        <file>sound/OpenSound.wav</file>
     </qresource>
 </RCC>
