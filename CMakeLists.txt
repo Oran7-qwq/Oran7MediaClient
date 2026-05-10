@@ -9,30 +9,6 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 设置Qt路径（如果没有通过CMAKE_PREFIX_PATH设置）
-if(NOT CMAKE_PREFIX_PATH)
-    if(WIN32)
-        # 尝试常见的Qt安装路径
-        set(POSSIBLE_QT_PATHS
-            "D:/Qt/6.7.2/mingw_64"
-            "C:/Qt/6.7.2/mingw_64"
-            "$ENV{QTDIR}"
-        )
-
-        foreach(QT_PATH ${POSSIBLE_QT_PATHS})
-            if(EXISTS "${QT_PATH}")
-                set(CMAKE_PREFIX_PATH "${QT_PATH}")
-                message(STATUS "Found Qt installation at: ${QT_PATH}")
-                break()
-            endif()
-        endforeach()
-    endif()
-endif()
-
-# 显示CMake前缀路径用于调试
-message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
-message(STATUS "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
-
 # 查找Qt6组件
 find_package(Qt6 REQUIRED COMPONENTS
     Core
@@ -47,101 +23,85 @@ find_package(Qt6 REQUIRED COMPONENTS
     Multimedia
 )
 
-# 显示找到的Qt版本和路径
-message(STATUS "Qt6 version: ${Qt6_VERSION}")
-message(STATUS "Qt6 directories: ${Qt6_DIR}")
+# 设置 Qt 策略以避免 QTP0001 警告
+qt_policy(SET QTP0001 NEW)
 
-# 查找OpenGL
-find_package(OpenGL REQUIRED)
+# 3rdparty QWindowKit (QWKQuick) 配置 - 参考 HuskarUI 方法
+set(QWINDOWKIT_BUILD_STATIC ON)
+set(QWINDOWKIT_BUILD_WIDGETS OFF)
+set(QWINDOWKIT_BUILD_QUICK ON)
+set(QWINDOWKIT_INSTALL OFF)
+add_subdirectory(3rdparty/qwindowkit)#QWindowKit 使用 add_subdirectory 方式构建
 
-#添加全局单例GlobalSingleton 配置路径
-set(GLOBAL_SIGNALTON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/GlobalSingleton")
+# 添加全局单例 GlobalSingleton 配置路径
+set(GLOBAL_SINGLETON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/GlobalSingleton")
 
 # 添加FFmpeg路径配置
 set(FFMPEG_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg6.0")
 #添加Oran7MediaPlayer模块配置路径
-set(ORAN7_PLAYER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7MediaPlayer")
+set(ORAN7_PLAYER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/Oran7MediaPlayer")
 #添加Oran7ScreenPlayer模块配置路径
-set(ORAN7_SCREEN_CAPTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7ScreenCapture")
+set(ORAN7_SCREEN_CAPTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/Oran7ScreenCapture")
 #添加Oran7VideoGPURender模块配置路径
-set(ORAN7_VIDEO_GPU_RENDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7VideoGPURender")
+set(ORAN7_VIDEO_GPU_RENDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/Oran7VideoGPURender")
 #添加Oran7Sever模块配置路径
-set(ORAN7_SEVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/Oran7Sever")
+set(ORAN7_SEVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/Oran7Sever")
 #添加QtQuicCppExtend模块配置路径
-set(QtQuicCppExtend_DIR "${CMAKE_CURRENT_SOURCE_DIR}/code/QtQuicCppExtend")
+set(QtQuicCppExtend_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/QtQuicCppExtend")
 
 set(PROJECT_MAIN_SOURCES
     main.cpp
     qml.qrc
     res.qrc
-    app.rc
+)
+
+file(GLOB_RECURSE SOURCES
+    "src/cpp/*.cpp"
+    "src/cpp/*.h"
+)
+
+# 创建 QML 模块用于导出 C++ 类
+qt_add_qml_module(Oran7UI_Impl
+    URI "Oran7UI.Impl"
+    VERSION 1.0
+    DESIGNER_SUPPORTED
+    OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Oran7UI/Impl"
+    QML_FILES
+        # 这里可以添加需要导出的 QML 文件
+    SOURCES
+        src/cpp/QtQuicCppExtend/Oran7WindowAgent.h
+        src/cpp/QtQuicCppExtend/Oran7WindowAgent.cpp
+        src/cpp/QtQuicCppExtend/Oran7Api.h
+        src/cpp/QtQuicCppExtend/Oran7Api.cpp
+)
+
+# 为 QML 模块添加包含目录
+target_include_directories(Oran7UI_Impl
+    PRIVATE
+        ${QtQuicCppExtend_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/qwindowkit/src/quick
+        ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/qwindowkit/src/core
+)
+
+# 为 QML 模块链接必要的库
+target_link_libraries(Oran7UI_Impl
+    PRIVATE
+        Qt6::Quick
+        Qt6::Qml
+        QWKCore
+        QWKQuick
+)
+
+# 添加 QWindowKit 宏定义
+add_compile_definitions(
+    QWK_QUICK_LIBRARY=1
+    QWK_CORE_LIBRARY=1
 )
 
 qt_add_executable(Oran7MediaClient
     MANUAL_FINALIZATION
     ${PROJECT_MAIN_SOURCES}
-
-    #USED BY QML
-
-    #GlobalSingleton
-    code/GlobalSingleton/appjsonconfigmanager.h
-    code/GlobalSingleton/appjsonconfigmanager.cpp
-    code/GlobalSingleton/asyncmanagers.h
-    code/GlobalSingleton/asyncmanagers.cpp
-    code/GlobalSingleton/applicationcontext.h
-    code/GlobalSingleton/applicationcontext.cpp
-    code/GlobalSingleton/globalhelper.h
-    code/GlobalSingleton/globalhelper.cpp
-    code/GlobalSingleton/client.h
-    code/GlobalSingleton/client.cpp
-
-    #Oran7MediaPlayer
-    code/Oran7MediaPlayer/ImageScaler.h
-    code/Oran7MediaPlayer/ffmsg.h
-    code/Oran7MediaPlayer/ffmsgqueue.h
-    code/Oran7MediaPlayer/ffmsgqueue.cpp
-    code/Oran7MediaPlayer/ffplay_def.h
-    code/Oran7MediaPlayer/ffplay_def.cpp
-    code/Oran7MediaPlayer/ffplayer.h
-    code/Oran7MediaPlayer/ffplayer.cpp
-    code/Oran7MediaPlayer/oran7mediaplayer.h
-    code/Oran7MediaPlayer/oran7mediaplayer.cpp
-    code/Oran7MediaPlayer/sonic.h
-    code/Oran7MediaPlayer/sonic.cpp
-    code/Oran7MediaPlayer/bilibliliveroomaddresscatch.h
-    code/Oran7MediaPlayer/bilibliliveroomaddresscatch.cpp
-
-    #Oran7ScreenCapture
-    code/Oran7ScreenCapture/oran7screencapture.h
-    code/Oran7ScreenCapture/oran7screencapture.cpp
-
-    #Oran7VideoGPURender
-    code/Oran7VideoGPURender/d3d11videoitem.h
-    code/Oran7VideoGPURender/d3d11videoitem.cpp
-    code/Oran7VideoGPURender/d3d11deviceprovider.h
-    code/Oran7VideoGPURender/d3d11deviceprovider.cpp
-    code/Oran7VideoGPURender/d3d11videorendernode.h
-    code/Oran7VideoGPURender/d3d11videorendernode.cpp
-
-    #Oran7Sever
-    code/Oran7Sever/sever.h
-    code/Oran7Sever/sever.cpp
-    code/Oran7Sever/database.h
-    code/Oran7Sever/database.cpp
-    code/Oran7Sever/protocolhandler.h
-    code/Oran7Sever/protocolhandler.cpp
-    code/Oran7Sever/loadingdatahandler.h
-    code/Oran7Sever/loadingdatahandler.cpp
-    code/Oran7Sever/loginhandler.h
-    code/Oran7Sever/loginhandler.cpp
-
-    #QtQuicCppExtend
-    code/QtQuicCppExtend/filehelper.h
-    code/QtQuicCppExtend/filehelper.cpp
-    code/QtQuicCppExtend/FramelessWindow.h
-    code/QtQuicCppExtend/FramelessWindow.cpp
-    code/GlobalSingleton/GlobalEventFilter.h
-    code/GlobalSingleton/GlobalEventFilter.cpp
+    ${SOURCES}
 )
 
 # ===================== ShaderEffect 自动编译 QSB ================
@@ -182,7 +142,7 @@ endif()
 # 在qt_add_executable之后添加模块配置文件路径
 target_include_directories(Oran7MediaClient
     PRIVATE
-    ${GLOBAL_SIGNALTON_DIR}
+    ${GLOBAL_SINGLETON_DIR}
 
     ${FFMPEG_ROOT_DIR}/include
     ${FFMPEG_ROOT_DIR}/include/SDL2
@@ -202,7 +162,7 @@ target_link_directories(Oran7MediaClient
         ${FFMPEG_ROOT_DIR}/lib
 )
 
-# target_link_libraries，添加Sql和QuickControls2模块
+# target_link_libraries，添加 Sql 和 QuickControls2 模块
 target_link_libraries(Oran7MediaClient
   PRIVATE
     Qt6::Core
@@ -215,12 +175,17 @@ target_link_libraries(Oran7MediaClient
     Qt6::OpenGLWidgets
     Qt6::ShaderTools
     Qt6::Multimedia
-    OpenGL::GL
     Qt6::GuiPrivate
-  PRIVATE
+    # QWindowKit 库（参考 HuskarUI 方法）
+    QWKCore
+    QWKQuick
+    # 链接创建的 QML 模块库
+    Oran7UI_Impl
+    # FFmpeg 库
     avcodec avformat avutil avdevice avfilter swresample swscale
-  PRIVATE
+    # SDL2 库
     SDL2 SDL2main
+    # Windows 系统库
     d3dcompiler dxgi dwmapi
 )
 

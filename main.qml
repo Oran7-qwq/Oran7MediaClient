@@ -4,19 +4,20 @@ import QtQuick.Controls
 import QtQuick.Shapes 1.10
 import Qt5Compat.GraphicalEffects
 
-import "./Src/LeftPage"
-import "./Src/RightPage"
-import "./Src/BottomPage"
-import "./Src/Basic"
-import "./Src/Components"
-import "./Src/Settings/SettingWindows"
+import "./src/qml/LeftPage"
+import "./src/qml/RightPage"
+import "./src/qml/BottomPage"
+import "./src/qml/Basic"
+import "./src/qml/Components"
+import "./src/qml/Settings/SettingWindows"
 
 import Client 1.0
 import FramelessWindow 1.0
+import Oran7UI.Impl 1.0
 
 ApplicationWindow {
     id: mainWindow
-    objectName: "mainWindow"
+    objectName: "__Oran7Window__"
     width: 1180
     height: 680
     visible: true
@@ -25,8 +26,7 @@ ApplicationWindow {
     minimumWidth: 1180
     minimumHeight: 680
 
-    // 使用无边框窗口样式，但保留原生窗口控制按钮
-    flags: Qt.FramelessWindowHint | Qt.Window | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
+    property alias __Oran7WindowBackGround__: mainWindowBackground
 
     onWidthChanged: {
         Qt.callLater(function () {
@@ -57,15 +57,18 @@ ApplicationWindow {
         Oran7MainUiSetting.savedNormalHeight = mainWindow.height;
         Oran7MainUiSetting.savedNormalX = mainWindow.x;
         Oran7MainUiSetting.savedNormalY = mainWindow.y;
+
+        // 设置全局mainWindow引用
+        BasicConfig.mainWindow = mainWindow;
     }
 
-    background: Image {
+    // 背景图片 - 作为直接子元素，可以被alias引用
+    Image {
         id: mainWindowBackground
         anchors.fill: parent
         sourceSize.width: mainWindow.minimumWidth
         sourceSize.height: mainWindow.minimumHeight
-        //source: "qrc:/image/themBackground.jpg"
-        source: Oran7MainUiSetting.backgroundImagePath
+        source: "file:///" + Oran7MainUiSetting.backgroundImagePath
         opacity: 0.999
 
         fillMode: Image.PreserveAspectCrop
@@ -76,10 +79,12 @@ ApplicationWindow {
         transformOrigin: Item.Center
     }
 
+    // 设置background属性引用mainWindowBackground
+    background: mainWindowBackground
+
     // --- MainWoindow functions ---
     function restoreFocus() {// 恢复主窗口焦点
-        console.log("恢复主窗口焦点");
-        mainWindow.requestActivate();
+        mainWindow.requestActivate();//native-api
     }
 
     // --- MainWoindow 性能监测 ---
@@ -122,82 +127,95 @@ ApplicationWindow {
         }
     }
 
-    //  --- 无边框窗口处理器 ---
-    FramelessWindow {
-        id: framelessWindow
-        targetWindow: mainWindow
-        borderWidth: 6
-        borderHeight: 6
-        titleBarHeight: Oran7MainUiSetting.window_titleBarWidth
+    //// 使用无边框窗口样式，但保留原生窗口控制按钮<---已弃用，已用QWK::QuickWindowAgent代理
+    // flags: Qt.FramelessWindowHint | Qt.Window | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
+    // // --- 无边框窗口处理器 --- //<---Discard 2026/5/9
+    // FramelessWindow {
+    //     id: framelessWindow
+    //     targetWindow: mainWindow
+    //     borderWidth: 6
+    //     borderHeight: 6
+    //     titleBarHeight: Oran7MainUiSetting.window_titleBarWidth
 
-        Component.onCompleted: {
-            setupWindow();
-        }
+    //     Component.onCompleted: {
+    //         setupWindow();
+    //     }
+    // }
+
+    // // --- 右上角原生窗口控制按钮（覆盖在主UI上） ---
+    // Row {
+    //     id: nativeWindowControls
+    //     width: 140  // 三个按钮的总宽度
+    //     height: 36
+    //     anchors.top: parent.top
+    //     anchors.right: parent.right
+    //     anchors.rightMargin: 12  // 增加右边距，给边框拉伸留出足够空间
+    //     anchors.topMargin: 12    // 增加上边距，给边框拉伸留出足够空间
+    //     spacing: 4  // 按钮之间的间距
+    //     z: 999
+    //     layoutDirection: Qt.RightToLeft
+
+    //     // 关闭按钮
+    //     WindowControlButton {
+    //         id: nativeCloseButton
+    //         width: 46
+    //         height: 32
+    //         buttonColor: "transparent"
+    //         hoverColor: "#c42b1c"
+    //         iconText: "✕"
+    //         onClicked: {
+    //             mainWindow.close();
+    //         }
+    //     }
+
+    //     // 最大化/还原按钮
+    //     WindowControlButton {
+    //         id: nativeMaximizeButton
+    //         width: 46
+    //         height: 32
+    //         buttonColor: "transparent"
+    //         hoverColor: Qt.rgba(0.2, 0.2, 0.2, 0.5)
+    //         // 为□符号设置更大的字体大小
+    //         buttonTextPixelSize: mainWindow.visibility === Window.Maximized ? 15 : 34
+    //         iconText: mainWindow.visibility === Window.Maximized ? "❐" : "▢"
+
+    //         onClicked: {
+    //             framelessWindow.nativeMaximize();
+    //         }
+    //     }
+
+    //     // 最小化按钮
+    //     WindowControlButton {
+    //         id: nativeMinimizeButton
+    //         width: 46
+    //         height: 32
+    //         buttonColor: "transparent"
+    //         hoverColor: Qt.rgba(0.2, 0.2, 0.2, 0.5)
+    //         iconText: "━"
+
+    //         onClicked: {
+    //             framelessWindow.nativeMinimize();
+    //         }
+    //     }
+    // }
+
+    Oran7WindowAgent{
+        id:__windowAgent
+    }
+
+    Oran7CaptionBar{
+        id: __captionBar
+        z: 65535
+        width: parent.width
+        height: Oran7MainUiSetting.topBarDefaultHeight
+        anchors.top: parent.top
+        targetWindow: mainWindow
+        windowAgent:__windowAgent
+        showWinTitle:false
+        showWinIcon:false
     }
 
     //====================== <Main ui> ========================//
-    // --- 右上角原生窗口控制按钮（覆盖在主UI上） ---
-    Row {
-        id: nativeWindowControls
-        width: 140  // 三个按钮的总宽度
-        height: 36
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.rightMargin: 12  // 增加右边距，给边框拉伸留出足够空间
-        anchors.topMargin: 12    // 增加上边距，给边框拉伸留出足够空间
-        spacing: 4  // 按钮之间的间距
-        z: 999
-        layoutDirection: Qt.RightToLeft
-
-        // 关闭按钮
-        WindowControlButton {
-            id: nativeCloseButton
-            width: 46
-            height: 32
-            buttonColor: "transparent"
-            hoverColor: "#c42b1c"
-            iconText: "✕"
-            onClicked: {
-                mainWindow.close();
-            }
-        }
-
-        // 最大化/还原按钮
-        WindowControlButton {
-            id: nativeMaximizeButton
-            width: 46
-            height: 32
-            buttonColor: "transparent"
-            hoverColor: Qt.rgba(0.2, 0.2, 0.2, 0.5)
-            // 为□符号设置更大的字体大小
-            buttonTextPixelSize: mainWindow.visibility === Window.Maximized ? 15 : 34
-            iconText: mainWindow.visibility === Window.Maximized ? "❐" : "▢"
-
-            onClicked: {
-                // if (mainWindow.visibility === Window.Maximized) {
-                //     framelessWindow.nativeMaximize();
-                // } else {
-                //     framelessWindow.nativeMaximize();
-                // }
-                framelessWindow.nativeMaximize();
-            }
-        }
-
-        // 最小化按钮
-        WindowControlButton {
-            id: nativeMinimizeButton
-            width: 46
-            height: 32
-            buttonColor: "transparent"
-            hoverColor: Qt.rgba(0.2, 0.2, 0.2, 0.5)
-            iconText: "━"
-
-            onClicked: {
-                framelessWindow.nativeMinimize();
-            }
-        }
-    }
-
     // --- MainUi Rectangle Container ---
     Rectangle {
         id: mainRectangle
@@ -276,29 +294,29 @@ ApplicationWindow {
         // -- 主体右部 --
         RightPage {
             id: rightRectangle
+
             anchors.left: leftRectangle.right
+            anchors.leftMargin: openSemiCircle.openIngState ? 7 : 0
             anchors.top: parent.top
             anchors.bottom: bottomRectangle.top
-            //anchors.bottom: parent.bottom
+            anchors.bottomMargin: openSemiCircle.openIngState ? 7 : 0
             anchors.right: parent.right
-            // color:"#13131a"
+
             property bool isTransparent: true
             color: isTransparent ? "transparent" : "#f8c7c7"
-            //clip: true
+
+            topBarHeight: openSemiCircle.openIngState ? Oran7MainUiSetting.topBarDefaultHeight : 0
         }
 
         // -- 主体底部 --
-        BottomPage {
-            id: bottomRectangle
+        Oran7BlurCard{
+            id:bottomRectangle
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            color: "#2a1a22"
-            //initilization
-            visible: true
-            visibleOpacity: 0.0
-            height: 0
-            z: leftRectangle.z > rightRectangle.z ? leftRectangle.z + 1 : rightRectangle.z + 1
+            anchors.margins: 7
+
+            borderRadius:17
 
             Behavior on height {
                 enabled: true
@@ -307,36 +325,59 @@ ApplicationWindow {
                     easing.type: Easing.OutCubic
                 }
             }
+            z: leftRectangle.z > rightRectangle.z ? leftRectangle.z + 1 : rightRectangle.z + 1
+
+            //initilization
+            height: 0
+            visible: true
+            themeColor: "#0EFFFFFF"
+            blurSource: mainWindowBackground
+            blurEnabled: true
+            property real visibleOpacity: 0.0
+
+            BottomPage {
+                id: bottomPage
+                anchors.fill: parent
+                //color: "#2a1a22"
+                color: "transparent"
+                //initilization
+                visible: bottomRectangle.visible
+                visibleOpacity: bottomRectangle.visibleOpacity
+            }
         }
 
         // -- 主体左部 --
         Oran7BlurCard {
             id: leftRectangle
-            property real defaultWidth: 204
+            width: !openIngState ? 0 :
+                              simpleMode ? leftPage.simpleModeWidth : leftPage.defaultWidth
+            property alias simpleMode: leftPage.simpleMode
+            readonly property bool openIngState: openSemiCircle.openIngState
 
-            width: defaultWidth
             Behavior on width {
                 NumberAnimation {
                     duration: 200
                     easing.type: Easing.OutCubic
                 }
             }
+
             anchors.top: parent.top
             anchors.left: parent.left
+            anchors.margins: openIngState ? 7 : 0
             anchors.bottom: bottomRectangle.top
 
             blurSource: mainWindowBackground
             blurEnabled: true
-            borderRadius: 0
+            borderRadius:17
             borderWidth: 0
             borderColor: "pink"
             dragable: false
             themeColor: "#0EFFFFFF"
             LeftPage {
                 id: leftPage
+                simpleMode: Oran7MainUiSetting.captionBar_is_simpleMode
                 anchors.fill: parent
-                //color:"#c36c7c"
-                visible: openSemiCircle.openIngState
+                visible: leftRectangle.openIngState
                 color: "transparent"
             }
         }
@@ -357,15 +398,6 @@ ApplicationWindow {
 
             property bool openIngState: true
 
-            // ShapePath{
-            //     strokeWidth: 1
-            //     strokeColor: "black"
-            //     fillColor: "#fef2e8"
-            //     startX: 0
-            //     startY: 0
-            //     PathArc { x: 0; y: 40; radiusX: 20; radiusY: 20 }
-            //     PathLine { x: 0; y: 40 }
-            // }
             Connections {
                 target: BasicConfig
                 function onClearAllUi_inVIdeoRenderArea(ok) {
@@ -383,13 +415,14 @@ ApplicationWindow {
                 anchors.leftMargin: 0
                 source: "/image/stackback.png"
 
-                rotation: 0
+                rotation: openSemiCircle.openIngState ? 0 : 180
                 Behavior on rotation {
                     NumberAnimation {
                         duration: 200
                         easing.type: Easing.OutCubic
                     }
                 }
+
                 property color openImageColorOverlay_defaultColor: "#fef2e8"
                 property color openImageColorOverlay_selectedColor: "#616161"
                 property color openImageColorOverlay_usedColor: openImage.openImageColorOverlay_defaultColor
@@ -409,17 +442,9 @@ ApplicationWindow {
                 anchors.fill: parent
                 onClicked: {
                     if (openSemiCircle.openIngState === false) {
-                        openImage.rotation = 0;
-                        leftRectangle.width = leftRectangle.defaultWidth;
-
                         openSemiCircle.openIngState = true;
-                        rightRectangle.topBarHeight = Oran7MainUiSetting.topBarDefaultHeight;
                     } else {
-                        openImage.rotation = 180;
-                        leftRectangle.width = 0;
-
                         openSemiCircle.openIngState = false;
-                        rightRectangle.topBarHeight = 0;
                     }
                 }
             }
@@ -431,7 +456,7 @@ ApplicationWindow {
             width: 40
             height: width
             anchors.left: parent.left
-            anchors.leftMargin: 12
+            anchors.leftMargin: leftRectangle.simpleMode ? 22 :12
             anchors.top: parent.top
             anchors.topMargin: 18
             opacity: 1.0

@@ -2,7 +2,6 @@
     <qresource prefix="/">
         <file>image/account.png</file>
         <file>image/backmaxsize.png</file>
-        <file>image/bok.png</file>
         <file>image/clear.png</file>
         <file>image/ClearPause.png</file>
         <file>image/ClearPlay.png</file>
@@ -10,17 +9,14 @@
         <file>image/colect.png</file>
         <file>image/coment.png</file>
         <file>image/delete.png</file>
-        <file>image/donwload.png</file>
         <file>image/download.png</file>
         <file>image/drag.png</file>
-        <file>image/gz.png</file>
         <file>image/heartmode.png</file>
         <file>image/hide.png</file>
         <file>image/hideContent.png</file>
         <file>image/history.png</file>
         <file>image/last.png</file>
         <file>image/listentogether.png</file>
-        <file>image/localmusic.png</file>
         <file>image/love.png</file>
         <file>image/love_NoMiddleTransparent.png</file>
         <file>image/loved.png</file>
@@ -46,9 +42,7 @@
         <file>image/share.png</file>
         <file>image/show.png</file>
         <file>image/skin.png</file>
-        <file>image/speSeleted.png</file>
         <file>image/stackback.png</file>
-        <file>image/suggest.png</file>
         <file>image/sure.png</file>
         <file>image/tangleqr.png</file>
         <file>image/themBackground.jpg</file>
@@ -59,7 +53,6 @@
         <file>image/wechat.png</file>
         <file>image/ep_select.png</file>
         <file>image/formkit_file.png</file>
-        <file>app.rc</file>
         <file>shaders/NOTE.txt</file>
         <file>shaders/bgra2rgba_vs.hlsl</file>
         <file>shaders/bgra2rgba_ps.hlsl</file>
@@ -69,5 +62,11 @@
         <file>image/hugeicons_ai-setting.png</file>
         <file>sound/CloseSound.wav</file>
         <file>sound/OpenSound.wav</file>
+        <file>app.rc</file>
+        <file>image/streamline_star-2-solid.png</file>
+        <file>image/hugeicons_ai-video.png</file>
+        <file>image/hugeicons_video-camera-ai.png</file>
+        <file>image/arcticons_star-music-tag-editor.png</file>
+        <file>image/icon-park-outline_like.png</file>
     </qresource>
 </RCC>

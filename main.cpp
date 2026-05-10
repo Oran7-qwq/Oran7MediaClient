@@ -8,12 +8,12 @@
 #include <memory>
 #include "GlobalEventFilter.h"
 
-#include "appjsonconfigmanager.h"
-#include "sever.h"
-#include "client.h"
-#include "applicationcontext.h"
-#include "filehelper.h"
-#include "bilibliliveroomaddresscatch.h"
+#include "AppJsonConfigManager.h"
+#include "Sever.h"
+#include "Client.h"
+#include "ApplicationContext.h"
+#include "Oran7FileHelper.h"
+#include "BilibliLiveRoomAddressCatch.h"
 #include "FramelessWindow.h"
 
 #include <QtGlobal>
@@ -85,6 +85,7 @@ int main(int argc, char *argv[])
             "qt.scenegraph.renderloop=true\n"
             "qt.rhi.general=true\n"
             "qt.rhi.warning=true\n");
+    QLoggingCategory::setFilterRules("qt.quick.shadereffect.warning=false\n");
 
     // Config SurfaceFormat
     QSurfaceFormat format;
@@ -103,12 +104,10 @@ int main(int argc, char *argv[])
 
     QGuiApplication app(argc, argv);
 
-    // 使用 std::unique_ptr 确保自动清理，但保留原始指针用于 installEventFilter
-    std::unique_ptr<GlobalEventFilter> globalFilterPtr = std::make_unique<GlobalEventFilter>(&app);
-    app.installEventFilter(globalFilterPtr.get());
-
     // 设置场景图形后端-->Direct3D11
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
+    QQuickWindow::setTextRenderType(QQuickWindow::QtTextRendering);
+    QQuickStyle::setStyle("Fusion");
 
     // Qt 默认 backend-->Windows : D3D11
     INFO_LOG << "Graphics API:" << QQuickWindow::graphicsApi();
@@ -117,20 +116,23 @@ int main(int argc, char *argv[])
     app.setApplicationName("Oran7MediaClient");
     app.setOrganizationName("Oran7Apps");
 
-    QQuickWindow::setTextRenderType(QQuickWindow::QtTextRendering);
-    QQuickStyle::setStyle("Fusion");
-
     QQmlApplicationEngine engine;
 
     ApplicationContext::instance();
 
-    qmlRegisterSingletonType(QUrl("qrc:/Src/Basic/BasicConfig.qml"), "BasicConfig", 1, 0, "BasicConfig");
-    qmlRegisterSingletonType(QUrl("qrc:/Src/Settings/GlobalSettings/Oran7MainUiSetting.qml"), "Oran7MainUiSetting", 1, 0, "Oran7MainUiSetting");
+    qmlRegisterSingletonType(QUrl("qrc:/src/qml/Basic/BasicConfig.qml"), "BasicConfig", 1, 0, "BasicConfig");
+    qmlRegisterSingletonType(QUrl("qrc:/src/qml/Settings/GlobalSettings/Oran7MainUiSetting.qml"), "Oran7MainUiSetting", 1, 0, "Oran7MainUiSetting");
 
-    qmlRegisterType<FileHelper>("FileHelper", 1, 0, "FileHelper");
+    qmlRegisterType<Oran7FileHelper>("Oran7FileHelper", 1, 0, "Oran7FileHelper");
     qmlRegisterType<BilibiliRoomAddressCatch>("BilibiliRoomAddressCatch", 1, 0, "BilibiliRoomAddressCatch");
     qmlRegisterType<D3D11VideoItem>("D3D11VideoItem", 1, 0, "D3D11VideoItem");
     qmlRegisterType<FramelessWindow>("FramelessWindow", 1, 0, "FramelessWindow");
+
+    // 注册全局事件过滤器到 QML
+    // 使用 std::unique_ptr 确保自动清理，但保留原始指针用于 installEventFilter
+    std::unique_ptr<GlobalEventFilter> globalFilterPtr = std::make_unique<GlobalEventFilter>(&app);
+    app.installEventFilter(globalFilterPtr.get());
+    engine.rootContext()->setContextProperty("globalEventFilter", globalFilterPtr.get());
 
     const QUrl url(QStringLiteral("qrc:/main.qml"));
     QObject::connect(
@@ -149,17 +151,12 @@ int main(int argc, char *argv[])
 
     Client *client = ApplicationContext::instance()->client();
     qmlRegisterSingletonType<Client>("Client", 1, 0, "Client",
-                                     [client](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject *
-                                     {
-                                         Q_UNUSED(engine);
-                                         Q_UNUSED(scriptEngine);
-                                         return client;
-                                     });
-
-    // 注册全局事件过滤器到 QML
-    engine.rootContext()->setContextProperty("globalEventFilter", globalFilterPtr.get());
-
-    QLoggingCategory::setFilterRules("qt.quick.shadereffect.warning=false\n");
+         [client](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject *
+         {
+             Q_UNUSED(engine);
+             Q_UNUSED(scriptEngine);
+             return client;
+         });
 
     if (!QSqlDatabase::isDriverAvailable("QSQLITE"))
     {
@@ -168,20 +165,17 @@ int main(int argc, char *argv[])
     }
 
     engine.load(url);
-    // auto *rootObj = engine.rootObjects().value(0);
-    // if (rootObj) rootObj->dumpObjectTree();
 
     Config_AppConfigManager_RET = Config_AppConfigManager_Load(engine);
     if (Config_AppConfigManager_RET == ConfigRET::Config_SUCCESSED)
         CONFIG_LOG << "AppConfigManager:Successfully load user Config,";
 
-    QObject::connect(&app, &QGuiApplication::aboutToQuit, &app, [&engine]() mutable
-                     {
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, &app, [&engine]() mutable{
         ApplicationContext::instance()->client()->StopPlayerRuning();//先确保杀死Oran7MediaPlayer防止Video_refresh还在触发回调qml渲染对象
 
         Config_AppConfigManager_RET = Config_AppConfigManager_Save(engine);
         if(Config_AppConfigManager_RET == ConfigRET::Config_SUCCESSED)
-            CONFIG_LOG<<"[AppConfigManager:Successfully save user Config."; });
+            CONFIG_LOG<<"AppConfigManager:Successfully save user Config."; });
 
     return app.exec();
 }
