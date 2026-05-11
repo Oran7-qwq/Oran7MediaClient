@@ -14,15 +14,17 @@ Window {
     color: "transparent"
     flags: Qt.Window | Qt.FramelessWindowHint
     modality: Qt.NonModal
-    width: 252
-    height: 600
+    width: Oran7MainUiSetting.settingItemWinDefalutWidth
+    height: root.savedNormalHeight
     opacity: 0
     x: root.savedNormalX
-    y: root.savedNormalY
+    y: 0
 
-    readonly property int savedNormalX: 40
-    readonly property real savedNormalY: 20
-    readonly property real savedNormalHeight: 600
+    property int  winIndex : 0
+
+    property int savedNormalX: 40 + Oran7MainUiSetting.settingItemWinDefalutWidth * root.winIndex
+    property real savedNormalY: 20
+    property real savedNormalHeight: 900
 
     property point clickPos: Qt.point(0, 0)
     property bool mouseIsPressed: false
@@ -30,16 +32,16 @@ Window {
     Connections {
         target: Oran7MainUiSetting
         function onTriggleOpen_Oran7MainUiSetting_window() {
-            delayTimer.delay(10).then(function () {
-                if (root.visible === false) {
+            if (root.visible === false) {
+                Oran7MainUiSetting.settingContent_visiable = true
+                delayTimer.delay(10 + 40*root.winIndex).then(function () {
                     root.visible = true;
-                    //only MainUiSettingWindow change it, a sign for extern
-                    Oran7MainUiSetting.settingContent_visiable = true
                     window_openAnimation.restart();
-                } else {
-                    window_closeAnimation.restart();
-                }
-            });
+                });
+            } else {
+                window_openAnimation.stop();
+                window_closeAnimation.restart();
+            }
         }
     }
 
@@ -58,16 +60,16 @@ Window {
             from: 0
             to: 1
             duration: window_openAnimation.aniDuration
-            easing.type: Easing.InOutCubic
+            easing.type: Easing.OutCubic
         }
 
         PropertyAnimation {
             target: root
             property: "y"
-            from: -root.savedNormalY
+            from: 0
             to: root.savedNormalY
             duration: window_openAnimation.aniDuration
-            easing.type: Easing.InOutCubic
+            easing.type: Easing.OutCubic
         }
 
         PropertyAnimation {
@@ -76,7 +78,7 @@ Window {
             from: 0
             to: root.savedNormalHeight
             duration: window_openAnimation.aniDuration
-            easing.type: Easing.InOutCubic
+            easing.type: Easing.OutCubic
         }
     }
 
@@ -97,7 +99,7 @@ Window {
             target: root
             property: "y"
             from: root.savedNormalY
-            to: -root.savedNormalY
+            to: 0
             duration: window_closeAnimation.aniDuration
             easing.type: Easing.InExpo
         }
@@ -262,6 +264,8 @@ Window {
         }
         onReleased: function(mouse) {
             root.mouseIsPressed = false;
+            root.savedNormalX = root.x
+            root.savedNormalY = root.y
             mouse.accepted = false;
         }
         onPositionChanged: function(mouse) {

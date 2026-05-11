@@ -268,12 +268,12 @@ ApplicationWindow {
 
             onPositionChanged: mouse => {
                 mouse.accepted = false;
-            //使用Windows原生窗体drag
-            // if(mainRectangleMouseArea.mouseIsPressed === false)return;
-            // if(mouse.y >= 80)return;
-            // let delta = Qt.point(mouse.x-clickPos.x,mouse.y-clickPos.y)
-            // mainWindow.x+=delta.x
-            // mainWindow.y+=delta.y
+                //<---Discard 使用Windows原生窗体drag
+                // if(mainRectangleMouseArea.mouseIsPressed === false)return;
+                // if(mouse.y >= 80)return;
+                // let delta = Qt.point(mouse.x-clickPos.x,mouse.y-clickPos.y)
+                // mainWindow.x+=delta.x
+                // mainWindow.y+=delta.y
             }
 
             onClicked: {
@@ -299,7 +299,7 @@ ApplicationWindow {
             anchors.leftMargin: openSemiCircle.openIngState ? 7 : 0
             anchors.top: parent.top
             anchors.bottom: bottomRectangle.top
-            anchors.bottomMargin: openSemiCircle.openIngState ? 7 : 0
+            //anchors.bottomMargin: openSemiCircle.openIngState ? 7 : 0
             anchors.right: parent.right
 
             property bool isTransparent: true
@@ -314,7 +314,7 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.margins: 7
+            anchors.margins: openSemiCircle.openIngState ? 7 : 0
 
             borderRadius:17
 
@@ -462,6 +462,8 @@ ApplicationWindow {
             opacity: 1.0
             visible: openSemiCircle.openIngState
             scale: 1.0
+
+            Behavior on anchors.leftMargin { NumberAnimation { duration: 150 } }
             Rectangle {
                 id: oran7IconRectangle
                 anchors.fill: parent

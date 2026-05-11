@@ -18,11 +18,11 @@ Window {
     x: root.savedNormalX
     y: 0
 
-    property int  winIndex : 1
+    property int  winIndex : 3
 
     property real savedNormalX: 40 + Oran7MainUiSetting.settingItemWinDefalutWidth * root.winIndex
     property real savedNormalY: 20
-    property real savedNormalHeight: 700
+    property real savedNormalHeight: 600
 
     property point clickPos: Qt.point(0, 0)
     property bool mouseIsPressed: false
@@ -143,7 +143,7 @@ Window {
 
             Oran7SetingTitleItem{
                 id:topDragRect
-                title:"VideoPlayerSettings"
+                title:"MusicPlayListSettings"
                 anchors.top: parent.top
                 anchors.margins: 2
             }

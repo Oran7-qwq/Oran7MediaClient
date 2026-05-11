@@ -44,5 +44,7 @@
         <file>src/qml/Settings/SettingWindows/Oran7SettingsContainerWindow.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7GroupDiveLine.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SetingTitleItem.qml</file>
+        <file>src/qml/Settings/SettingWindows/Oran7MusicPlayListSettingWindow.qml</file>
+        <file>src/qml/Settings/SettingWindows/Oran7ScreenCaptureSettingWindow.qml</file>
     </qresource>
 </RCC>

@@ -32,21 +32,30 @@ Item {
     // ================= SettingUi_Window_Property ================
     property bool settingWin_isOpen: false
     property bool settingContent_visiable: false
-    property real toggleOpenAniDuration: 400
+    property real toggleOpenAniDuration: 300
+    property real settingItemWinDefalutWidth: 252
 
     property real itemHeight: 30
-
     property real textPixelSize: 16
     property string fontFamily : "微软雅黑"
 
     property bool isDarkMode: true
     readonly property color backColor: isDarkMode ? "#030303" : "#ffffff"
-    readonly property color itemBackColor: isDarkMode ? "#101110" : "#d1d1d1"
+    readonly property color itemBackColor: isDarkMode ? "#242020" : "#d1d1d1"
     readonly property color tagColor: "#FF818E"
     readonly property color textColor: isDarkMode ? "#dadada" : "#5c5c5c"
     readonly property color winShadowColor: isDarkMode ? "#80000000" : "#20000000"
     property color themeColor: /*"#8cffff"*//*"#fc3c55"*/"#beb7ff"
 
+    //--- statue manager ---
+    //过滤内层控件聚焦状态
+    readonly property bool __SurelySetingWinIsFocus__: !isOran7TextFieldActive && settingWinActive
+
+    readonly property bool settingWinActive : settingWin_isOpen
+    readonly property bool isOran7TextFieldActive:activeOran7TextFieldCount > 0
+    property int activeOran7TextFieldCount: 0 //引用计数机制
+
+    // --- Oran7TextField InputText Auto DetectionType ENUM ---
     enum DetectionType {
         NoDetection = 0,
         FileDetection = 1,

@@ -35,6 +35,8 @@ private:
     void checkKeyCombinations();
     void handleKeyPress(QKeyEvent *keyEvent);
     void handleKeyRelease(QKeyEvent *keyEvent);
+
+    bool __GlobelKeyLogINFO__ = false;
 };
 
 #endif // GLOBALEVENTFILTER_H

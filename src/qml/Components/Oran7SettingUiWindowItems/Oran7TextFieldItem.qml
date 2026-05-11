@@ -54,6 +54,12 @@ Item {
             verticalAlignment: Text.AlignVCenter
             visible: !textField.text && !textField.focus
         }
+        onFocusChanged: {
+            if(textField.focus)
+                Oran7MainUiSetting.activeOran7TextFieldCount++
+            else
+                Oran7MainUiSetting.activeOran7TextFieldCount--
+        }
     }
     //index_ line
     Rectangle {
