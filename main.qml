@@ -12,7 +12,6 @@ import "./src/qml/Components"
 import "./src/qml/Settings/SettingWindows"
 
 import Client 1.0
-import FramelessWindow 1.0
 import Oran7UI.Impl 1.0
 
 ApplicationWindow {
@@ -66,16 +65,18 @@ ApplicationWindow {
     Image {
         id: mainWindowBackground
         anchors.fill: parent
-        sourceSize.width: mainWindow.minimumWidth
-        sourceSize.height: mainWindow.minimumHeight
-        source: "file:///" + Oran7MainUiSetting.backgroundImagePath
+        sourceSize.width: Screen.width * Screen.devicePixelRatio
+        sourceSize.height: Screen.height * Screen.devicePixelRatio
+        source: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage) ?
+                    "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/test_background1.jpg"
+        //source: ""
         opacity: 0.999
 
         fillMode: Image.PreserveAspectCrop
-        asynchronous: false  // 拖动时改为同步，避免异步计算导致的卡顿
-        mipmap: true            // 启用mipmap，提高缩放性能
-        smooth: false            // 拖动时关闭平滑，提高性能
-        cache: true
+        asynchronous: false
+        mipmap: false
+        smooth: false
+        cache: false
         transformOrigin: Item.Center
     }
 
@@ -207,7 +208,7 @@ ApplicationWindow {
         id: __captionBar
         z: 65535
         width: parent.width
-        height: Oran7MainUiSetting.topBarDefaultHeight
+        height: Oran7Theme.Oran7MainGUI.topBarDefaultHeight
         anchors.top: parent.top
         targetWindow: mainWindow
         windowAgent:__windowAgent
@@ -296,16 +297,16 @@ ApplicationWindow {
             id: rightRectangle
 
             anchors.left: leftRectangle.right
-            anchors.leftMargin: openSemiCircle.openIngState ? 7 : 0
+            anchors.leftMargin: openCaptionBtn.openIngState ? 7 : 0
             anchors.top: parent.top
             anchors.bottom: bottomRectangle.top
-            //anchors.bottomMargin: openSemiCircle.openIngState ? 7 : 0
+            //anchors.bottomMargin: openCaptionBtn.openIngState ? 7 : 0
             anchors.right: parent.right
 
             property bool isTransparent: true
             color: isTransparent ? "transparent" : "#f8c7c7"
 
-            topBarHeight: openSemiCircle.openIngState ? Oran7MainUiSetting.topBarDefaultHeight : 0
+            topBarHeight: openCaptionBtn.openIngState ? Oran7Theme.Oran7MainGUI.topBarDefaultHeight : 0
         }
 
         // -- 主体底部 --
@@ -314,7 +315,7 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.margins: openSemiCircle.openIngState ? 7 : 0
+            anchors.margins: openCaptionBtn.openIngState ? 7 : 0
 
             borderRadius:17
 
@@ -330,9 +331,10 @@ ApplicationWindow {
             //initilization
             height: 0
             visible: true
-            themeColor: "#0EFFFFFF"
+            themeColor: "#04FFFFFF"
             blurSource: mainWindowBackground
             blurEnabled: true
+            borderWidth: 1
             property real visibleOpacity: 0.0
 
             BottomPage {
@@ -352,7 +354,7 @@ ApplicationWindow {
             width: !openIngState ? 0 :
                               simpleMode ? leftPage.simpleModeWidth : leftPage.defaultWidth
             property alias simpleMode: leftPage.simpleMode
-            readonly property bool openIngState: openSemiCircle.openIngState
+            readonly property bool openIngState: openCaptionBtn.openIngState
 
             Behavior on width {
                 NumberAnimation {
@@ -369,82 +371,54 @@ ApplicationWindow {
             blurSource: mainWindowBackground
             blurEnabled: true
             borderRadius:17
-            borderWidth: 0
-            borderColor: "pink"
-            dragable: false
-            themeColor: "#0EFFFFFF"
+            borderWidth: 1
+            themeColor: "#04FFFFFF"
             LeftPage {
                 id: leftPage
-                simpleMode: Oran7MainUiSetting.captionBar_is_simpleMode
+                simpleMode: Oran7Theme.Oran7CaptionBar.isSimpleMode
                 anchors.fill: parent
                 visible: leftRectangle.openIngState
                 color: "transparent"
             }
         }
         // -- 左部导航栏->打开关闭button --
-        Shape {
-            id: openSemiCircle
-            width: height / 2
-            height: Oran7MainUiSetting.topBarDefaultHeight * 0.8
+        Image {
+            id: openCaptionBtn
+
+            sourceSize.height: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 1
+            sourceSize.width: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 1
             anchors.left: leftRectangle.right
-            anchors.leftMargin: 12
+            anchors.leftMargin: 0
             anchors.top: leftRectangle.top
-            anchors.topMargin: Oran7MainUiSetting.topBarDefaultHeight * 0.1
+            anchors.topMargin: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 0.1
             z: leftRectangle.z + 1
-            layer.enabled: true
-            layer.smooth: true
-            layer.samples: 12
-            antialiasing: true
+
+            source: openCaptionBtn.openIngState ? "qrc:/image/sitQiubi.png" : "qrc:/image/hideQiubi.png"
 
             property bool openIngState: true
+
+            asynchronous: false
+            mipmap: true
+            cache: true
+            antialiasing: true
 
             Connections {
                 target: BasicConfig
                 function onClearAllUi_inVIdeoRenderArea(ok) {
                     if (ok === false)
-                        openImage.visible = true;
-                    else if (openSemiCircle.openIngState !== true)
-                        openImage.visible = false;
+                        openCaptionBtn.visible = true;
+                    else if (openCaptionBtn.openIngState !== true)
+                        openCaptionBtn.visible = false;
                 }
             }
-            Image {
-                id: openImage
-                scale: 2
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.leftMargin: 0
-                source: "/image/stackback.png"
 
-                rotation: openSemiCircle.openIngState ? 0 : 180
-                Behavior on rotation {
-                    NumberAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                    }
-                }
-
-                property color openImageColorOverlay_defaultColor: "#fef2e8"
-                property color openImageColorOverlay_selectedColor: "#616161"
-                property color openImageColorOverlay_usedColor: openImage.openImageColorOverlay_defaultColor
-                layer.enabled: true
-                layer.effect: ColorOverlay {
-                    source: openImage
-                    anchors.fill: openImage
-                    color: openImage.openImageColorOverlay_usedColor
-                }
-
-                asynchronous: false
-                mipmap: true
-                cache: true
-                antialiasing: true
-            }
             MouseArea {
                 anchors.fill: parent
                 onClicked: {
-                    if (openSemiCircle.openIngState === false) {
-                        openSemiCircle.openIngState = true;
+                    if (openCaptionBtn.openIngState === false) {
+                        openCaptionBtn.openIngState = true;
                     } else {
-                        openSemiCircle.openIngState = false;
+                        openCaptionBtn.openIngState = false;
                     }
                 }
             }
@@ -460,7 +434,7 @@ ApplicationWindow {
             anchors.top: parent.top
             anchors.topMargin: 18
             opacity: 1.0
-            visible: openSemiCircle.openIngState
+            visible: openCaptionBtn.openIngState
             scale: 1.0
 
             Behavior on anchors.leftMargin { NumberAnimation { duration: 150 } }
@@ -489,31 +463,55 @@ ApplicationWindow {
                         property real transDuration: 500
 
                         PropertyAnimation {
-                            to: "#FFA500"
+                            to: Oran7ColorGenerator.presetToColor("#Preset_Red")
                             duration: shadowAnimation.transDuration
                         }
                         PropertyAnimation {
-                            to: "#FFFF00"
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Volcano"))
                             duration: shadowAnimation.transDuration
                         }
                         PropertyAnimation {
-                            to: "#00FF00"
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Orange"))
                             duration: shadowAnimation.transDuration
                         }
                         PropertyAnimation {
-                            to: "#00FFFF"
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Gold"))
                             duration: shadowAnimation.transDuration
                         }
                         PropertyAnimation {
-                            to: "#0000FF"
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Yellow"))
                             duration: shadowAnimation.transDuration
                         }
                         PropertyAnimation {
-                            to: "#800080"
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Lime"))
                             duration: shadowAnimation.transDuration
                         }
                         PropertyAnimation {
-                            to: "#FF0000"
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Green"))
+                            duration: shadowAnimation.transDuration
+                        }
+                        PropertyAnimation {
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Cyan"))
+                            duration: shadowAnimation.transDuration
+                        }
+                        PropertyAnimation {
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Blue"))
+                            duration: shadowAnimation.transDuration
+                        }
+                        PropertyAnimation {
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Geekblue"))
+                            duration: shadowAnimation.transDuration
+                        }
+                        PropertyAnimation {
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Purple"))
+                            duration: shadowAnimation.transDuration
+                        }
+                        PropertyAnimation {
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Magenta"))
+                            duration: shadowAnimation.transDuration
+                        }
+                        PropertyAnimation {
+                            to: Oran7ColorGenerator.presetToColor(String("#Preset_Grey"))
                             duration: shadowAnimation.transDuration
                         }
                     }
@@ -543,7 +541,7 @@ ApplicationWindow {
         Oran7AnimatedWindow {
             id: animatedWindowWarper
             buttonColor: "#f8c7c7"
-            fullscreenColor: "#c46d7c"
+            fullscreenColor: "#f8c7c7"
             maxTiltAngle: 30
             animDuration: 500
             onStateChanged: {
@@ -556,10 +554,12 @@ ApplicationWindow {
             //嵌入子项到内部contentArea区域
             Image {
                 id: animatedWindowWarperbackgoundImage
-                // anchors.fill: animatedWindowWarper
-                sourceSize.width: animatedWindowWarper.width
-                sourceSize.height: animatedWindowWarper.height
-                source: "qrc:/image/themBackground.jpg"
+                width: mainWindow.width
+                height: mainWindow.height
+                sourceSize.width: Screen.width * Screen.devicePixelRatio
+                sourceSize.height: Screen.height * Screen.devicePixelRatio
+                source: animatedWindowWarperbackgoundImage.focus ? "" : filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage) ?
+                            "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/test_background1.jpg"
 
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: false  // 拖动时改为同步，避免异步计算导致的卡顿
@@ -571,8 +571,7 @@ ApplicationWindow {
             Oran7BlurCard {
                 anchors.fill: parent
                 blurSource: animatedWindowWarperbackgoundImage
-                dragable: false
-                themeColor: "#0EFFFFFF"
+                themeColor: "#04FFFFFF"
                 Oran7AuthorBriefItem {
                     id: oran7Brief
                     start_gradientLayerColorAnimation: false
@@ -678,11 +677,50 @@ ApplicationWindow {
         }
     }
 
-    // --- Setting windows ---
-    // Oran7MainUiSettingWindow {id: oran7MainUiSettingWindow}
-    // Oran7MediaPlayerSettingWindow{id: oran7MediaPlayerSettingWindow}
+    // --- Tools ---
+    Oran7FileHelper{
+        id:filehepler
+    }
 
-    // 全屏设置容器窗口
+    // --- OutLine Border ---
+    // Window{
+    //     id:outLine_border
+    //     width: mainWindow.width + (4+borderSpace) * 2
+    //     height: mainWindow.height + (4+borderSpace) * 2
+    //     visible: mainWindow.visible && mainWindow.active
+
+    //     objectName: "__BORDER__"
+
+    //     property real borderSpace: 7
+
+    //     x: mainWindow.x - (4+borderSpace)
+    //     y: mainWindow.y - (4+borderSpace)
+    //     z:mainWindow.z -1
+    //     //flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+    //     color: "transparent"
+
+    //     // 鼠标穿透代理
+    //     Oran7WindowAgent {
+    //         id: __borderWindowAgent__
+    //     }
+    //     // Item {
+    //     //     id: __hitTestPassThroughArea
+    //     //     anchors.fill: parent
+    //     //     Component.onCompleted: {
+    //     //         __borderWindowAgent__.setsetHitTestVisible(__hitTestPassThroughArea, true);
+    //     //     }
+    //     // }
+
+    //     Rectangle {
+    //          anchors.fill: parent
+    //          border.width: 4
+    //          border.color:"cyan"
+    //          radius: 10
+    //          color:"transparent"
+    //      }
+    // }
+
+    // --- Setting windows ---
     Oran7SettingsContainerWindow {
         id: settingsContainer
 

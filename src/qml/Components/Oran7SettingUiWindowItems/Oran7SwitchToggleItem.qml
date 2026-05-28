@@ -5,6 +5,8 @@ import Qt5Compat.GraphicalEffects
 
 import "../../Settings/GlobalSettings"
 
+import Oran7UI.Impl
+
 Item {
     id: root
 
@@ -15,7 +17,7 @@ Item {
 
     // 属性定义
     property bool checked: false
-    property color onColor: Oran7MainUiSetting.themeColor
+    property color onColor: Oran7Theme.Oran7MainGUI.themeColor
     property color offColor: Oran7MainUiSetting.itemBackColor
     property color borderColor: Oran7MainUiSetting.isDarkMode ? root.onColor : root.offColor
 
@@ -32,7 +34,9 @@ Item {
         radius: height / 2
 
         color: root.checked ? root.onColor : root.offColor
+        Behavior on color{PropertyAnimation{duration:Oran7Theme.Primary.durationMid}}
         border.color: root.borderColor
+        Behavior on border.color{PropertyAnimation{duration:Oran7Theme.Primary.durationMid}}
         border.width: 1
     }
 

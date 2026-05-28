@@ -7,6 +7,9 @@
 #include <QDir>
 #include <QThread>
 
+#include <QCoreApplication>
+
+#define DEVELOPER_MODE 1
 #define MAX_SLIDER_VALUE 65536
 
 enum ERROR_CODE
@@ -19,6 +22,43 @@ class GlobalHelper
 {
 public:
     GlobalHelper();
+
+    static QString getConfigDir()
+    {
+        // 检查 QCoreApplication 是否仍然有效（防止析构时崩溃）
+        if (!QCoreApplication::instance() || QCoreApplication::closingDown()) {
+            static QString cachedDir;
+            if (!cachedDir.isEmpty()) {
+                return cachedDir;
+            }
+            return QString();
+        }
+
+        // 缓存结果，避免重复计算和访问已析构的对象
+        static QString cachedConfigDir;
+        if (!cachedConfigDir.isEmpty()) {
+            return cachedConfigDir;
+        }
+
+        QString appDir = QCoreApplication::applicationDirPath();
+        QString devConfigPath = QFileInfo(appDir).absolutePath() + "/config";
+        QString releaseConfigPath = appDir + "/config";
+
+        QString configDir;
+
+        if (QDir(devConfigPath).exists()) {
+            configDir = devConfigPath;
+        } else {
+            configDir = releaseConfigPath;
+        }
+
+        if (!QDir(configDir).exists()) {
+            QDir().mkpath(configDir);
+        }
+
+        cachedConfigDir = configDir;
+        return configDir;
+    }
 };
 
 //==================<Self define logInfo Out>=================//
@@ -34,6 +74,7 @@ public:
         Client,
         Info,
         Warning,
+        Error,
         Network,
         Config
     };
@@ -42,7 +83,7 @@ public:
            const char* file,
            int line,
            bool showDetail = false,
-           bool showData = false,
+           bool showData = true,
            bool showThreadId = false)
         : m_debug(levelToQtType(level))
     {
@@ -59,16 +100,16 @@ public:
             header += QString("[%1:%2]").arg(file).arg(line);
         }
         header += ("[" + levelToString(level) + "]")
-                             .leftJustified(12, ' ');
+                             .leftJustified(2, ' ');
 
         if(showThreadId)
         {
             header += QString("[T:%1]")
             .arg((quintptr)QThread::currentThreadId())
-                .leftJustified(10, ' ');
+                .leftJustified(2, ' ');
         }
 
-        header += " ---> ";
+        header += " >> ";
         m_debug << header;
     }
 
@@ -86,8 +127,18 @@ private:
     {
         switch (level)
         {
+        case Level::Client:
+            return QtInfoMsg;
+        case Level::Info:
+            return QtInfoMsg;
         case Level::Warning:
             return QtWarningMsg;
+        case Level::Error:
+            return QtCriticalMsg;
+        case Level::Network:
+            return QtInfoMsg;
+        case Level::Config:
+            return QtInfoMsg;
         default:
             return QtDebugMsg;
         }
@@ -97,11 +148,12 @@ private:
     {
         switch (level)
         {
-        case Level::Client:  return "CLIENT";
+        case Level::Client:  return "CLET";
         case Level::Info:    return "INFO";
-        case Level::Warning: return "WARNING";
-        case Level::Network: return "NETWORK";
-        case Level::Config:  return "CONFIG";
+        case Level::Warning: return "WARN";
+        case Level:: Error: return "EROR";
+        case Level::Network: return "NETW";
+        case Level::Config:  return "CFIG";
         }
         return "UNKNOWN";
     }
@@ -114,6 +166,7 @@ private:
 #define CLIENT_LOG   Logger(Logger::Level::Client,  __FILE__, __LINE__)
 #define INFO_LOG     Logger(Logger::Level::Info,    __FILE__, __LINE__)
 #define WARNING_LOG  Logger(Logger::Level::Warning, __FILE__, __LINE__)
+#define ERROR_LOG Logger(Logger::Level::Error, __FILE__,__LINE__)
 #define NETWORK_LOG  Logger(Logger::Level::Network, __FILE__, __LINE__)
 #define CONFIG_LOG   Logger(Logger::Level::Config,  __FILE__, __LINE__)
 

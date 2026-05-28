@@ -216,10 +216,14 @@ Item {
             Connections{
                 target: Client
                 function onTriggerPlayNext(){
+                    if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
+                        return;
                     localMusciStack_playlistView.dealClicked(
                                 (localMusciStack_playlistView.curSelectingIndex+1)%localMusciStack_playlistView.listModel.count)
                 }
                 function onTriggerPlayLast(){
+                    if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
+                        return;
                     localMusciStack_playlistView.dealClicked(
                                 localMusciStack_playlistView.curSelectingIndex-1<0 ?
                                     localMusciStack_playlistView.listModel.count - 1 :

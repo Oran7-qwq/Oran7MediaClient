@@ -1,0 +1,11 @@
+{
+    "__init__":{
+        "__vars__":{
+            "colorPrimaryBase":"$genColor(#Preset_Volcano)",
+            "textColorBase":"$genColor(#2a1a22)"
+        }
+    },
+    "__style__":{
+        "listViewFontPixelSize": 16
+    }
+}

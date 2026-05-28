@@ -4,7 +4,7 @@ import Qt5Compat.GraphicalEffects
 import "../../Basic"
 import "../../Components"
 import Client 1.0
-import Oran7FileHelper 1.0
+import Oran7UI.Impl 1.0
 import BilibiliRoomAddressCatch 1.0
 
 Item {
@@ -158,7 +158,7 @@ Item {
                 }
             }
 
-            property bool openIngState: true
+            property bool openIngState: false
             Image {
                 id: openImage
                 scale: 2
@@ -368,14 +368,12 @@ Item {
                         }
                         function handle_bilibiliRoomNumWay_play() {
                             bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_pauseImageSourceUrl;
-                            playImage.source = playImage.pouseImageSourceUrl;
                             BasicConfig.isPlaying = true;
                             videoRenderItem.tryAttachDelayed(); //sureLoad videoItemCpp
                             Client.qmlClickedReqPreparePlayVideo(bilibiliRoomAddressCatch.urls[0]);
                         }
                         function handle_bilibiliRoomNumWay_pause() {
                             bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl;
-                            playImage.source = playImage.playImageSourceUrl;
                             BasicConfig.isPlaying = false;
                             Client.qmlClickedReqPreparePlayVideo(bilibiliRoomAddressCatch.urls[0]);
                         }
@@ -529,14 +527,12 @@ Item {
                         }
                         function handle_InputFilePathWay_play() {
                             inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_pauseImageSourceUrl;
-                            playImage.source = playImage.pouseImageSourceUrl;
                             BasicConfig.isPlaying = true;
                             videoRenderItem.tryAttachDelayed();
                             Client.qmlClickedReqPreparePlayVideo(inputFilePathTextArea.text);
                         }
                         function handle_InputFilePathWay_pause() {
                             inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                            playImage.source = playImage.playImageSourceUrl;
                             BasicConfig.isPlaying = false;
                             Client.qmlClickedReqPreparePlayVideo(inputFilePathTextArea.text);
                         }
@@ -598,7 +594,6 @@ Item {
                                 if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex) {
                                     BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_VideoPlayerIndex;
                                 }
-                                playImage.source = playImage.playImageSourceUrl;
                                 inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
                                 BasicConfig.isPlaying = false;
                                 Client.sigStop();
@@ -632,7 +627,7 @@ Item {
                     }
                 }
                 //============= 选择videoScaleMode ==================//
-                property int scaleMode: Client.Fit
+                property int scaleMode: Client.Fill
                 Label {
                     id: scaleModeTextLabel
                     font.pixelSize: 20
@@ -703,7 +698,7 @@ Item {
                 }
                 property string playImageSourceUrl: "qrc:/image/ClearPlay.png"
                 property string pouseImageSourceUrl: "qrc:/image/ClearPause.png"
-                source: playImageSourceUrl
+                source: BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex && BasicConfig.isPlaying ? pouseImageSourceUrl : playImageSourceUrl
                 layer.enabled: true
                 layer.effect: ColorOverlay {
                     source: playImage
@@ -739,7 +734,6 @@ Item {
                     function onPlayerFocusChanged() {
                         if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex) {
                             inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                            playImage.source = playImage.playImageSourceUrl;
                         }
                     }
                 }
@@ -757,38 +751,38 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 focusedPlayer: BasicConfig.globalPlayer_VideoPlayerIndex
                 property real ratio: 0
+                onPositionChanged: {
+                    hideControlRectTimer.restart();
+                }
                 Connections {
                     target: Client
-                    // enabled: videoBottomControlBarRect.visible
-                    //              && videoBottomControlBarRect.enabled
-                    //              && videoBottomControlBarRect.Window
-                    //              && videoBottomControlBarRect.Window.active
+                    enabled: videoBottomControlBarRect.visible
+                                 && videoBottomControlBarRect.enabled
+                                 && videoBottomControlBarRect.Window
+                                 && videoBottomControlBarRect.Window.active
                     function onUpdataQmlPlayProgressSliderCurPos(CurPos, CurTime_Second) {
                         if (videoProgressSlider.isPressed === false && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
                             //console.log(CurPos,CurTime_Second)
                             videoProgressSlider.nowSecondTime = CurTime_Second;
-                            videoProgressSlider.nowTimeText = String(Math.floor(Math.floor(CurTime_Second / 60) / 10)) + String(Math.floor(Math.floor(CurTime_Second / 60) % 10)) + ":" + String(Math.floor(Math.floor(CurTime_Second % 60) / 10)) + String(Math.floor(Math.floor(CurTime_Second % 60) % 10));
                             videoProgressSlider.ratio = CurPos / BasicConfig.max_Slider_Value;
                             // console.log(videoProgressSlider.ratio)
                             videoProgressSlider.progressHandleX = videoProgressSlider.width * videoProgressSlider.ratio - videoProgressSlider.progressHandleWidth / 2;
                             videoProgressSlider.visibleProgressX = videoProgressSlider.width * videoProgressSlider.ratio;
                             if (videoProgressSlider.nowSecondTime >= videoProgressSlider.allSecondTime) {
                                 inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                                playImage.source = playImage.playImageSourceUrl;
                             }
                         }
                     }
                     function onUpdataQmlPlayNowFileAllTime(AllTime) {
                         if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
                             videoProgressSlider.allSecondTime = AllTime;
-                            videoProgressSlider.allTimeText = String(Math.floor(Math.floor(AllTime / 60) / 10)) + String(Math.floor(Math.floor(AllTime / 60) % 10)) + ":" + String(Math.floor(Math.floor(AllTime % 60) / 10)) + String(Math.floor(Math.floor(AllTime % 60) % 10));
                         }
                     }
                     function onUpdataQmlTransforStopIcon() {
-                        playImage.source = playImage.playImageSourceUrl;
                         inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
                         videoProgressSlider.progressHandleX = videoProgressSlider.width - videoProgressSlider.progressHandleWidth / 2;
                         videoProgressSlider.visibleProgressX = videoProgressSlider.width;
+                        BasicConfig.isPlaying = false;
                     }
                 }
             }

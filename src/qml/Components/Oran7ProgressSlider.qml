@@ -2,7 +2,9 @@ import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
 import "../Basic"
+
 import Client 1.0
+import Oran7UI.Impl 1.0
 
 Rectangle{
     id:root
@@ -11,11 +13,21 @@ Rectangle{
     color:"transparent"
     visible: true
 
+    // ===Api ===
+
+    // --- config  ---
+
     property var sliderColor_themeItems : [
         {default_Color: "#00DDDD",sel_Color: "cyan"},
         {default_Color: "#c74054",sel_Color: "#fc3c55"}
     ]
     property int sliderColor_themeIndex: 1
+
+    // --- signal ---
+
+     signal positionChanged()
+
+    //========
 
     property int progressHandleWidth: 12
     property color progressHandleColor: "white"
@@ -36,11 +48,14 @@ Rectangle{
     }
     property string visibleColor:root.sliderColor_themeItems[root.sliderColor_themeIndex].default_Color
 
+    property real ratio: 0
     property int allSecondTime:0          //单位s
     property int nowSecondTime: 0     //单位s
 
-    property string nowTimeText: "00:00"
-    property string allTimeText: "00:00"
+    readonly property string nowTimeText: String(Math.floor(Math.floor(root.nowSecondTime/60)/10))+String(Math.floor(root.nowSecondTime/60)%10)+": "
+                                          +String(Math.floor((root.nowSecondTime%60/10)))+String((root.nowSecondTime%60%10))
+    readonly property string allTimeText: String(Math.floor(Math.floor(root.allSecondTime/60)/10))+String(Math.floor(root.allSecondTime/60)%10)+": "
+                                          +String(Math.floor((root.allSecondTime%60/10)))+String((root.allSecondTime%60%10))
 
     property int focusedPlayer: -1
 
@@ -64,22 +79,24 @@ Rectangle{
             visible: false
             anchors.verticalCenter: parent.verticalCenter
             x:root.progressHandleX
+            z:visiableRectangle.z + 1
         }
         background: Rectangle{
             id:progressBackgroundRectangle
             anchors.fill: parent
             radius: progressSlier.height/2
-            color: "#4d4d56"
+            color: Oran7Theme.Oran7ProgressSlider.trackColor ?? "gray"
+            opacity: Oran7Theme.Oran7ProgressSlider.trackOpacity ?? 0.3
             clip: true
-            Rectangle{
-                id:visiableRectangle
-                height:parent.height
-                width: root.visibleProgressX
-                color: root.visibleColor
-                radius: width/2
-                anchors.left: progressBackgroundRectangle.left
-                anchors.top: progressBackgroundRectangle.top
-            }
+        }
+        Rectangle{
+            id:visiableRectangle
+            height:progressBackgroundRectangle.height
+            width: root.visibleProgressX
+            color: root.visibleColor
+            radius: width/2
+            anchors.left: progressBackgroundRectangle.left
+            anchors.top: progressBackgroundRectangle.top
         }
     }
     MouseArea{
@@ -122,24 +139,42 @@ Rectangle{
                      root.progressHandleX = mouse.x - progressHandle.width/2
                      root.visibleProgressX =mouse.x
                      root.nowSecondTime=root.allSecondTime*(mouse.x/root.width)
-                     root.nowTimeText = String(Math.floor(Math.floor(root.nowSecondTime/60)/10))+String(Math.floor(root.nowSecondTime/60)%10)+": "
-                                     +String(Math.floor((root.nowSecondTime%60/10)))+String((root.nowSecondTime%60%10))
                  }
                 if(mouse.x<0)
                 {
                     root.progressHandleX=0-progressHandle.width/2
                     root.visibleProgressX =0
                     root.nowSecondTime=0
-                    root.nowTimeText = String(Math.floor(Math.floor(root.nowSecondTime/60)/10))+String(Math.floor(root.nowSecondTime/60)%10)+": "
-                                     +String(Math.floor((root.nowSecondTime%60/10)))+String((root.nowSecondTime%60%10))
                 }
                 if(mouse.x>root.width)
                 {
                     root.progressHandleX=root.width-progressHandle.width/2
                     root.visibleProgressX =root.width
-                    root.nowTimeText =String(Math.floor(Math.floor(root.allSecondTime/60)/10))+String(Math.floor(root.allSecondTime/60)%10)+": "
-                                     +String(Math.floor((root.allSecondTime%60/10)))+String((root.allSecondTime%60%10))
                 }
+            }
+        }
+
+        property point lastPos: Qt.point(-99999, -99999)
+        property bool hasLast: false
+        property real moveThreshold: Oran7Theme.Oran7ProgressSlider.moveThreshold
+        onPositionChanged: mouse =>{
+            if(root.isInOutSide && !root.isPressed){
+                hasLast = false
+                return;
+            }
+
+            const p = Qt.point(mouse.x,mouse.y)
+            if(!hasLast){
+                lastPos = p;
+                hasLast = true
+                return;
+            }
+            //console.log(p)
+            const dx = p.x - lastPos.x
+            const dy = p.y - lastPos.y
+            const dist2 = dx * dx + dy * dy;
+            if(dist2 >= moveThreshold  * moveThreshold){
+                root.positionChanged()
             }
         }
     }

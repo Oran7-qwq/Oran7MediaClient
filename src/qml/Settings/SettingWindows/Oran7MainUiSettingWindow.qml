@@ -1,5 +1,3 @@
-pragma ComponentBehavior: Bound
-
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import Qt5Compat.GraphicalEffects
@@ -8,46 +6,58 @@ import "../GlobalSettings"
 import "../../Components"
 import "../../Components/Oran7SettingUiWindowItems"
 
-Window {
+import Oran7UI.Impl
+
+Item {
     id: root
     visible: false
-    color: "transparent"
-    flags: Qt.Window | Qt.FramelessWindowHint
-    modality: Qt.NonModal
-    width: Oran7MainUiSetting.settingItemWinDefalutWidth
-    height: root.savedNormalHeight
+    width: Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth
+    height: 0
     opacity: 0
     x: root.savedNormalX
     y: 0
 
     property int  winIndex : 0
 
-    property int savedNormalX: 40 + Oran7MainUiSetting.settingItemWinDefalutWidth * root.winIndex
-    property real savedNormalY: 20
-    property real savedNormalHeight: 900
+    property int savedNormalX: 80 + Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth * root.winIndex
+    property real savedNormalY: 40
+    property real savedNormalHeight: 700 // 初始默认值，会根据内容动态调整
 
     property point clickPos: Qt.point(0, 0)
     property bool mouseIsPressed: false
+    property bool isAnimating: false  // 动画期间禁用 Behavior，防止与显式动画冲突导致抖动
 
-    Connections {
-        target: Oran7MainUiSetting
-        function onTriggleOpen_Oran7MainUiSetting_window() {
-            if (root.visible === false) {
-                Oran7MainUiSetting.settingContent_visiable = true
-                delayTimer.delay(10 + 40*root.winIndex).then(function () {
-                    root.visible = true;
-                    window_openAnimation.restart();
-                });
-            } else {
-                window_openAnimation.stop();
-                window_closeAnimation.restart();
-            }
-        }
+    function prepareForOpen() {
+        window_closeAnimation.stop();
+        root.isAnimating = true;
+        root.opacity = 0;
+        root.y = 0;
+        root.visible = true;
+        // 直接计算内容高度，与 savedNormalHeight Binding 公式一致，避免读到旧默认值
+        root.savedNormalHeight = Math.max(contene_column.implicitHeight + topDragRect.height + 50, 200);
+        root.height = root.savedNormalHeight;
     }
 
-    // --- tools Component ---
-    Oran7DelayTimer {
-        id: delayTimer
+    function startOpenAnimation() {
+        window_openAnimation.restart();
+    }
+
+    function startCloseAnimation() {
+        window_openAnimation.stop();
+        root.isAnimating = true;
+        window_closeAnimation.restart();
+    }
+
+    Timer {
+        id: openStartedTimer
+        interval: 20
+        repeat: false
+        onTriggered: {
+            Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = true
+            Oran7Theme.installComponentToken("Oran7MainGUI","OpenSettingWin",true)
+            Oran7Theme.installComponentToken("Oran7MainGUI","settingContent_visiable",true)
+            openSoundEffect.play();
+        }
     }
 
     ParallelAnimation {
@@ -72,13 +82,13 @@ Window {
             easing.type: Easing.OutCubic
         }
 
-        PropertyAnimation {
-            target: root
-            property: "height"
-            from: 0
-            to: root.savedNormalHeight
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
+        onStarted: {
+            openStartedTimer.start();
+        }
+
+        onFinished: {
+            root.isAnimating = false;
+            root.height = Qt.binding(function() { return root.savedNormalHeight; });
         }
     }
 
@@ -109,16 +119,29 @@ Window {
             property: "height"
             from: root.savedNormalHeight
             to: 0
-            duration: window_openAnimation.aniDuration
+            duration: window_closeAnimation.aniDuration
             easing.type: Easing.InExpo
         }
 
         onStarted: {
-            Oran7MainUiSetting.settingContent_visiable = false
+             //first index of settingWindow
+            Oran7Theme.installComponentToken("Oran7MainGUI","settingContent_visiable",false)
+            Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = true
         }
 
         onFinished: {
             root.visible = false;
+            root.opacity = 0
+            root.y = 0;
+            root.height = 0;
+            root.isAnimating = false;
+
+            //console.log("finised close,opacity:",root.opacity)
+
+             //first index of settingWindow
+            Oran7MainUiSetting.clickedOutSide()
+            Oran7Theme.installComponentToken("Oran7MainGUI","OpenSettingWin",false)
+            closeSoundEffect.play();
         }
     }
 
@@ -128,7 +151,7 @@ Window {
         color: "transparent"
         radius: 10
 
-        // 阴影效果 - 添加在内容下方
+        // 阴影效果 - 延迟到动画完成后再启用，避免首次渲染卡顿
         layer.enabled: true
         layer.effect: DropShadow {
             horizontalOffset: 0
@@ -146,6 +169,7 @@ Window {
             anchors.margins: 16  // 避开阴影边缘
             color: Oran7MainUiSetting.backColor
             radius: 10
+            clip: true
             opacity: 1
 
             Oran7SetingTitleItem{
@@ -157,10 +181,11 @@ Window {
 
             //<--- ui content goes here --->
             Column {
+                id:contene_column
                 anchors.top: topDragRect.bottom
                 anchors.topMargin: 8
                 anchors.left: parent.left
-                anchors.leftMargin: 4
+                anchors.leftMargin: 1
                 anchors.right: parent.right
                 spacing: 2
 
@@ -179,41 +204,45 @@ Window {
                 // --- item: backgroundImagePath ---
                 Oran7SettingItem {
                     text: "Background Image:"
-                    Oran7OpenFolderItem {
-                        id: background_imageOpen
-                        fileDialog_selectReset: true
-                        isMultiSelect: false
-                        onReady: {
-                            //console.log(background_imageOpen.singleton_filePath)
-                            Oran7MainUiSetting.backgroundImagePath = background_imageOpen.filesArray[0];
-                            background_image_textField.textField.text = Oran7MainUiSetting.backgroundImagePath
-                            background_image_textField.tempText = Oran7MainUiSetting.backgroundImagePath
-                        }
-                    }
                 }
                 Oran7TextFieldItem {
                     id: background_image_textField
-                    tempText: Oran7MainUiSetting.backgroundImagePath
+                    tempText: Oran7Theme.Oran7MainGUI.backgroundImage
                     placeholderText: "please input image path."
                     detectEnable: true
                     detectType: Oran7MainUiSetting.DetectionType.FileDetection
                     onEnterPressed: {
-                        Oran7MainUiSetting.backgroundImagePath = tempText
+                        Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundImage",tempText)
+                    }
+                    anchors.rightMargin: background_imageOpen.height + 2
+                    Oran7OpenFolderItem {
+                        id: background_imageOpen
+                        fileDialog_selectReset: true
+                        isMultiSelect: false
+                        anchors.left: parent.right
+                        anchors.leftMargin: 2
+                        onReady: {
+                            //console.log(background_imageOpen.singleton_filePath)
+
+                            Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundImage",background_imageOpen.filesArray[0]);
+                            background_image_textField.textField.text = Oran7Theme.Oran7MainGUI.backgroundImage
+                            background_image_textField.tempText = Oran7Theme.Oran7MainGUI.backgroundImage
+                        }
                     }
                 }
 
                 // --- theme color set ---
-                Oran7SettingItem {
-                    text: "SettingWin Theme Color:"
-                }
-                Oran7TextFieldItem {
-                    id: themeColor_textFiled
-                    tempText: ""
-                    placeholderText: tempText.length <=0 ? Oran7MainUiSetting.themeColor : ""
-                    detectEnable: true
-                    detectType: Oran7MainUiSetting.DetectionType.ColorDetection
-                    onEnterPressed: {
-                        Oran7MainUiSetting.themeColor = tempText
+                Oran7ColorSettingGroup{
+                    title:"SettingWin Theme Color"
+                    checkedColor:Oran7Theme.Oran7MainGUI.themeColor
+                    componentName: "Oran7MainGUI"
+                    colorToken:"colorPrimaryBase"
+                    onEnterOfTextFiled: function(text){
+                        Oran7Theme.saveComponentToken(componentName,"themeColor",text)
+                    }
+                    onColorReady: function(seletedColor){
+                        Oran7Theme.saveComponentToken(componentName,"themeColor",String(seletedColor).toLowerCase())
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
                     }
                 }
 
@@ -230,55 +259,113 @@ Window {
                 Oran7SettingItem{
                     text:"SimpleCaptionBar"
                     Oran7SwitchToggleItem{
-                        checked: Oran7MainUiSetting.captionBar_is_simpleMode
+                        checked: Oran7Theme.Oran7CaptionBar.isSimpleMode
                         onSwitchToggleChanged: function (checked) {
-                            Oran7MainUiSetting.captionBar_is_simpleMode = checked;
+                            Oran7Theme.saveComponentToken("Oran7CaptionBar","isSimpleMode",checked);
                         }
                     }
                 }
 
+                // --- CaptionSelectedColor ---
+                Oran7ColorSettingGroup{
+                    title:"CaptionSelectedColor"
+                    checkedColor: Oran7Theme.Oran7CaptionBar.selectedColor
+                    componentName: "Oran7CaptionBar"
+                    colorToken:"colorPrimaryBase"
+                    onEnterOfTextFiled: function(text){
+                        //Oran7Theme.saveComponentToken(componentName,"selectedColor",text)
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                    onColorReady: function(seletedColor){
+                        //Oran7Theme.saveComponentToken(componentName,"selectedColor",seletedColor)
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                }
+
+                // --- CaptionHoveredColor ---
+                Oran7ColorSettingGroup{
+                    title:"CaptionHoveredColor:"
+                    checkedColor: Oran7Theme.Oran7CaptionBar.hoveredColor
+                    componentName: "Oran7CaptionBar"
+                    colorToken:"colorPrimaryBase"
+                    onEnterOfTextFiled: function(text){
+                        //Oran7Theme.saveComponentToken(componentName,"hoveredColor",text)
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                    onColorReady: function(seletedColor){
+                        //Oran7Theme.saveComponentToken(componentName,"hoveredColor",seletedColor)
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                }
+
+                // --- CaptionIconColor ---
+                Oran7ColorSettingGroup{
+                    title:"CaptionIconColor:"
+                    checkedColor: Oran7Theme.Oran7CaptionBar[colorToken+"-6"]
+                    componentName: "Oran7CaptionBar"
+                    colorToken:"iconColorBase"
+                    onEnterOfTextFiled: function(text){
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                    onColorReady: function(seletedColor){
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                }
+                // --- CaptionTextColor ---
+                Oran7ColorSettingGroup{
+                    title:"CaptionTextColor:"
+                    checkedColor: Oran7Theme.Oran7CaptionBar[colorToken+"-6"]
+                    componentName: "Oran7CaptionBar"
+                    colorToken:"textColorBase"
+                    onEnterOfTextFiled: function(text){
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                    onColorReady: function(seletedColor){
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                }
+
+                // ~~~ Binding ~~~
+                // 动态绑定窗口高度到内容高度
+                Binding {
+                    target: root
+                    property: "savedNormalHeight"
+                    value: Math.max(contene_column.implicitHeight + topDragRect.height + 50, 200)
+                    when: root.visible // 只在窗口可见时更新
+                }
             }
             //<--- ui content ends here --->
         }
     }
 
-    // 拖动区域 - 整个窗口可拖动
     MouseArea {
-        anchors.fill: parent
-        propagateComposedEvents: true
+        id: dragArea
+
+        anchors.left: parent.left
+        anchors.right: parent.right
+        y: 16
+        height: topDragRect.height
+
+        property point pressPos: Qt.point(0, 0)
+
         onPressed: function(mouse) {
-            root.mouseIsPressed = true;
-            root.clickPos = Qt.point(mouse.x, mouse.y);
-
-            // 检查是否在标题栏区域（用于拖动）
-            let inTitleBar = mouse.y <= topDragRect.height + 16 && mouse.y >= 16;
-
-            if (inTitleBar) {
-                mouse.accepted = true; // 标题栏拖动事件被接受
-            } else {
-                mouse.accepted = false; // 其他区域事件传递给子组件
-                // 立即触发 clickedOutSide，让 TextField 失去焦点\
-                //console.log("clickedOutSide")
-                Oran7MainUiSetting.clickedOutSide();
-            }
+            root.mouseIsPressed = true
+            pressPos = Qt.point(mouse.x, mouse.y)
         }
+
         onReleased: function(mouse) {
-            root.mouseIsPressed = false;
+            root.mouseIsPressed = false
             root.savedNormalX = root.x
             root.savedNormalY = root.y
-            mouse.accepted = false;
         }
+
         onPositionChanged: function(mouse) {
-            if (root.mouseIsPressed === false)
-                return;
-            if (root.clickPos.y > topDragRect.height + 16 || root.clickPos.y < 16)
-                return;
-            let delta = Qt.point(mouse.x - root.clickPos.x, mouse.y - root.clickPos.y);
-            root.x += delta.x;
-            root.y += delta.y;
-        }
-        onClicked: function(mouse) {
-            mouse.accepted = false; // 允许事件继续传递给子组件
+            if (!root.mouseIsPressed)
+                return
+
+            let delta = Qt.point(mouse.x - pressPos.x, mouse.y - pressPos.y)
+            root.x += delta.x
+            root.y += delta.y
         }
     }
 }

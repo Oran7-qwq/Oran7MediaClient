@@ -240,9 +240,9 @@ Rectangle {
 
     property Component winButtonsDelegate: Row {
         id: nativeWindowControls
-        width: (Oran7MainUiSetting.topBarDefaultHeight + spacing) * 3
-        height: Oran7MainUiSetting.topBarDefaultHeight * 0.8
-        // anchors.margins: Oran7MainUiSetting.topBarDefaultHeight * 0.1
+        width: (Oran7Theme.Oran7MainGUI.topBarDefaultHeight + spacing) * 3
+        height: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 0.8
+        // anchors.margins: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 0.1
         spacing: 4
         layoutDirection: Qt.RightToLeft
 
@@ -260,8 +260,8 @@ Rectangle {
         // 关闭按钮
         WindowControlButton {
             id: __closeButton
-            width: Oran7MainUiSetting.topBarDefaultHeight
-            height: Oran7MainUiSetting.topBarDefaultHeight * 0.8
+            width: Oran7Theme.Oran7MainGUI.topBarDefaultHeight
+            height: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 0.8
             visible: control.showCloseButton
             buttonColor: "transparent"
             hoverColor: "#c42b1c"
@@ -273,8 +273,8 @@ Rectangle {
         // 最大化/还原按钮
         WindowControlButton {
             id: __maximizeButton
-            width: Oran7MainUiSetting.topBarDefaultHeight
-            height: Oran7MainUiSetting.topBarDefaultHeight * 0.8
+            width: Oran7Theme.Oran7MainGUI.topBarDefaultHeight
+            height: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 0.8
             visible: control.showMaximizeButton
             buttonColor: "transparent"
             hoverColor: Qt.rgba(0.2, 0.2, 0.2, 0.5)
@@ -286,8 +286,8 @@ Rectangle {
         // 最小化按钮
         WindowControlButton {
             id: __minimizeButton
-            width: Oran7MainUiSetting.topBarDefaultHeight
-            height: Oran7MainUiSetting.topBarDefaultHeight * 0.8
+            width: Oran7Theme.Oran7MainGUI.topBarDefaultHeight
+            height: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 0.8
             visible: control.showMinimizeButton
             buttonColor: "transparent"
             hoverColor: Qt.rgba(0.2, 0.2, 0.2, 0.5)
@@ -310,10 +310,10 @@ Rectangle {
     objectName: '__Oran7CaptionBar__'
     color: "transparent"
 
-    // 左侧事件穿透区域（x=0到x=240），不参与窗口拖拽
+    // 左侧事件穿透区域（x=0到x=260），不参与窗口拖拽
     Item {
         id: __hitTestPassThroughArea
-        width: 240
+        width: 260
         height: parent.height
         anchors.left: parent.left
         anchors.top: parent.top

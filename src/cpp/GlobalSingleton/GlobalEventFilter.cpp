@@ -13,6 +13,8 @@ GlobalEventFilter::GlobalEventFilter(QObject *parent)
     {
         connect(this, &GlobalEventFilter::escapeKeyPressed, this, []()
                 { INFO_LOG << "ESC key is pressed."; });
+        connect(this, &GlobalEventFilter::escapeKeyReleased, this, []()
+                { INFO_LOG << "ESC key is released."; });
         connect(this, &GlobalEventFilter::upKeyPressed, this, []()
                 { INFO_LOG << "UP key is pressed."; });
         connect(this, &GlobalEventFilter::downKeyPressed, this, []()
@@ -52,7 +54,7 @@ bool GlobalEventFilter::eventFilter(QObject *obj, QEvent *event)
 
         // 忽略长按产生的自动重复事件
         if (keyEvent->isAutoRepeat()) {
-            if(__GlobelKeyLogINFO__)
+            if(__GlobelKeyLogINFO__Detail__)
                 INFO_LOG << "eventFilter: Ignoring auto-repeat event for key=" << keyEvent->key()
                         << ", type=" << (event->type() == QEvent::KeyPress ? "Press" : "Release");
             return QObject::eventFilter(obj, event); // 返回 false 让其他处理器也能处理
@@ -74,7 +76,7 @@ void GlobalEventFilter::handleKeyPress(QKeyEvent *keyEvent)
 
     // 检查是否已经按下（防止重复处理）
     if (m_pressedKeys.value(key, false)) {
-        if(__GlobelKeyLogINFO__)
+        if(__GlobelKeyLogINFO__Detail__)
             INFO_LOG << "handleKeyPress: Key " << key << " already pressed, ignoring";
         return;
     }
@@ -82,7 +84,7 @@ void GlobalEventFilter::handleKeyPress(QKeyEvent *keyEvent)
     // 记录按键为按下状态
     m_pressedKeys[key] = true;
 
-    if(__GlobelKeyLogINFO__)
+    if(__GlobelKeyLogINFO__Detail__)
         INFO_LOG << "handleKeyPress: Key " << key << " pressed (non-repeat)";
 
     // 发送全局键盘事件信号
@@ -122,17 +124,17 @@ void GlobalEventFilter::handleKeyRelease(QKeyEvent *keyEvent)
 {
     int key = keyEvent->key();
 
-    if(__GlobelKeyLogINFO__)
+    if(__GlobelKeyLogINFO__Detail__)
         INFO_LOG << "handleKeyRelease: key=" << key << ", m_pressedKeys[" << key << "]=" << m_pressedKeys.value(key, false);
 
     // 如果按键已经不在按下状态，忽略这个释放事件
     if (!m_pressedKeys.value(key, false)) {
-        if(__GlobelKeyLogINFO__)
+        if(__GlobelKeyLogINFO__Detail__)
             INFO_LOG << "handleKeyRelease: Key " << key << " already released, ignoring";
         return;
     }
 
-    if(__GlobelKeyLogINFO__)
+    if(__GlobelKeyLogINFO__Detail__)
         INFO_LOG << "handleKeyRelease: Key " << key << " released (non-repeat)";
 
     // 发送全局键盘事件信号
@@ -141,6 +143,9 @@ void GlobalEventFilter::handleKeyRelease(QKeyEvent *keyEvent)
     // 处理方向键释放事件
     switch (key)
     {
+    case Qt::Key_Escape:
+        emit escapeKeyReleased();
+        break;
     case Qt::Key_Up:
         emit upKeyReleased();
         break;
@@ -160,7 +165,7 @@ void GlobalEventFilter::handleKeyRelease(QKeyEvent *keyEvent)
     // 清除按键状态
     m_pressedKeys[key] = false;
 
-    if(__GlobelKeyLogINFO__)
+    if(__GlobelKeyLogINFO__Detail__)
         INFO_LOG << "handleKeyRelease: Cleared pressed state for key=" << key;
 }
 

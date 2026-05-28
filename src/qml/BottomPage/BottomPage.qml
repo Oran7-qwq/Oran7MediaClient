@@ -223,21 +223,21 @@ Rectangle{
         }
         Connections{
             target:Client
-            function onUpdataQmlTransforStopIcon()
-            {
-                BasicConfig.isPlaying=false
+            // function onUpdataQmlTransforStopIcon()
+            // {
+            //     BasicConfig.isPlaying=false
 
-                //停止时确保Handler走向尽头
-                musicProgressHandle.x=musicProgressRectanle.width-musicProgressHandle.width/2
-                backgroundRectangle.visibleProgressX =musicProgressRectanle.width
-                leftTimeLabel.text =String(Math.floor(Math.floor(allTime/60)/10))+String(Math.floor(allTime/60)%10)+": "+String(Math.floor((allTime%60/10)))+String((allTime%60%10))
+            //     //停止时确保Handler走向尽头
+            //     musicProgressHandle.x=musicProgressRectanle.width-musicProgressHandle.width/2
+            //     backgroundRectangle.visibleProgressX =musicProgressRectanle.width
+            //     leftTimeLabel.text =String(Math.floor(Math.floor(allTime/60)/10))+String(Math.floor(allTime/60)%10)+": "+String(Math.floor((allTime%60/10)))+String((allTime%60%10))
 
-                // 模拟视觉反馈
-                playRectangle.scale = 1.0
-                playRectangle.color = "#fc3c55"
-                playImage.colorOverlay = "white"
-                pauseImage.colorOverlay = "white"
-            }
+            //     // 模拟视觉反馈
+            //     playRectangle.scale = 1.0
+            //     playRectangle.color = "#fc3c55"
+            //     playImage.colorOverlay = "white"
+            //     pauseImage.colorOverlay = "white"
+            // }
             function onConfigSignal_loadLastCloseAppFocusedMusic(icon_,music_name_,music_artist_,music_album_,timesize_,music_id_,music_filepath_){
                 console.log("Loading foucsed music.")
                 //由于Basic.currentMediaCoverFilePath连接着信号处理，最后再赋值它，顺带触发自动更新ui
@@ -246,7 +246,7 @@ Rectangle{
                 BasicConfig.currentMediaFilePath=music_filepath_
                 //显示的总时长一般都是C艹端在打开媒体文件后自动往qml端更新
                 //这里额外直接设置
-                root.allTime = timesize_
+                musicProgressSlier.allSecondTime = timesize_
 
                 //触发更新
                 BasicConfig.currentMediaCoverFilePath=icon_
@@ -384,9 +384,8 @@ Rectangle{
         anchors.verticalCenter: playRectangle.verticalCenter
     }
     //音乐播放进度条Slider
-    //Rectangle
-    Rectangle{
-        id:musicProgressRectanle
+    Oran7ProgressSlider{
+        id:musicProgressSlier
         anchors.top: root.top
         anchors.topMargin: 0
         anchors.left: root.left
@@ -396,143 +395,28 @@ Rectangle{
         height: 10
         color:"transparent"
         visible: root.visible
+        focusedPlayer: BasicConfig.globalPlayer_MusicPlayerIndex
 
-        property var sliderColor_themeItems : [
-            {default_Color: "#00DDDD",sel_Color: "cyan"},
-            {default_Color: "#c74054",sel_Color: "#fc3c55"}
-        ]
-        property int sliderColor_themeIndex: 1
-
-        Slider{
-            id:musicProgressSlier
-            anchors.verticalCenter: parent.verticalCenter
-            from: 0
-            to: BasicConfig.max_Slider_Value
-            height: 8
-            width: parent.width
-            handle:Rectangle{
-                id:musicProgressHandle
-                Behavior on x{
-                    NumberAnimation{
-                        duration:   200
-                        easing.type: Easing.OutCubic
-                    }
-                }
-                width:12
-                height: width
-                radius: width/2
-                color: "white"
-                visible: false
-                anchors.verticalCenter: parent.verticalCenter
-            }
-            background: Rectangle{
-                id:backgroundRectangle
-                anchors.fill: parent
-                // radius: musicProgressSlier.height/2
-                color: "#4d4d56"
-                clip: true
-                property real visibleProgressX: 0.0
-                Behavior on visibleProgressX{
-                    NumberAnimation{
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                    }
-                }
-                property string visibleColor:musicProgressRectanle.sliderColor_themeItems[musicProgressRectanle.sliderColor_themeIndex].default_Color
-                Rectangle{
-                    id:visibleRectangle
-                    height:parent.height
-                    width: backgroundRectangle.visibleProgressX
-                    // radius: height/2
-                    color: backgroundRectangle.visibleColor
-                    anchors.left: backgroundRectangle.left
-                    anchors.top: backgroundRectangle.top
-                }
-            }
-        }
-        MouseArea{
-            id:musicProgressRectanleMouseArea
-            anchors.fill: parent
-            hoverEnabled: true
-            property bool isPressed: false
-            property bool isInOutSide: true
-            onEntered: {
-                musicProgressHandle.visible = true
-                musicProgressRectanleMouseArea.isInOutSide=false
-                backgroundRectangle.visibleColor=musicProgressRectanle.sliderColor_themeItems[musicProgressRectanle.sliderColor_themeIndex].sel_Color
-            }
-            onExited: {
-                if(musicProgressRectanleMouseArea.isPressed===false)
+        Connections{
+            target: Client
+            function onUpdataQmlPlayProgressSliderCurPos(CurPos,CurTime_Second){
+                if(musicProgressSlier.isPressed===false && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex)
                 {
-                    musicProgressHandle.visible = false
-                    backgroundRectangle.visibleColor=musicProgressRectanle.sliderColor_themeItems[musicProgressRectanle.sliderColor_themeIndex].default_Color
-                }
-                musicProgressRectanleMouseArea.isInOutSide=true
-            }
-            onPressed: (mouse)=>{
-                   // var newPos = (mouse.x - musicProgressSlier.leftPadding) /musicProgressSlier.width
-                   // newPos = Math.max(0, Math.min(1, newPos)) // 限制在 0~1 范围内
-                   // musicProgressSlier.value = newPos
-                    if(root.allTime !== 0)
-                        musicProgressHandle.x=mouse.x
-                    musicProgressRectanleMouseArea.isPressed=true
-            }
-            onReleased: {
-                musicProgressRectanleMouseArea.isPressed=false
-                if(musicProgressRectanleMouseArea.isInOutSide===true)
-                {
-                        musicProgressHandle.visible = false
-                        backgroundRectangle.visibleColor=musicProgressRectanle.sliderColor_themeItems[musicProgressRectanle.sliderColor_themeIndex].default_Color
-                }
-                if(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex)
-                    Client.progressSlider_Seek(root.nowTime)
-            }
-            onMouseXChanged: (mouse)=>{
-                if(musicProgressRectanleMouseArea.isPressed===true)
-                {
-                     if(mouse.x<=musicProgressRectanle.width&&mouse.x>=0)
-                     {
-                         musicProgressHandle.x=mouse.x-musicProgressHandle.width/2
-                         backgroundRectangle.visibleProgressX =mouse.x
-                         nowTime=allTime*(mouse.x/musicProgressRectanle.width)
-                         leftTimeLabel.text = String(Math.floor(Math.floor(nowTime/60)/10))+String(Math.floor(nowTime/60)%10)+": "+String(Math.floor((nowTime%60/10)))+String((nowTime%60%10))
-                     }
-                    if(mouse.x<0)
-                    {
-                        musicProgressHandle.x=0-musicProgressHandle.width/2
-                        backgroundRectangle.visibleProgressX =0
-                         nowTime=0
-                         leftTimeLabel.text = String(Math.floor(Math.floor(nowTime/60)/10))+String(Math.floor(nowTime/60)%10)+": "+String(Math.floor((nowTime%60/10)))+String((nowTime%60%10))
-                    }
-                    if(mouse.x>musicProgressRectanle.width)
-                    {
-                        musicProgressHandle.x=musicProgressRectanle.width-musicProgressHandle.width/2
-                        backgroundRectangle.visibleProgressX =musicProgressRectanle.width
-                        leftTimeLabel.text =String(Math.floor(Math.floor(allTime/60)/10))+String(Math.floor(allTime/60)%10)+": "+String(Math.floor((allTime%60/10)))+String((allTime%60%10))
-                    }
+                    musicProgressSlier.nowSecondTime=CurTime_Second
+                    musicProgressSlier.ratio=CurPos/BasicConfig.max_Slider_Value
+                    musicProgressSlier.progressHandleX=musicProgressSlier.width * musicProgressSlier.ratio - musicProgressSlier.progressHandleWidth/2
+                    musicProgressSlier.visibleProgressX =musicProgressSlier.width * musicProgressSlier.ratio
                 }
             }
-        }
-    }
-    //ProgressSlider临时变量
-    property int allTime:0          //单位s
-    property int nowTime: 0     //单位s
-    property real ratio :0
-    Connections{
-        target: Client
-        function onUpdataQmlPlayProgressSliderCurPos(CurPos,CurTime_Second){
-            if(musicProgressRectanleMouseArea.isPressed===false && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex)
-            {
-                root.nowTime=CurTime_Second
-                leftTimeLabel.text = String(Math.floor(Math.floor(CurTime_Second/60)/10))+String(Math.floor(CurTime_Second/60)%10)+": "+String(Math.floor((CurTime_Second%60/10)))+String((CurTime_Second%60%10))
-                root.ratio=CurPos/BasicConfig.max_Slider_Value
-                musicProgressHandle.x=musicProgressSlier.width * root.ratio - musicProgressHandle.width/2
-                backgroundRectangle.visibleProgressX =musicProgressSlier.width * root.ratio
+            function onUpdataQmlPlayNowFileAllTime(AllTime){
+                if(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex){
+                    musicProgressSlier.allSecondTime = AllTime;
+                }
             }
-        }
-        function onUpdataQmlPlayNowFileAllTime(AllTime){
-            if(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex)
-                root.allTime = AllTime
+            function onUpdataQmlTransforStopIcon() {
+                musicProgressSlier.progressHandleX = musicProgressSlier.width - musicProgressSlier.progressHandleWidth / 2;
+                musicProgressSlier.visibleProgressX = musicProgressSlier.width;
+            }
         }
     }
 
@@ -542,8 +426,7 @@ Rectangle{
         anchors.right: rightTimeLabel.left
         anchors.rightMargin: 0
         anchors.verticalCenter: root.verticalCenter
-        text: String(Math.floor(Math.floor(nowTime/60)/10))+String(Math.floor(nowTime/60)%10)+": "
-              +String(Math.floor((nowTime%60/10)))+String((nowTime%60%10))
+        text: musicProgressSlier.nowTimeText
         color: "#fef2e8"
         visible: root.visible
         font.family: "微软雅黑"
@@ -554,8 +437,7 @@ Rectangle{
         anchors.right: rightBottomRow.left
         anchors.rightMargin: 30
         anchors.verticalCenter: root.verticalCenter
-        text: "  //  "+String(Math.floor(Math.floor(allTime/60)/10))+String(Math.floor(allTime/60)%10)+": "
-              +String(Math.floor((allTime%60/10)))+String((allTime%60%10))
+        text: "  //  "+musicProgressSlier.allTimeText
         color: "#fef2e8"
         visible: root.visible
         font.family: "微软雅黑"

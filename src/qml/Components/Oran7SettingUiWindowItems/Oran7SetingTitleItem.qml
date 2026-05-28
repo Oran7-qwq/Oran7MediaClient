@@ -4,6 +4,8 @@ import Qt5Compat.GraphicalEffects
 
 import "../../Settings/GlobalSettings"
 
+import Oran7UI.Impl
+
 Rectangle {
     id: root
     anchors.left: parent.left

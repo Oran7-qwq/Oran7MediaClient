@@ -68,5 +68,10 @@
         <file>image/hugeicons_video-camera-ai.png</file>
         <file>image/arcticons_star-music-tag-editor.png</file>
         <file>image/icon-park-outline_like.png</file>
+        <file>image/hugeicons_more-horizontal-square-01.png</file>
+        <file>image/hideQiubi.png</file>
+        <file>image/sitQiubi.png</file>
+        <file>image/test_background1.jpg</file>
+        <file>image/mynaui_panel-left-close-solid.png</file>
     </qresource>
 </RCC>

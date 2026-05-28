@@ -1,8 +1,10 @@
 import QtQuick
 import QtQuick.Controls
-import Oran7FileHelper 1.0
+import Oran7UI.Impl 1.0
 
 import "../../Settings/GlobalSettings"
+
+import Oran7UI.Impl
 
 Item {
     id: root
@@ -11,17 +13,12 @@ Item {
     property alias textField: textField //当外部从引用主动操作改变文本时，一定要同时赋值tempText，否则会发生异常
 
     property string placeholderText: ""
-    property color placeholderTextColor: Oran7MainUiSetting.themeColor
+    property color placeholderTextColor: Oran7Theme.Oran7MainGUI.themeColor
+    Behavior on placeholderTextColor{PropertyAnimation{duration:Oran7Theme.Primary.durationMid}}
 
     property bool detectEnable: false
     // 0: NoDetection, 1: FileDetection, 2: ColorDetection
-    property int detectType: DetectionType.NoDetection
-
-    enum DetectionType {
-        NoDetection = 0,
-        FileDetection = 1,
-        ColorDetection = 2
-    }
+    property int detectType: Oran7MainUiSetting.DetectionType.NoDetection
 
     anchors.left: parent.left
     anchors.right: parent.right
@@ -40,7 +37,8 @@ Item {
             color: "transparent"
         }
         text: root.tempText
-        color: Oran7MainUiSetting.themeColor
+        color: Oran7Theme.Oran7MainGUI.themeColor
+        Behavior on color{PropertyAnimation{duration:Oran7Theme.Primary.durationMid}}
         font.pixelSize: Oran7MainUiSetting.textPixelSize
         font.family: Oran7MainUiSetting.fontFamily
         verticalAlignment: Text.AlignVCenter
@@ -48,6 +46,7 @@ Item {
             anchors.fill: parent
             text: root.placeholderText
             color: root.placeholderTextColor
+            Behavior on color{PropertyAnimation{duration:Oran7Theme.Primary.durationMid}}
             font.pixelSize: Oran7MainUiSetting.textPixelSize
             font.family: Oran7MainUiSetting.fontFamily
             font.italic: true  // 只设置斜体
@@ -55,10 +54,11 @@ Item {
             visible: !textField.text && !textField.focus
         }
         onFocusChanged: {
+            //console.log("focus:",focus)
             if(textField.focus)
-                Oran7MainUiSetting.activeOran7TextFieldCount++
+                Oran7MainUiSetting.activeOtherItemCount++
             else
-                Oran7MainUiSetting.activeOran7TextFieldCount--
+                Oran7MainUiSetting.activeOtherItemCount--
         }
     }
     //index_ line
@@ -68,7 +68,8 @@ Item {
         anchors.right: parent.right
         anchors.leftMargin: 4
         anchors.rightMargin: 4
-        color: Oran7MainUiSetting.themeColor
+        color: Oran7Theme.Oran7MainGUI.themeColor
+        Behavior on color{PropertyAnimation{duration:Oran7Theme.Primary.durationMid}}
         height: Oran7MainUiSetting.itemHeight * 0.067
     }
     //header_ line
@@ -94,14 +95,14 @@ Item {
             //detect based on type
             var isValid = false;
             switch (root.detectType) {
-            case Oran7TextFieldItem.DetectionType.FileDetection:
+            case Oran7MainUiSetting.DetectionType.FileDetection:
                 isValid = filehelper.fileExists(textField.text);
                 if(isValid) textField.text = filehelper.lastProcessedPath()
                 break;
-            case Oran7TextFieldItem.DetectionType.ColorDetection:
+            case Oran7MainUiSetting.DetectionType.ColorDetection:
                 isValid = isValidColor(textField.text);
                 break;
-            case Oran7TextFieldItem.DetectionType.NoDetection:
+            case Oran7MainUiSetting.DetectionType.NoDetection:
             default:
                 isValid = true;
                 break;
@@ -144,21 +145,21 @@ Item {
         }
     }
 
-    MouseArea {
-        anchors.fill: parent
-        hoverEnabled: true
-        acceptedButtons: Qt.LeftButton
-        onEntered: {
-            cursorShape = Qt.IBeamCursor;
-        }
-        onExited: {
-            cursorShape = Qt.ArrowCursor;
-        }
-        onClicked: {
-            if(!textField.focus)
-                textField.focus = true;
-        }
-    }
+    // MouseArea {
+    //     anchors.fill: parent
+    //     hoverEnabled: true
+    //     acceptedButtons: Qt.LeftButton
+    //     onEntered: {
+    //         cursorShape = Qt.IBeamCursor;
+    //     }
+    //     onExited: {
+    //         cursorShape = Qt.ArrowCursor;
+    //     }
+    //     onClicked: {
+    //         if(!textField.focus)
+    //             textField.focus = true;
+    //     }
+    // }
 
     // --- tools ---
     Oran7FileHelper {

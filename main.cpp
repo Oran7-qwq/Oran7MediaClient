@@ -6,19 +6,19 @@
 #include <QLoggingCategory>
 #include <QQmlContext>
 #include <memory>
-#include "GlobalEventFilter.h"
 
+#include "GlobalEventFilter.h"
 #include "AppJsonConfigManager.h"
-#include "Sever.h"
+//#include "Sever.h"
 #include "Client.h"
 #include "ApplicationContext.h"
-#include "Oran7FileHelper.h"
 #include "BilibliLiveRoomAddressCatch.h"
-#include "FramelessWindow.h"
+#include "Oran7Theme.h"
+#include "ConsoleLogger.h"
+
 
 #include <QtGlobal>
 #include <QDebug>
-
 #include <QLoggingCategory>
 
 #ifdef Q_OS_WIN
@@ -54,7 +54,6 @@ enum ConfigRET
     Config_ERROR = -1,
     Config_SUCCESSED = 0
 };
-
 ConfigRET Config_AppConfigManager_RET = Config_NONE;
 ConfigRET Config_AppConfigManager_Load(QQmlApplicationEngine &engine);
 ConfigRET Config_AppConfigManager_Save(QQmlApplicationEngine &engine);
@@ -67,6 +66,8 @@ int main(int argc, char *argv[])
 #endif
 #ifdef Q_OS_WIN
     QLoggingCategory::setFilterRules("qt.gui.imageio=false");
+    QLoggingCategory::setFilterRules("qt.core.qobject.warning=true");
+    QLoggingCategory::setFilterRules("qt.quick.warning=true");
     disableDPIVirtualization();
 
     // threaded 渲染循环
@@ -85,6 +86,7 @@ int main(int argc, char *argv[])
             "qt.scenegraph.renderloop=true\n"
             "qt.rhi.general=true\n"
             "qt.rhi.warning=true\n");
+
     QLoggingCategory::setFilterRules("qt.quick.shadereffect.warning=false\n");
 
     // Config SurfaceFormat
@@ -102,6 +104,9 @@ int main(int argc, char *argv[])
     // 不使用 OpenGL 共享，删除 AA_ShareOpenGLContexts
     // QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 
+    // 附加日志控制台窗口
+    ATTACH_CONSOLE("Oran7MediaClient Logs");
+
     QGuiApplication app(argc, argv);
 
     // 设置场景图形后端-->Direct3D11
@@ -118,15 +123,16 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine engine;
 
+    // 确保全局单例被创建-->
     ApplicationContext::instance();
 
     qmlRegisterSingletonType(QUrl("qrc:/src/qml/Basic/BasicConfig.qml"), "BasicConfig", 1, 0, "BasicConfig");
     qmlRegisterSingletonType(QUrl("qrc:/src/qml/Settings/GlobalSettings/Oran7MainUiSetting.qml"), "Oran7MainUiSetting", 1, 0, "Oran7MainUiSetting");
 
-    qmlRegisterType<Oran7FileHelper>("Oran7FileHelper", 1, 0, "Oran7FileHelper");
+    //qmlRegisterType<Oran7FileHelper>("Oran7FileHelper", 1, 0, "Oran7FileHelper");
     qmlRegisterType<BilibiliRoomAddressCatch>("BilibiliRoomAddressCatch", 1, 0, "BilibiliRoomAddressCatch");
     qmlRegisterType<D3D11VideoItem>("D3D11VideoItem", 1, 0, "D3D11VideoItem");
-    qmlRegisterType<FramelessWindow>("FramelessWindow", 1, 0, "FramelessWindow");
+    //qmlRegisterType<FramelessWindow>("FramelessWindow", 1, 0, "FramelessWindow");
 
     // 注册全局事件过滤器到 QML
     // 使用 std::unique_ptr 确保自动清理，但保留原始指针用于 installEventFilter
@@ -146,10 +152,10 @@ int main(int argc, char *argv[])
         },
         Qt::QueuedConnection);
 
-    Sever sever;
-    sever.startServer(55711);
+    // Sever sever;
+    // sever.startServer(55711);
 
-    Client *client = ApplicationContext::instance()->client();
+    Client *client = ApplicationContext::instance().client();
     qmlRegisterSingletonType<Client>("Client", 1, 0, "Client",
          [client](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject *
          {
@@ -158,8 +164,7 @@ int main(int argc, char *argv[])
              return client;
          });
 
-    if (!QSqlDatabase::isDriverAvailable("QSQLITE"))
-    {
+    if (!QSqlDatabase::isDriverAvailable("QSQLITE")){
         qCritical() << "SQLite driver not available!";
         return -1;
     }
@@ -171,11 +176,16 @@ int main(int argc, char *argv[])
         CONFIG_LOG << "AppConfigManager:Successfully load user Config,";
 
     QObject::connect(&app, &QGuiApplication::aboutToQuit, &app, [&engine]() mutable{
-        ApplicationContext::instance()->client()->StopPlayerRuning();//先确保杀死Oran7MediaPlayer防止Video_refresh还在触发回调qml渲染对象
+        ApplicationContext::instance().client()->StopPlayerRuning();//先确保杀死Oran7MediaPlayer防止Video_refresh还在触发回调qml渲染对象
 
         Config_AppConfigManager_RET = Config_AppConfigManager_Save(engine);
         if(Config_AppConfigManager_RET == ConfigRET::Config_SUCCESSED)
             CONFIG_LOG<<"AppConfigManager:Successfully save user Config."; });
+
+    ///Singleton依赖:析构链路AppConfigManager.Oran7ThemeProfileManager.Oran7Theme.Oran7ThemePrivate
+    qAddPostRoutine([](){
+        Oran7Theme::cleanup();
+    });
 
     return app.exec();
 }
@@ -184,18 +194,18 @@ ConfigRET Config_AppConfigManager_Load(QQmlApplicationEngine &engine)
 {
     try
     {
-        AppConfigManager::instance().loadConfig(); //<-----一定要首先加载
+        AppConfigManager::ins().loadConfig(); //<-----一定要首先加载
 
-        ApplicationContext::instance()->client()->loadConfig_AppWindowPosition(engine);
-        ApplicationContext::instance()->client()->loadConfig_AppWindowSize(engine);
+        ApplicationContext::instance().client()->loadConfig_AppWindowPosition(engine);
+        ApplicationContext::instance().client()->loadConfig_AppWindowSize(engine);
 
-        QString SearchLocalMediaFiles_folderPath = ApplicationContext::instance()->client()->createAppDirectories();
+        QString SearchLocalMediaFiles_folderPath = ApplicationContext::instance().client()->createAppDirectories();
         if (SearchLocalMediaFiles_folderPath.isEmpty())
             throw std::runtime_error("AppData Temp folder in Oran7MediaClient Could not be Created correctly");
-        ApplicationContext::instance()->client()->loadConfig_localMusicList_playOrder();                                  //*加载localMusicList自定义排序Config配置
-        ApplicationContext::instance()->asyncWorker()->startSearchLocalMediaFiles_Task(SearchLocalMediaFiles_folderPath); //*Load localMusic列表（Async）
-        ApplicationContext::instance()->client()->loadConfig_lastCloseAppFocusedMusic();                                  //*加载last focus music info
-        ApplicationContext::instance()->client()->loadConfig_AppSetPlayerVolume();                                        //*Load PlayerVolume Config
+        ApplicationContext::instance().client()->loadConfig_localMusicList_playOrder();                                  //*加载localMusicList自定义排序Config配置
+        ApplicationContext::instance().asyncWorker()->startSearchLocalMediaFiles_Task(SearchLocalMediaFiles_folderPath); //*Load localMusic列表（Async）
+        ApplicationContext::instance().client()->loadConfig_lastCloseAppFocusedMusic();                                  //*加载last focus music info
+        ApplicationContext::instance().client()->loadConfig_AppSetPlayerVolume();                                        //*Load PlayerVolume Config
     }
     catch (std::exception &e)
     {
@@ -209,14 +219,14 @@ ConfigRET Config_AppConfigManager_Save(QQmlApplicationEngine &engine)
 {
     try
     {
-        ApplicationContext::instance()->client()->saveConfig_lastCloseAppFocusedMusic(); //* 保存客户端最近一次播放的文件
-        ApplicationContext::instance()->client()->saveConfig_localMusicList_playOrder(); //* 保存Custom自定义LocalMusicList_playOrder的Config配置
-        ApplicationContext::instance()->client()->saveConfig_AppSetPlayerVolume();
+        ApplicationContext::instance().client()->saveConfig_lastCloseAppFocusedMusic(); //* 保存客户端最近一次播放的文件
+        ApplicationContext::instance().client()->saveConfig_localMusicList_playOrder(); //* 保存Custom自定义LocalMusicList_playOrder的Config配置
+        ApplicationContext::instance().client()->saveConfig_AppSetPlayerVolume();
 
-        ApplicationContext::instance()->client()->saveConfig_AppWindowSize(engine);
-        ApplicationContext::instance()->client()->saveConfig_AppWindowPosition(engine);
+        ApplicationContext::instance().client()->saveConfig_AppWindowSize(engine);
+        ApplicationContext::instance().client()->saveConfig_AppWindowPosition(engine);
 
-        AppConfigManager::instance().saveConfig(); // 确保程序退出前保存配置
+        AppConfigManager::ins().saveConfig(); // 确保程序退出前保存配置
     }
     catch (std::exception &e)
     {

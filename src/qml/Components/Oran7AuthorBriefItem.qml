@@ -23,6 +23,7 @@ Item {
     }
 
     property var dataItems: [
+        {value:"VideoPlayer模块稳定支持播放4k60fps高帧率视频资源文件~"},
         {value:"Every free Music 可以导入.(支持mp3，flac无损格式等)"},
         {value:"Created author by Oran柒 ヾ(≧ ▽ ≦)ゝ"},
         {value:"Oran7CloudMusic of Version is 0.7 ,仍在努力创作中~ o((>ω< ))o"},

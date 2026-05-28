@@ -14,7 +14,7 @@ class AppConfigManager : public QObject
     Q_OBJECT
 
 public:
-    static AppConfigManager& instance();
+    static AppConfigManager& ins();
 
     // 配置项操作
     QVariant getValueQVariant(const QString& key, const QVariant& defaultValue = QVariant())const;
@@ -56,6 +56,7 @@ private:
     explicit AppConfigManager(QObject* parent = nullptr);
     AppConfigManager(const AppConfigManager&) = delete;
     AppConfigManager& operator=(const AppConfigManager&) = delete;
+    static AppConfigManager* s_instance;
 
     QString configFilePath();
     QVariant getNestedValue(const QStringList& keys, const QJsonObject& obj)const;

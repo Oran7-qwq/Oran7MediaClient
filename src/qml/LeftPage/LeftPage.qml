@@ -4,6 +4,8 @@ import Qt5Compat.GraphicalEffects
 import QtQuick.Effects
 import "../Basic"
 
+import Oran7UI.Impl
+
 Rectangle {
     id: root
 
@@ -98,13 +100,13 @@ Rectangle {
                 height: 42
                 width: root.simpleMode ? 42 : 160
                 radius: 10
-                color: root.itemSeleted_index === model.index ? "#fc3c4b" :
-                                    root.itemHovered_index === model.index ? "#FF818E" : "transparent"
-                Behavior on x { NumberAnimation { duration: 150 } }
-                Behavior on width { NumberAnimation { duration: 150 } }
+                color: root.itemSeleted_index === model.index ? Oran7Theme.Oran7CaptionBar.selectedColor :
+                                    root.itemHovered_index === model.index ? Oran7Theme.Oran7CaptionBar.hoveredColor : "transparent"
+                Behavior on x { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
+                Behavior on width { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
                 Behavior on color{
                     PropertyAnimation{
-                        duration: 200
+                        duration: Oran7Theme.Primary.durationMid
                         easing.type:Easing.OutCubic
                     }
                 }
@@ -134,14 +136,15 @@ Rectangle {
                     sourceSize.height: height
 
                     // 尺寸和位置变化动画
-                    Behavior on width { NumberAnimation { duration: 150 } }
-                    Behavior on height { NumberAnimation { duration: 150 } }
-                    Behavior on x { NumberAnimation { duration: 150 } }
+                    Behavior on width { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
+                    Behavior on height { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
+                    Behavior on x { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
 
                     layer.enabled: true
                     layer.effect: ColorOverlay {
                         source: topListImageIcon
-                        color: "white"
+                        color: Oran7Theme.Oran7CaptionBar["iconColorBase-6"]
+                        Behavior on color{PropertyAnimation{duration:Oran7Theme.Primary.durationMid}}
                     }
                 }
                 Text {
@@ -149,7 +152,7 @@ Rectangle {
                     font.pixelSize: 14
                     font.family: "微软雅黑"
                     font.bold: true
-                    color: "#fef2e8"
+                    color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
                     anchors.left: topListImageIcon.right
                     anchors.leftMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
@@ -188,9 +191,9 @@ Rectangle {
         anchors.topMargin: 10
         width: root.simpleMode ? 50 : 154
         height: 1
-        color: "#fef2e8"
+        color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
 
-        Behavior on width { NumberAnimation { duration: 150 } }
+        Behavior on width { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
     }
     //"我的"
     Label {
@@ -202,7 +205,7 @@ Rectangle {
         anchors.leftMargin: 4
         font.pixelSize: 12
         font.family: "微软雅黑"
-        color: "#fef2e8"
+        color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
     }
 
     //中间列表数据模型
@@ -244,13 +247,13 @@ Rectangle {
                 height: 42
                 width: root.simpleMode ? 42 : 160
                 radius: 10
-                color: root.itemSeleted_index - topListModel.count === model.index ? "#fc3c4b" :
-                                    root.itemHovered_index - topListModel.count === model.index ? "#FF818E" : "transparent"
+                color: root.itemSeleted_index - topListModel.count === model.index ? Oran7Theme.Oran7CaptionBar.selectedColor :
+                                    root.itemHovered_index - topListModel.count === model.index ? Oran7Theme.Oran7CaptionBar.hoveredColor : "transparent"
                 Behavior on x { NumberAnimation { duration: 150 } }
                 Behavior on width { NumberAnimation { duration: 150 } }
                 Behavior on color{
                     PropertyAnimation{
-                        duration: 200
+                        duration: Oran7Theme.Primary.durationMid
                         easing.type:Easing.OutCubic
                     }
                 }
@@ -279,14 +282,15 @@ Rectangle {
                     sourceSize.height: height
 
                     // 尺寸和位置变化动画
-                    Behavior on width { NumberAnimation { duration: 150 } }
-                    Behavior on height { NumberAnimation { duration: 150 } }
-                    Behavior on x { NumberAnimation { duration: 150 } }
+                    Behavior on width { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
+                    Behavior on height { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
+                    Behavior on x { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
 
                     layer.enabled: true
                     layer.effect: ColorOverlay {
                         source: middleListImageIcon
-                        color: "white"
+                        color: Oran7Theme.Oran7CaptionBar["iconColorBase-6"]
+                        Behavior on color{PropertyAnimation{duration:Oran7Theme.Primary.durationMid}}
                     }
                 }
                 Text {
@@ -294,7 +298,7 @@ Rectangle {
                     font.pixelSize: 14
                     font.family: "微软雅黑"
                     font.bold: true
-                    color: "#fef2e8"
+                    color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
                     anchors.left: middleListImageIcon.right
                     anchors.leftMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
@@ -335,7 +339,7 @@ Rectangle {
         anchors.leftMargin: 2
         font.pixelSize: 13
         font.family: "微软雅黑"
-        color: "#fef2e8"
+        color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
     }
     //分割线 2
     Rectangle {
@@ -345,9 +349,9 @@ Rectangle {
         anchors.topMargin: 14
         width: root.simpleMode ? 50 : 154
         height: 1
-        color: "#fef2e8"
+        color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
 
-        Behavior on width { NumberAnimation { duration: 150 } }
+        Behavior on width { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
     }
     // //" 创建的歌单  num  ∨"TextLabel
     // property int musicListNum: 0
@@ -380,7 +384,7 @@ Rectangle {
         id: oran7MainUiSetting_openImage
 
         x: root.enableCentering ? parent.width/2 - width/2 : 7
-        Behavior on x { NumberAnimation { duration: 150 } }
+        Behavior on x { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
 
         anchors.bottom: root.bottom
         anchors.margins: 7
@@ -395,8 +399,11 @@ Rectangle {
         layer.enabled: true
         layer.effect: ColorOverlay {
             source: oran7MainUiSetting_openImage
-            color: "white"
+            color: Oran7Theme.Oran7CaptionBar["iconColorBase-7"]
+            Behavior on color{PropertyAnimation{duration:Oran7Theme.Primary.durationMid}}
         }
+        Behavior on opacity {NumberAnimation{duration:Oran7Theme.Primary.durationMid}}
+        Behavior on scale {NumberAnimation{duration: Oran7Theme.Primary.durationVeryFast}}
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
@@ -405,10 +412,14 @@ Rectangle {
             }
             onEntered: {
                 cursorShape = Qt.PointingHandCursor
+                oran7MainUiSetting_openImage.scale = 1.05
             }
             onExited: {
                 cursorShape = Qt.ArrowCursor
+                oran7MainUiSetting_openImage.scale = 1
             }
+            onPressed: oran7MainUiSetting_openImage.scale = 0.95
+            onReleased: oran7MainUiSetting_openImage.scale = 1
         }
     }
 }

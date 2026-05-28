@@ -14,7 +14,7 @@ class WindowApi : public QObject
 public:
     ~WindowApi();
 
-    static WindowApi *instance();
+    static WindowApi& instance();
     static WindowApi *create(QQmlEngine *, QJSEngine *);
 
     Q_INVOKABLE void setWindowMinimized(QWindow *window);

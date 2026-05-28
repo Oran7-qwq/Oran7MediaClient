@@ -6,45 +6,44 @@ import "../GlobalSettings"
 import "../../Components"
 import "../../Components/Oran7SettingUiWindowItems"
 
-Window {
+import Oran7UI.Impl
+
+Item {
     id: root
     visible: false
-    color: "transparent"
-    flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    modality: Qt.NonModal
-    width: Oran7MainUiSetting.settingItemWinDefalutWidth
-    height: root.savedNormalHeight
+    width: Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth
+    height: 0
     opacity: 0
     x: root.savedNormalX
     y: 0
 
     property int  winIndex : 3
 
-    property real savedNormalX: 40 + Oran7MainUiSetting.settingItemWinDefalutWidth * root.winIndex
-    property real savedNormalY: 20
+    property real savedNormalX: 80 + Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth * root.winIndex
+    property real savedNormalY: 40
     property real savedNormalHeight: 600
 
     property point clickPos: Qt.point(0, 0)
     property bool mouseIsPressed: false
+    property bool isAnimating: false
 
-    Connections {
-        target: Oran7MainUiSetting
-        function onTriggleOpen_Oran7MainUiSetting_window() {
-            if (root.visible === false) {
-                delayTimer.delay(10 + 40*root.winIndex).then(function () {
-                    root.visible = true;
-                    window_openAnimation.restart();
-                });
-            } else {
-                window_openAnimation.stop();
-                window_closeAnimation.restart();
-            }
-        }
+    function prepareForOpen() {
+        window_closeAnimation.stop();
+        root.isAnimating = true;
+        root.opacity = 0;
+        root.y = 0;
+        root.height = 0;
+        root.visible = true;
     }
 
-    // --- tools Component ---
-    Oran7DelayTimer {
-        id: delayTimer
+    function startOpenAnimation() {
+        window_openAnimation.restart();
+    }
+
+    function startCloseAnimation() {
+        window_openAnimation.stop();
+        root.isAnimating = true;
+        window_closeAnimation.restart();
     }
 
     ParallelAnimation {
@@ -77,6 +76,12 @@ Window {
             duration: window_openAnimation.aniDuration
             easing.type: Easing.OutCubic
         }
+
+        onFinished: {
+            root.isAnimating = false;
+            root.height = Qt.binding(function() { return root.savedNormalHeight; });
+            Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = false
+        }
     }
 
     ParallelAnimation {
@@ -106,12 +111,19 @@ Window {
             property: "height"
             from: root.savedNormalHeight
             to: 0
-            duration: window_openAnimation.aniDuration
+            duration: window_closeAnimation.aniDuration
             easing.type: Easing.InExpo
         }
 
         onFinished: {
             root.visible = false;
+            root.opacity = 0
+            root.y = 0;
+            root.height = 0;
+            root.isAnimating = false;
+
+            //the last index of settingWindow
+            Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = false
         }
     }
 
@@ -121,7 +133,6 @@ Window {
         color: "transparent"
         radius: 10
 
-        // 阴影效果 - 添加在内容下方
         layer.enabled: true
         layer.effect: DropShadow {
             horizontalOffset: 0
@@ -136,9 +147,10 @@ Window {
         Rectangle {
             id: ui_content
             anchors.fill: parent
-            anchors.margins: 16  // 避开阴影边缘
+            anchors.margins: 16
             color: Oran7MainUiSetting.backColor
             radius: 10
+            clip: true
             opacity: 1
 
             Oran7SetingTitleItem{
@@ -149,29 +161,64 @@ Window {
             }
 
             //<--- ui content goes here --->
+            Column {
+                id:contene_column
+                anchors.top: topDragRect.bottom
+                anchors.topMargin: 8
+                anchors.left: parent.left
+                anchors.leftMargin: 1
+                anchors.right: parent.right
+                spacing: 2
+                // --- textColor ---
+                Oran7ColorSettingGroup{
+                    title:"ListViewTextColor:"
+                    checkedColor: Oran7Theme.Oran7MusicPlaylistView[colorToken +"-6"]
+                    componentName: "Oran7MusicPlaylistView"
+                    colorToken:"textColorBase"
+                    onEnterOfTextFiled: function(text){
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                    onColorReady: function(seletedColor){
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                    }
+                }
+
+                // --- textFontPixelSize ---
+                Oran7NumSettingGroup{
+                    value:Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                    title: "ListViewTextPixelSize"
+                    property string componentName: "Oran7MusicPlaylistView"
+                    property string tokenName: "listViewFontPixelSize"
+                    sliderValueFrom: 7
+                    sliderValueTo: 27
+                    onCommitted: (value, thresholdPosition, ratio) =>{
+                        Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                    }
+                }
+            }
 
             //<--- ui content ends here --->
         }
     }
 
-    // 拖动区域 - 整个窗口可拖动
+    // 拖动区域
     MouseArea {
         anchors.fill: parent
-        propagateComposedEvents: true
         onPressed: function(mouse) {
             root.mouseIsPressed = true;
             root.clickPos = Qt.point(mouse.x, mouse.y);
 
-            // 检查是否在标题栏区域（用于拖动）
             let inTitleBar = mouse.y <= topDragRect.height + 16 && mouse.y >= 16;
 
             if (inTitleBar) {
-                mouse.accepted = true; // 标题栏拖动事件被接受
+                mouse.accepted = true;
             } else {
-                mouse.accepted = false; // 其他区域事件传递给子组件
-                // 立即触发 clickedOutSide，让 TextField 失去焦点\
-                //console.log("clickedOutSide")
-                Oran7MainUiSetting.clickedOutSide();
+                mouse.accepted = false;
+                let inMargin = mouse.x < 16 || mouse.x > root.width - 16
+                            || mouse.y < 16 || mouse.y > root.height - 16;
+                if (inMargin) {
+                    Oran7MainUiSetting.clickedOutSide();
+                }
             }
         }
         onReleased: function(mouse) {
@@ -190,7 +237,7 @@ Window {
             root.y += delta.y;
         }
         onClicked: function(mouse) {
-            mouse.accepted = false; // 允许事件继续传递给子组件
+            mouse.accepted = false;
         }
     }
 }

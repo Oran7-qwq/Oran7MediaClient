@@ -1,7 +1,7 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
-#include"Oran7MediaPlayer.h"
+#include "Oran7MediaPlayer.h"
 #include "D3d11Videoitem.h"
 #include "GlobalHelper.h"
 #include "Oran7ScreenCapture.h"
@@ -132,7 +132,7 @@ public:
         QPointer<QQuickItem> host;//qml端视频画面渲染父对象host
         QMetaObject::Connection cW, cH;
         QSize srcSize;                         // 源视频尺寸
-        ScaleMode scaleMode = ScaleMode::Fit;
+        ScaleMode scaleMode = ScaleMode::Fill;
         bool syncPending = false;    //异步缩放请求
     }D3D11RenderContext;
 

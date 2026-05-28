@@ -4,6 +4,11 @@
 #include "AsyncManagers.h"
 #include "Client.h"
 
+#include "AppJsonConfigManager.h"
+#include "Oran7ThemeProfileManager.h"
+
+#include "WindowApi.h"
+
 #include <QObject>
 #include <QQmlApplicationEngine>
 
@@ -14,10 +19,11 @@ class ApplicationContext : public QObject
     Q_PROPERTY(Client* client READ client CONSTANT)
 public:
 
-    static ApplicationContext* instance()
+    static ApplicationContext& instance()
     {
         static ApplicationContext m_instance;
-        return &m_instance;
+
+        return m_instance;
     }
 
     AsyncWorker* asyncWorker() const;

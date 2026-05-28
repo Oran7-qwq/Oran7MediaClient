@@ -1,0 +1,16 @@
+{
+    "__init__":{
+        "__vars__":{
+            "colorPrimaryBase":"$genColor(#Preset_Volcano)",
+            "iconColorBase":"$genColor(#ffffff)",
+            "textColorBase":"$genColor(#ffffff)"
+        }
+    },
+    "__style__":{
+        "textColor":"#ffffff",
+        "selectedColor":"@colorPrimaryBase-6",
+        "hoveredColor":"@colorPrimaryBase-4",
+
+        "isSimpleMode": true
+    }
+}

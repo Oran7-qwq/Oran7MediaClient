@@ -5,11 +5,13 @@ import "./TopMenuBar"
 import "../Basic"
 import "./MainStackView"
 
+import Oran7UI.Impl
+
 Rectangle {
     id: root
     clip: false
 
-    property int topBarHeight: Oran7MainUiSetting.topBarDefaultHeight
+    property int topBarHeight: Oran7Theme.Oran7MainGUI.topBarDefaultHeight
 
     //===================background 动态渐变效果 - 在启用============
     // 创建渐变层

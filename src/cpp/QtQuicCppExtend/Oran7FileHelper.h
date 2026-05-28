@@ -4,10 +4,12 @@
 #include <QObject>
 #include <QFile>
 #include <QRegularExpression>
+#include <QtQml/qqml.h>
 
 class Oran7FileHelper : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Oran7FileHelper)
 public:
     explicit Oran7FileHelper(QObject *parent = nullptr);
 

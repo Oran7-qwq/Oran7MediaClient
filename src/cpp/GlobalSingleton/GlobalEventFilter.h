@@ -17,6 +17,7 @@ protected:
 
 signals:
     void escapeKeyPressed();
+    void escapeKeyReleased();
     void enterKeyPressed();
     void globalKeyEvent(int key, bool pressed);
     void keyCombinationTriggered(const QString &comboName);
@@ -37,6 +38,7 @@ private:
     void handleKeyRelease(QKeyEvent *keyEvent);
 
     bool __GlobelKeyLogINFO__ = false;
+    bool __GlobelKeyLogINFO__Detail__ = false;
 };
 
 #endif // GLOBALEVENTFILTER_H

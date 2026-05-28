@@ -6,45 +6,44 @@ import "../GlobalSettings"
 import "../../Components"
 import "../../Components/Oran7SettingUiWindowItems"
 
-Window {
+import Oran7UI.Impl
+
+Item {
     id: root
     visible: false
-    color: "transparent"
-    flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    modality: Qt.NonModal
-    width: Oran7MainUiSetting.settingItemWinDefalutWidth
-    height: root.savedNormalHeight
+    width: Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth
+    height: 0  // 静态初始值避免与打开动画的 from:0 产生绑定冲突导致抖动
     opacity: 0
     x: root.savedNormalX
     y: 0
 
     property int  winIndex : 1
 
-    property real savedNormalX: 40 + Oran7MainUiSetting.settingItemWinDefalutWidth * root.winIndex
-    property real savedNormalY: 20
+    property real savedNormalX: 80 + Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth * root.winIndex
+    property real savedNormalY: 40
     property real savedNormalHeight: 700
 
     property point clickPos: Qt.point(0, 0)
     property bool mouseIsPressed: false
+    property bool isAnimating: false  // 动画期间禁用 Behavior，防止与显式动画冲突导致抖动
 
-    Connections {
-        target: Oran7MainUiSetting
-        function onTriggleOpen_Oran7MainUiSetting_window() {
-            if (root.visible === false) {
-                delayTimer.delay(10 + 40*root.winIndex).then(function () {
-                    root.visible = true;
-                    window_openAnimation.restart();
-                });
-            } else {
-                window_openAnimation.stop();
-                window_closeAnimation.restart();
-            }
-        }
+    function prepareForOpen() {
+        window_closeAnimation.stop();
+        root.isAnimating = true;
+        root.opacity = 0;
+        root.y = 0;
+        root.height = 0;
+        root.visible = true;
     }
 
-    // --- tools Component ---
-    Oran7DelayTimer {
-        id: delayTimer
+    function startOpenAnimation() {
+        window_openAnimation.restart();
+    }
+
+    function startCloseAnimation() {
+        window_openAnimation.stop();
+        root.isAnimating = true;
+        window_closeAnimation.restart();
     }
 
     ParallelAnimation {
@@ -77,6 +76,11 @@ Window {
             duration: window_openAnimation.aniDuration
             easing.type: Easing.OutCubic
         }
+
+        onFinished: {
+            root.isAnimating = false;
+            root.height = Qt.binding(function() { return root.savedNormalHeight; });
+        }
     }
 
     ParallelAnimation {
@@ -106,12 +110,16 @@ Window {
             property: "height"
             from: root.savedNormalHeight
             to: 0
-            duration: window_openAnimation.aniDuration
+            duration: window_closeAnimation.aniDuration
             easing.type: Easing.InExpo
         }
 
         onFinished: {
             root.visible = false;
+            root.opacity = 0
+            root.y = 0;
+            root.height = 0;
+            root.isAnimating = false;
         }
     }
 
@@ -139,6 +147,7 @@ Window {
             anchors.margins: 16  // 避开阴影边缘
             color: Oran7MainUiSetting.backColor
             radius: 10
+            clip: true
             opacity: 1
 
             Oran7SetingTitleItem{
@@ -157,7 +166,6 @@ Window {
     // 拖动区域 - 整个窗口可拖动
     MouseArea {
         anchors.fill: parent
-        propagateComposedEvents: true
         onPressed: function(mouse) {
             root.mouseIsPressed = true;
             root.clickPos = Qt.point(mouse.x, mouse.y);
@@ -169,9 +177,11 @@ Window {
                 mouse.accepted = true; // 标题栏拖动事件被接受
             } else {
                 mouse.accepted = false; // 其他区域事件传递给子组件
-                // 立即触发 clickedOutSide，让 TextField 失去焦点\
-                //console.log("clickedOutSide")
-                Oran7MainUiSetting.clickedOutSide();
+                let inMargin = mouse.x < 16 || mouse.x > root.width - 16
+                            || mouse.y < 16 || mouse.y > root.height - 16;
+                if (inMargin) {
+                    Oran7MainUiSetting.clickedOutSide();
+                }
             }
         }
         onReleased: function(mouse) {

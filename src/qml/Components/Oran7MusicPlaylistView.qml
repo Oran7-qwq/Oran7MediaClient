@@ -5,6 +5,8 @@ import Qt5Compat.GraphicalEffects
 import "../Basic"
 import Client 1.0
 
+import Oran7UI.Impl
+
 Item {
     id: root
 
@@ -367,8 +369,10 @@ Item {
 
                     text: " # "
                     font.family: "微软雅黑"
-                    font.pixelSize: 16
-                    color: "#2a1a22"
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                    Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                 }
                 // 标题
                 Label {
@@ -379,8 +383,10 @@ Item {
                     anchors.leftMargin: root.titleTopLabelLeftMargin
                     text: "   标题"
                     font.family: "微软雅黑"
-                    font.pixelSize: 16
-                    color: "#2a1a22"
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                    Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                     background: Rectangle {
                         anchors.fill: parent
                         anchors.top: parent.top
@@ -411,8 +417,10 @@ Item {
                     anchors.leftMargin: root.albumTopLabelLeftMargin
 
                     font.family: "微软雅黑"
-                    font.pixelSize: 16
-                    color: "#2a1a22"
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                    Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                     background: Rectangle {
                         anchors.fill: parent
                         anchors.top: parent.top
@@ -443,7 +451,8 @@ Item {
                     anchors.leftMargin: 4
 
                     font.family: "微软雅黑"
-                    font.pixelSize: 16
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: "#2a1a22"
                 }
                 // 时长
@@ -458,8 +467,10 @@ Item {
                     anchors.leftMargin: root.timeSizeTopLabelLeftMargin
 
                     font.family: "微软雅黑"
-                    font.pixelSize: 16
-                    color: "#2a1a22"
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                    Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                     background: Rectangle {
                         anchors.fill: parent
                         anchors.top: parent.top
@@ -617,7 +628,7 @@ Item {
                     text: dragElementFloatTag.musicTagName
                     color: "#2a1a22"
                     clip: true
-                    font.pixelSize: 15
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                     font.family: "微软雅黑"
                     width: dragElementFloatTag.width - 40
                     anchors.left: musicTagIconImageRectangle.right
@@ -645,14 +656,16 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.horizontalCenter: parent.horizontalCenter
                         font.family: "微软雅黑"
-                        font.pixelSize: 10
+                        font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7 < 10 ? 10 :
+                                                                                   Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7
+                        Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     }
                 }
                 Label {
                     text: dragElementFloatTag.musicTagArtist
                     color: "#2a1a22"
                     clip: true
-                    font.pixelSize: 15
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                     font.family: "微软雅黑"
                     width: dragElementFloatTag.width - 100
                     anchors.left: audioTagTypeRectangle.right
@@ -1019,14 +1032,11 @@ Item {
                             height: root.elementRectangleHeight
                             width: playlistColumn.width - 20
                             radius: 10
-                            color: root.isMultiSelected ? "transparent" : playlistItem.itemIsSelected ? "#fef2e8" : playlistItem.itemIsHovered && root.mouseInPlaylist ? "#BEBEBE" : "transparent"
+                            color: root.isMultiSelected ? "transparent" :
+                                                          playlistItem.itemIsSelected ? "#8Efef2e8" :
+                                                                                        playlistItem.itemIsHovered && root.mouseInPlaylist ? "#8EBEBEBE" : "transparent"
 
-                            Behavior on color {
-                                PropertyAnimation {
-                                    duration: 1000
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
+                            Behavior on color {PropertyAnimation {duration: 500 ;easing.type: Easing.OutCubic}}
 
                             property int itemIndex: model.index
                             property string itemIcon: model.icon
@@ -1124,8 +1134,9 @@ Item {
                                     anchors.leftMargin: 5
                                     text: model.index < 9 ? "0" + (model.index + 1) : (model.index + 1)
                                     font.family: "微软雅黑"
-                                    font.pixelSize: 14
-                                    color: "#2a1a22"
+                                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                    color:Oran7Theme.Oran7MusicPlaylistView["textColorBase-5"]
                                 }
 
                                 Image {
@@ -1151,7 +1162,7 @@ Item {
                                     anchors.topMargin: 0
                                     anchors.horizontalCenter: playIcon.horizontalCenter
 
-                                    visible: !playlistItem.itemIsHovered && playlistItem.itemIsSelected
+                                    visible: !root.isMultiSelected&& !playlistItem.itemIsHovered && playlistItem.itemIsSelected
 
                                     animationEnabled: playlistItem.itemIsPlaying
                                 }
@@ -1197,8 +1208,10 @@ Item {
                                 Label {
                                     id: titleLabel
                                     text: playlistItem.itemTitle
-                                    color: "#2a1a22"
-                                    font.pixelSize: 15
+                                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                                    Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                     font.family: "微软雅黑"
                                     width: parent.width - 100
                                 }
@@ -1218,7 +1231,9 @@ Item {
                                         anchors.verticalCenter: parent.verticalCenter
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         font.family: "微软雅黑"
-                                        font.pixelSize: 10
+                                        font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7 < 10 ? 10 :
+                                                                                    Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7
+                                        Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                         Label {
                                             id: artistLabel
                                             text: playlistItem.itemArtist
@@ -1228,8 +1243,11 @@ Item {
                                             width: playlistColumn.titleWidth - typeRect.width - coverRect.width - 7
                                             clip: true
                                             font.family: "微软雅黑"
-                                            font.pixelSize: 12
-                                            color: "#2a1a22"
+                                            font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5 < 12 ? 12 :
+                                                                                    Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5
+                                            Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                            color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                                            Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                                         }
                                     }
                                 }
@@ -1244,8 +1262,10 @@ Item {
                                 width: 200
                                 text: itemAlbum
                                 font.family: "微软雅黑"
-                                font.pixelSize: 14
-                                color: "#2a1a22"
+                                font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                                Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"]
+                                Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                             }
 
                             // 时长
@@ -1257,8 +1277,10 @@ Item {
                                 width: 50
                                 text: formatDuration(itemDuration)
                                 font.family: "微软雅黑"
-                                font.pixelSize: 13
-                                color: "#2a1a22"
+                                font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                                Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-7"]
+                                Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                                 visible: !root.isMultiSelected
                             }
 
@@ -1278,7 +1300,8 @@ Item {
                                 layer.enabled: true
                                 layer.effect: ColorOverlay {
                                     source: dragIcon
-                                    color: dragIcon.item_isDraging ? "#ff7384" : "#2a1a22"
+                                    color: dragIcon.item_isDraging ? Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"] :
+                                                                     Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                                 }
 
                                 MouseArea {

@@ -2,6 +2,8 @@ pragma Singleton
 import QtQml 2.15
 import QtQuick 2.15
 
+import Oran7UI.Impl
+
 Item {
     id: root
 
@@ -19,41 +21,31 @@ Item {
     property real savedNormalX: 0
     property real savedNormalY: 0
 
-    //TitleBarWidth
-    property real topBarDefaultHeight: 50
-    readonly property real window_titleBarWidth: 50
-
-    //MainUi背景图片路径
-    property string backgroundImagePath: "C:/Users/funny/QtProject.doc/Oran7MediaClient/image/test_background1.jpg"
-
-    //-------------- CaptionBar_Property --------------
-    property bool captionBar_is_simpleMode: true
-
     // ================= SettingUi_Window_Property ================
-    property bool settingWin_isOpen: false
-    property bool settingContent_visiable: false
     property real toggleOpenAniDuration: 300
-    property real settingItemWinDefalutWidth: 252
+    property bool settingWindow_isOpening_Or_isClosing: false
 
     property real itemHeight: 30
     property real textPixelSize: 16
     property string fontFamily : "微软雅黑"
-
     property bool isDarkMode: true
+
     readonly property color backColor: isDarkMode ? "#030303" : "#ffffff"
     readonly property color itemBackColor: isDarkMode ? "#242020" : "#d1d1d1"
-    readonly property color tagColor: "#FF818E"
+    readonly property color tagColor: textColor
     readonly property color textColor: isDarkMode ? "#dadada" : "#5c5c5c"
     readonly property color winShadowColor: isDarkMode ? "#80000000" : "#20000000"
     property color themeColor: /*"#8cffff"*//*"#fc3c55"*/"#beb7ff"
 
     //--- statue manager ---
     //过滤内层控件聚焦状态
-    readonly property bool __SurelySetingWinIsFocus__: !isOran7TextFieldActive && settingWinActive
-
-    readonly property bool settingWinActive : settingWin_isOpen
-    readonly property bool isOran7TextFieldActive:activeOran7TextFieldCount > 0
-    property int activeOran7TextFieldCount: 0 //引用计数机制
+    readonly property bool __SurelySetingWinIsFocus__: !isOtherItemActive && settingWinActive
+    readonly property bool settingWinActive : Oran7Theme.Oran7MainGUI.OpenSettingWin
+    readonly property bool isOtherItemActive:activeOtherItemCount > 0
+    /*引用计数机制
+    * Contain of : Oran7TextField ; Oran7ColorPickWindow
+    */
+    property int activeOtherItemCount: 0
 
     // --- Oran7TextField InputText Auto DetectionType ENUM ---
     enum DetectionType {

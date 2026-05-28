@@ -15,6 +15,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Gui
     Quick
     QuickControls2
+    QuickTemplates2
     Qml
     Sql
     OpenGL
@@ -32,6 +33,11 @@ set(QWINDOWKIT_BUILD_WIDGETS OFF)
 set(QWINDOWKIT_BUILD_QUICK ON)
 set(QWINDOWKIT_INSTALL OFF)
 add_subdirectory(3rdparty/qwindowkit)#QWindowKit 使用 add_subdirectory 方式构建
+# 添加 QWindowKit 宏定义
+add_compile_definitions(
+    QWK_QUICK_LIBRARY=1
+    QWK_CORE_LIBRARY=1
+)
 
 # 添加全局单例 GlobalSingleton 配置路径
 set(GLOBAL_SINGLETON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/GlobalSingleton")
@@ -48,19 +54,20 @@ set(ORAN7_VIDEO_GPU_RENDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/Oran7VideoGP
 set(ORAN7_SEVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/Oran7Sever")
 #添加QtQuicCppExtend模块配置路径
 set(QtQuicCppExtend_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/QtQuicCppExtend")
+#添加Oran7Utils模块配置路径
+set(ORAN7_UTILS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/Oran7Utils")
 
 set(PROJECT_MAIN_SOURCES
     main.cpp
-    qml.qrc
-    res.qrc
+    qml.qrc res.qrc
 )
 
-file(GLOB_RECURSE SOURCES
-    "src/cpp/*.cpp"
-    "src/cpp/*.h"
-)
+file(GLOB_RECURSE CORE_SOURCES "src/cpp/*.cpp" "src/cpp/*.h")
+# 排除 QtQuicCppExtend 目录（用于 QML 模块）
+#list(FILTER CORE_SOURCES EXCLUDE REGEX "src/cpp/QtQuicCppExtend/.*")
 
-# 创建 QML 模块用于导出 C++ 类
+
+# ======== 创建 QML 模块用于导出 C++ 类 ======
 qt_add_qml_module(Oran7UI_Impl
     URI "Oran7UI.Impl"
     VERSION 1.0
@@ -68,21 +75,55 @@ qt_add_qml_module(Oran7UI_Impl
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Oran7UI/Impl"
     QML_FILES
         # 这里可以添加需要导出的 QML 文件
+    RESOURCES
+        # 添加主题 JSON 资源到 QML 模块
+        # src/resource/themeJson/Index.json
     SOURCES
         src/cpp/QtQuicCppExtend/Oran7WindowAgent.h
         src/cpp/QtQuicCppExtend/Oran7WindowAgent.cpp
         src/cpp/QtQuicCppExtend/Oran7Api.h
         src/cpp/QtQuicCppExtend/Oran7Api.cpp
+        src/cpp/QtQuicCppExtend/Oran7Theme.h
+        src/cpp/QtQuicCppExtend/Oran7Theme.cpp
+        src/cpp/QtQuicCppExtend/Oran7FileHelper.h
+        src/cpp/QtQuicCppExtend/Oran7FileHelper.cpp
+        src/cpp/QtQuicCppExtend/Oran7Theme_p.h
+        src/cpp/QtQuicCppExtend/Oran7ThemeFunctions.h
+        src/cpp/QtQuicCppExtend/Oran7ThemeFunctions.cpp
+        src/cpp/QtQuicCppExtend/Oran7ColorGenerator.h
+        src/cpp/QtQuicCppExtend/Oran7ColorGenerator.cpp
+        src/cpp/QtQuicCppExtend/Oran7RadiusGenerator.h
+        src/cpp/QtQuicCppExtend/Oran7RadiusGenerator.cpp
+        src/cpp/QtQuicCppExtend/Oran7SizeGenerator.h
+        src/cpp/QtQuicCppExtend/Oran7SizeGenerator.cpp
+
+        src/cpp/GlobalSingleton/AppJsonConfigManager.h
+        src/cpp/GlobalSingleton/AppJsonConfigManager.cpp
+        src/cpp/GlobalSingleton/Oran7ThemeProfileManager.h
+        src/cpp/GlobalSingleton/Oran7ThemeProfileManager.cpp
+)
+
+qt_add_resources(Oran7UI_Impl "resource"
+      PREFIX "/"
+      FILES
+          config/themeJson/Index.json
+          config/themeJson/Oran7MainGUI.json
+          config/themeJson/Oran7CaptionBar.json
+          config/themeJson/Oran7ProgressSlider.json
+          config/themeJson/Oran7MusicPlaylistView.json
+
+          config/default.json
 )
 
 # 为 QML 模块添加包含目录
 target_include_directories(Oran7UI_Impl
     PRIVATE
-        ${QtQuicCppExtend_DIR}
+        ${GLOBAL_SINGLETON_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/qwindowkit/src/quick
         ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/qwindowkit/src/core
+        ${QtQuicCppExtend_DIR}
+        ${ORAN7_UTILS_DIR}
 )
-
 # 为 QML 模块链接必要的库
 target_link_libraries(Oran7UI_Impl
     PRIVATE
@@ -92,16 +133,12 @@ target_link_libraries(Oran7UI_Impl
         QWKQuick
 )
 
-# 添加 QWindowKit 宏定义
-add_compile_definitions(
-    QWK_QUICK_LIBRARY=1
-    QWK_CORE_LIBRARY=1
-)
+#==================< qt_add_executable：Oran7MediaClient >============================
 
 qt_add_executable(Oran7MediaClient
     MANUAL_FINALIZATION
     ${PROJECT_MAIN_SOURCES}
-    ${SOURCES}
+    ${CORE_SOURCES}
 )
 
 # ===================== ShaderEffect 自动编译 QSB ================
@@ -152,6 +189,7 @@ target_include_directories(Oran7MediaClient
     ${ORAN7_SCREEN_CAPTURE_DIR}
     ${ORAN7_VIDEO_GPU_RENDER_DIR}
     ${ORAN7_SEVER_DIR}
+    ${ORAN7_UTILS_DIR}
     ${QtQuicCppExtend_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -200,6 +238,7 @@ set_target_properties(Oran7MediaClient PROPERTIES
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
+    QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 include(GNUInstallDirs)

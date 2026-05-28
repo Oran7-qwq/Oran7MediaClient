@@ -203,7 +203,7 @@ void SearchLocalMediaFiles_Task::process()
     m_cancelled.store(false);
     m_fileCount.store(0);
 
-    Client * const client=ApplicationContext::instance()->client();
+    Client * const client=ApplicationContext::instance().client();
 
     const QString &folderPath=client->createAppDirectories();
     if(folderPath.isEmpty())

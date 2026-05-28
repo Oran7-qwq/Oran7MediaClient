@@ -7,7 +7,7 @@
 #include <QStandardPaths>
 #include <QDebug>
 
-AppConfigManager& AppConfigManager::instance()
+AppConfigManager& AppConfigManager::ins()
 {
     static AppConfigManager instance;
     return instance;
@@ -16,48 +16,31 @@ AppConfigManager& AppConfigManager::instance()
 AppConfigManager::AppConfigManager(QObject* parent) : QObject(parent)
 {
     // 设置默认配置
-    m_defaultConfig = QJsonObject({
-        {"window", QJsonObject({
-                       {"width", 1180},
-                       {"height", 680},
-                       {"maximized", false},
-                       {"position", QJsonObject({
-                                            {"x", 800},
-                                            {"y", 400}
-                                        })}
-                   })},
-        {"appearance", QJsonObject({
-                               {"theme", "default"},
-                               {"font_size", "default"},
-                               {"language", "default"}
-                           })},
-        {"user", QJsonObject({
-                     {"username", "default"},
-                     {"auto_login", false},
-                     {"remember_password", true}
-                 })},
-        {"recent_files", QJsonArray()},
-        {"recent_files_max_count", 10}, // 最大最近文件数量
-        {"last_used_file", ""}, // 最近使用的单个文件路径
-        {"playerVolume",25},//Global PlayerVolume
-        //本地缓存排序模块记录
-        {"local_music_sort",QJsonObject({
-                                        {"last_modified",""},
-                                        {"sort_type","birth_time"},//默认按birth_time排序，custom->用户指定排序
-                                        {"play_order",QJsonArray()}})}
-    });
-
-    m_config = m_defaultConfig;
+    if(QFile defaultJson(":/config/default.json"); defaultJson.open(QIODevice::ReadOnly))
+    {
+        QJsonParseError error;
+        QJsonDocument indexDoc = QJsonDocument::fromJson(defaultJson.readAll(),&error);
+        if(error.error == QJsonParseError::NoError)
+        {
+            m_defaultConfig = indexDoc.object();
+            m_config = m_defaultConfig;
+            CONFIG_LOG << "AppConfigManager: Loaded default config from resources";
+        }
+        else
+            ERROR_LOG<<"AppConfigManager of defaultJson parse error:"<<error.errorString();
+    }
+    else
+        ERROR_LOG << "AppConfigManager: Cannot find default.json in resources";
 }
 
 QString AppConfigManager::configFilePath()
 {
-    QString configDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    QDir dir(configDir);
-    if (!dir.exists()) {
-        dir.mkpath(".");
-    }
-    return dir.filePath("config.json");
+    // QString configDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    // QDir dir(configDir);
+    // if (!dir.exists()) {
+    //     dir.mkpath(".");
+    // }
+    return GlobalHelper::getConfigDir() + "/config.json";
 }
 
 bool AppConfigManager::loadConfig()

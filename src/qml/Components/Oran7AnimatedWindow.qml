@@ -270,7 +270,6 @@ Item {
             PropertyChanges { target: windowContent; opacity: 1 }
         }
     ]
-
     // ==== 动画过渡 (Transitions) ====
     transitions: [
         Transition {
@@ -357,6 +356,6 @@ Item {
 
     // 防泄漏：组件销毁时如果仍标记为打开，主动减计数
     Component.onDestruction: {
-        if (_lastOpenState && oran7MainUiSetting) oran7MainUiSetting.openAnimatedWindowCount -= 1
+        if (_lastOpenState && Oran7MainUiSetting) Oran7MainUiSetting.openAnimatedWindowCount -= 1
     }
 }

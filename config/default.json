@@ -1,0 +1,28 @@
+{
+    "window": {
+        "width": 1180,
+        "height": 680,
+        "maximized": false,
+        "position": {
+            "x": 200,
+            "y": 200
+        }
+    },
+    "appearance": {
+        "themeProfile": "profile-default"
+    },
+    "last_used_file": "",
+    "local_music_sort": {
+        "last_modified": "",
+        "play_order": [],
+        "sort_type": "birth_time"
+    },
+    "playerVolume": 25,
+    "recent_files": [],
+    "recent_files_max_count": 10,
+    "user": {
+        "auto_login": false,
+        "remember_password": true,
+        "username": "default"
+    }
+}

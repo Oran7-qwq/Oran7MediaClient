@@ -20,10 +20,8 @@ public:
     Q_INVOKABLE void setWindowStaysOnTopHint(QWindow *window, bool hint);
     Q_INVOKABLE void setWindowState(QWindow *window, int state);
 
-    // 设置窗口是否置顶
     Q_INVOKABLE void setAlwaysOnTop(QWindow *window, bool alwaysOnTop);
 
-    // 获取窗口当前状态
     Q_INVOKABLE int getWindowState(QWindow *window) const;
 
 private:

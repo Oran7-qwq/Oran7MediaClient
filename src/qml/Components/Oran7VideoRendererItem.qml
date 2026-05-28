@@ -16,11 +16,10 @@ Rectangle {
     visible: true
     clip: true
 
-    Rectangle {
+    Item {
         id: videoHost
         width: root.width
         height: root.height
-        color:"transparent"
         clip:true
     }
 

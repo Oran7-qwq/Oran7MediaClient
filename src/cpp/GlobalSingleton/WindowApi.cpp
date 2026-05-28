@@ -11,15 +11,15 @@ WindowApi::~WindowApi()
 {
 }
 
-WindowApi *WindowApi::instance()
+WindowApi& WindowApi::instance()
 {
-    static WindowApi *ins = new WindowApi;
+    static WindowApi ins;
     return ins;
 }
 
 WindowApi *WindowApi::create(QQmlEngine *, QJSEngine *)
 {
-    return instance();
+    return &instance();
 }
 
 void WindowApi::setWindowMinimized(QWindow *window)

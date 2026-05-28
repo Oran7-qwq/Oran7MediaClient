@@ -1,0 +1,16 @@
+{
+    "__init__":{
+        "__vars__":{
+            "colorPrimaryBase":"$genColor(#Preset_Volcano)"
+        }
+    },
+    "__style__":{
+        "themeColor":"#beb7ff",
+        "backgroundImage":"qrc:/image/test_background1.jpg",
+        "topBarDefaultHeight":50,
+        "settingWinItemDefalutWidth":252,
+
+        "settingContent_visiable":false,
+        "OpenSettingWin":false
+    }
+}

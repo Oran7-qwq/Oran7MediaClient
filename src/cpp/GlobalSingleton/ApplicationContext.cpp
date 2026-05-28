@@ -10,8 +10,21 @@ ApplicationContext::ApplicationContext(QObject *parent) : QObject(parent)
 
 ApplicationContext::~ApplicationContext()
 {
-    delete m_client;
-    delete m_asyncWorker;
+    INFO_LOG << "[DTOR] ApplicationContext::~ApplicationContext() called";
+    INFO_LOG << "[DTOR]   m_client:" << m_client;
+    INFO_LOG << "[DTOR]   m_asyncWorker:" << m_asyncWorker;
+
+    if (m_client) {
+        INFO_LOG << "[DTOR]   Deleting m_client...";
+        delete m_client;
+        m_client = nullptr;
+    }
+    if (m_asyncWorker) {
+        INFO_LOG << "[DTOR]   Deleting m_asyncWorker...";
+        delete m_asyncWorker;
+        m_asyncWorker = nullptr;
+    }
+    INFO_LOG << "[DTOR] ApplicationContext::~ApplicationContext() finished";
 }
 
 Client *ApplicationContext::client() const

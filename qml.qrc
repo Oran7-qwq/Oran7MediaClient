@@ -4,7 +4,6 @@
         <file>src/qml/Basic/BasicConfig.qml</file>
         <file>src/qml/Basic/qmldir</file>
         <file>src/qml/BottomPage/BottomPage.qml</file>
-        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorDialog.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7OpenFolderItem.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SettingItem.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SwitchToggleItem.qml</file>
@@ -42,9 +41,14 @@
         <file>src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7MediaPlayerSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7SettingsContainerWindow.qml</file>
-        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7GroupDiveLine.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SetingTitleItem.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7MusicPlayListSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7ScreenCaptureSettingWindow.qml</file>
+        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorSelectItem.qml</file>
+        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorCheckBox.qml</file>
+        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorSettingGroup.qml</file>
+        <file>src/qml/Components/Oran7ColorPickerWindow.qml</file>
+        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7NumSettingGroup.qml</file>
+        <file>src/qml/Components/Oran7ValueSlider.qml</file>
     </qresource>
 </RCC>

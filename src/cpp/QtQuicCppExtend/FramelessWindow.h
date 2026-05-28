@@ -1,6 +1,10 @@
 #ifndef FRAMELESSWINDOW_H
 #define FRAMELESSWINDOW_H
 
+/**
+ * @note Discard temporary
+ *
+*/
 #include <QObject>
 #include <QQuickWindow>
 #include <QAbstractNativeEventFilter>

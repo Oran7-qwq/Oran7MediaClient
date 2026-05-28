@@ -76,21 +76,29 @@ Client::Client(const QString &host,quint16 port,QObject *parent)
 
 Client::~Client()
 {
+    INFO_LOG << "[DTOR] Client::~Client() called";
+    INFO_LOG << "[DTOR]   mp_:" << mp_;
+    INFO_LOG << "[DTOR]   Progress_SliderPos_ReqUpdateTimer:" << Progress_SliderPos_ReqUpdateTimer;
+
     if(localdb.isOpen())
         localdb.close();
     if(mp_!=nullptr)//确保释放Oran7MediaPlayer内层
     {
+        INFO_LOG << "[DTOR]   Destroying mp_";
         mp_->oran7mp_destroy();
         delete mp_;
         mp_ = nullptr;
+        INFO_LOG << "[DTOR]   mp_ destroyed";
     }
     //释放定时器
     Progress_SliderPos_ReqUpdateTimer->stop();
     delete Progress_SliderPos_ReqUpdateTimer;
+    INFO_LOG << "[DTOR]   Progress_SliderPos_ReqUpdateTimer deleted";
 
     for (auto& conn : connections) {
         QObject::disconnect(conn);
     }
+    INFO_LOG << "[DTOR] Client::~Client() finished";
 }
 
 int Client::InitSignalsAndSlots()
@@ -182,12 +190,12 @@ void Client::saveConfig_lastCloseAppFocusedMusic()
 {
     QMutexLocker loceker(&client_mutex);
     if(this->appData.audioAbsoluteFilePath.isEmpty())return;
-    AppConfigManager::instance().setLastUsedFile(this->appData.audioAbsoluteFilePath);
+    AppConfigManager::ins().setLastUsedFile(this->appData.audioAbsoluteFilePath);
 }
 
 void Client::loadConfig_lastCloseAppFocusedMusic()
 {
-    QString lastFilePath = AppConfigManager::instance().getLastUsedFile();
+    QString lastFilePath = AppConfigManager::ins().getLastUsedFile();
     QMap<QString,QVariant> mediaInfo= this->analyzeMediaFileInfo(lastFilePath);
     if(mediaInfo["success"].toInt() !=0)
     {
@@ -1286,19 +1294,19 @@ void Client::refreshLocalMusicList()
 
     CLIENT_LOG<<"refreshLocalMusicList...";
     //重遍历列表
-    ApplicationContext::instance()->asyncWorker()->startSearchLocalMediaFiles_Task(this->appData.audioDirPath);
+    ApplicationContext::instance().asyncWorker()->startSearchLocalMediaFiles_Task(this->appData.audioDirPath);
 }
 
 void Client::loadConfig_localMusicList_playOrder()
 {
     QMutexLocker locker(&client_mutex);
-    this->appData.Custom_LocalMusic_playOrder=AppConfigManager::instance().getLocalMusicList_palyOrder();
+    this->appData.Custom_LocalMusic_playOrder=AppConfigManager::ins().getLocalMusicList_palyOrder();
 }
 
 void Client::loadConfig_AppWindowSize(QQmlApplicationEngine &engine)
 {
-    int AppWindow_width = AppConfigManager::instance().getValueQVariant("window.width").toInt();
-    int AppWindow_height = AppConfigManager::instance().getValueQVariant("window.height").toInt();
+    int AppWindow_width = AppConfigManager::ins().getValueQVariant("window.width").toInt();
+    int AppWindow_height = AppConfigManager::ins().getValueQVariant("window.height").toInt();
 
     auto rootObjects = engine.rootObjects();
     if(rootObjects.isEmpty())return;
@@ -1315,8 +1323,8 @@ void Client::loadConfig_AppWindowSize(QQmlApplicationEngine &engine)
 
 void Client::loadConfig_AppWindowPosition(QQmlApplicationEngine &engine)
 {
-    int AppWindow_PosX = AppConfigManager::instance().getValueQVariant("window.position.x").toInt();
-    int AppWindow_PosY = AppConfigManager::instance().getValueQVariant("window.position.y").toInt();
+    int AppWindow_PosX = AppConfigManager::ins().getValueQVariant("window.position.x").toInt();
+    int AppWindow_PosY = AppConfigManager::ins().getValueQVariant("window.position.y").toInt();
 
     auto rootObjects = engine.rootObjects();
     if(rootObjects.isEmpty())return;
@@ -1331,7 +1339,7 @@ void Client::loadConfig_AppWindowPosition(QQmlApplicationEngine &engine)
 
 void Client::loadConfig_AppSetPlayerVolume()
 {
-    int value = AppConfigManager::instance().getValueQVariant("playerVolume").toInt();
+    int value = AppConfigManager::ins().getValueQVariant("playerVolume").toInt();
     this->reqChangeVolumeValue(value);
     if(value <0 || value >100)return;
     emit this->configSignal_loadPlayerVolumeConfig(value);
@@ -1346,7 +1354,7 @@ QList<QFileInfo> Client::sortFileInfoList_byFilePaths(const QList<QFileInfo> &fi
         qVariantList_orderPaths_isEmpty=true;
     }
 
-    //1.copy QVariantList副本
+    //copy QVariantList副本
     QStringList order=QStringList();
     if(qVariantList_orderPaths_isEmpty==false)
         for(const QVariant& op : std::as_const(orderPaths))
@@ -1356,7 +1364,7 @@ QList<QFileInfo> Client::sortFileInfoList_byFilePaths(const QList<QFileInfo> &fi
                 order.append(path);
         }
 
-    //2.创建路径到索引的映射
+    //创建路径到索引的映射
     QHash<QString,int> orderIndex=QHash<QString,int>();
     if(qVariantList_orderPaths_isEmpty==false)
         for(int i=0;i<order.size();++i)
@@ -1365,10 +1373,9 @@ QList<QFileInfo> Client::sortFileInfoList_byFilePaths(const QList<QFileInfo> &fi
             orderIndex[normalizedPath]=i;
         }
 
-    //3.copy QList<QFileInfo>副本 for sort
+    //copy QList<QFileInfo>Impl for sort
     QList<QFileInfo> sortedList = fileInfoList;
 
-    //4.std::sort
     std::sort(sortedList.begin(),sortedList.end(),[&orderIndex](const QFileInfo& a,const QFileInfo&b){
         QString pathA=QDir::fromNativeSeparators(a.absoluteFilePath());
         QString pathB =QDir::fromNativeSeparators(b.absoluteFilePath());
@@ -1402,7 +1409,7 @@ void Client::saveConfig_localMusicList_playOrder()
             appData.Custom_LocalMusic_playOrder.append(QVariant(fl.absoluteFilePath()));
         }
     }
-    AppConfigManager::instance().saveLocalMusicList_playOrder(appData.Custom_LocalMusic_playOrder);
+    AppConfigManager::ins().saveLocalMusicList_playOrder(appData.Custom_LocalMusic_playOrder);
 }
 
 void Client::saveConfig_AppWindowSize(QQmlApplicationEngine &engine)
@@ -1422,8 +1429,8 @@ void Client::saveConfig_AppWindowSize(QQmlApplicationEngine &engine)
 
     if (width > 0 && height > 0)
     {
-        AppConfigManager::instance().setValueQVariant("window.width", width);
-        AppConfigManager::instance().setValueQVariant("window.height", height);
+        AppConfigManager::ins().setValueQVariant("window.width", width);
+        AppConfigManager::ins().setValueQVariant("window.height", height);
     }
 }
 
@@ -1445,14 +1452,14 @@ void Client::saveConfig_AppWindowPosition(QQmlApplicationEngine &engine)
 
     if(posX >= 0 && posY >=0)
     {
-        AppConfigManager::instance().setValueQVariant("window.position.x",posX);
-        AppConfigManager::instance().setValueQVariant("window.position.y",posY);
+        AppConfigManager::ins().setValueQVariant("window.position.x",posX);
+        AppConfigManager::ins().setValueQVariant("window.position.y",posY);
     }
 }
 
 void Client::saveConfig_AppSetPlayerVolume()
 {
-    AppConfigManager::instance().setValueQVariant("playerVolume",appData.playerVolume);
+    AppConfigManager::ins().setValueQVariant("playerVolume",appData.playerVolume);
 }
 
 
