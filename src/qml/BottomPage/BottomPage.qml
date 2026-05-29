@@ -394,6 +394,7 @@ Rectangle{
         anchors.rightMargin: 2
         height: 10
         color:"transparent"
+        sliderColor_themeIndex:0
         visible: root.visible
         focusedPlayer: BasicConfig.globalPlayer_MusicPlayerIndex
 

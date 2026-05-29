@@ -71,6 +71,7 @@ public:
     }
 
     void bind_DdaGrab_d3dqtDev(ID3D11Device *dev){m_capDev = dev;}
+    void setDebugLog(bool on) { m_debugLog.store(on, std::memory_order_release); }
 
 public slots:
     void start();
@@ -149,10 +150,11 @@ private:
     int  m_fps = 60;
     std::atomic_bool m_running{false};
 
-    // FFmpeg AVFilterGraph
+    std::atomic_bool m_debugLog{false};  // 抓屏调试日志开关
+
+    // FFmpeg AVFilterGraph (ddagrab -> buffersink，无 fps filter)
     AVFilterGraph*   m_graph = nullptr;
     AVFilterContext* m_src = nullptr;
-    AVFilterContext* m_fpsCtx = nullptr;
     AVFilterContext* m_sink = nullptr;
     AVBufferRef*     m_hwdev = nullptr;
 };
@@ -178,9 +180,12 @@ public:
     Q_INVOKABLE void setDrawMouse(bool on);
     Q_INVOKABLE bool drawMouse() const { return m_drawMouse; }
 
-    // 设置期望 fps（会插入 fps filter，尽量稳定输出）
+    // 设置期望 fps（ddagrab 源头帧率）
     Q_INVOKABLE void setFps(int fps);
     Q_INVOKABLE int fps() const { return m_fps; }
+
+    // 开关抓屏调试日志（submitFrame fps / DUP 检测等）
+    Q_INVOKABLE void setDebugLog(bool on);
 
     // ========================= Render ==========================//
     void setVideoItem(QObject* item);
@@ -210,6 +215,7 @@ private:
     bool m_drawMouse = true;
     int  m_fps = 60;
     std::atomic_bool m_running{false};//running state
+    std::atomic_bool m_debugLog{true};  // 抓屏调试日志开关
 
     // ========================= Render ==========================//
     QPointer<D3D11VideoItem> m_item;
@@ -219,6 +225,7 @@ private:
     ComPtr<ID3D11Texture2D> m_qtTex[kPool];
     quintptr m_handle[kPool]{};
     int m_texW=0, m_texH=0;
+    QMutex m_texMutex;  // 保护 m_qtTex / m_texW / m_texH (跨线程读写)
     bool m_deviceReady = false;
 
     // worker thread

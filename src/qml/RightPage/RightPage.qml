@@ -220,6 +220,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: openCaptionBtn.openIngState ? 7 : 0
         clip: true
 
         initialItem: Qt.createComponent(BasicConfig.getUrl(BasicConfig.videoPlayerPage)).createObject(mainStackView, {

@@ -6,6 +6,7 @@ Rectangle {
 
     // ===== 外部属性 =====
     property bool animationEnabled: false  // 动画开关：true=动态，false=静态
+    property color waveColor: "#FF8F6E"
 
     // ===== 内部尺寸定义 =====
     property int barWidth: 5              // 柱子宽度
@@ -124,7 +125,7 @@ Rectangle {
         x: 0
         y: root.height - height
         radius: 2
-        color: "#FF8F6E"
+        color: root.waveColor
 
         Behavior on height {
             NumberAnimation {
@@ -142,7 +143,7 @@ Rectangle {
         x: bar1.width + root.barSpacing
         y: root.height - height
         radius: 2
-        color: "#FF8F6E"
+        color: root.waveColor
 
         Behavior on height {
             NumberAnimation {
@@ -160,7 +161,7 @@ Rectangle {
         x: bar2.x + bar2.width + root.barSpacing
         y: root.height - height
         radius: 2
-        color: "#FF8F6E"
+        color: root.waveColor
 
         Behavior on height {
             NumberAnimation {

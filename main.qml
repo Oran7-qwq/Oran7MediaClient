@@ -68,7 +68,7 @@ ApplicationWindow {
         sourceSize.width: Screen.width * Screen.devicePixelRatio
         sourceSize.height: Screen.height * Screen.devicePixelRatio
         source: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage) ?
-                    "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/test_background1.jpg"
+                   "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/defaultBg.jpg"
         //source: ""
         opacity: 0.999
 
@@ -202,6 +202,12 @@ ApplicationWindow {
 
     Oran7WindowAgent{
         id:__windowAgent
+        Component.onCompleted: {
+              // 启用 DWM 模糊（Windows 系统级透明+模糊）
+              __windowAgent.setWindowAttribute('dwm-blur', true)
+              // 可选：深色模式标题栏
+              //__windowAgent.setWindowAttribute('dark-mode', true)
+          }
     }
 
     Oran7CaptionBar{

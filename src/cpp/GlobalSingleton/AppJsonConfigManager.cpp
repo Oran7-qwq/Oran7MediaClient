@@ -15,22 +15,41 @@ AppConfigManager& AppConfigManager::ins()
 
 AppConfigManager::AppConfigManager(QObject* parent) : QObject(parent)
 {
-    // 设置默认配置
+    // 设置默认配置：优先从 QRC 资源加载，失败则从文件系统 Config 目录读取
+    QByteArray raw;
+    bool loaded = false;
+
+    // 1) 尝试 QRC 资源
     if(QFile defaultJson(":/config/default.json"); defaultJson.open(QIODevice::ReadOnly))
     {
+        raw = defaultJson.readAll();
+        loaded = true;
+    }
+
+    // 2) 兜底：从文件系统同级 ../Config/default.json 读取
+    if (!loaded) {
+        QString fsPath = GlobalHelper::getConfigDir() + "/default.json";
+        QFile fsFile(fsPath);
+        if (fsFile.open(QIODevice::ReadOnly)) {
+            raw = fsFile.readAll();
+            loaded = true;
+        }
+    }
+
+    if (loaded) {
         QJsonParseError error;
-        QJsonDocument indexDoc = QJsonDocument::fromJson(defaultJson.readAll(),&error);
+        QJsonDocument indexDoc = QJsonDocument::fromJson(raw, &error);
         if(error.error == QJsonParseError::NoError)
         {
             m_defaultConfig = indexDoc.object();
             m_config = m_defaultConfig;
-            CONFIG_LOG << "AppConfigManager: Loaded default config from resources";
+            CONFIG_LOG << "AppConfigManager: Loaded default config";
         }
         else
             ERROR_LOG<<"AppConfigManager of defaultJson parse error:"<<error.errorString();
     }
     else
-        ERROR_LOG << "AppConfigManager: Cannot find default.json in resources";
+        ERROR_LOG << "AppConfigManager: Cannot find default.json in resources or Config directory";
 }
 
 QString AppConfigManager::configFilePath()

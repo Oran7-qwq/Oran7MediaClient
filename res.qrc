@@ -45,7 +45,6 @@
         <file>image/stackback.png</file>
         <file>image/sure.png</file>
         <file>image/tangleqr.png</file>
-        <file>image/themBackground.jpg</file>
         <file>image/transparent.png</file>
         <file>image/useApp.png</file>
         <file>image/usericon.png</file>
@@ -73,5 +72,6 @@
         <file>image/sitQiubi.png</file>
         <file>image/test_background1.jpg</file>
         <file>image/mynaui_panel-left-close-solid.png</file>
+        <file>image/defaultBg.jpg</file>
     </qresource>
 </RCC>

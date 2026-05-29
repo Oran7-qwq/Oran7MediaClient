@@ -190,7 +190,7 @@ Item {
                     property string componentName: "Oran7MusicPlaylistView"
                     property string tokenName: "listViewFontPixelSize"
                     sliderValueFrom: 7
-                    sliderValueTo: 27
+                    sliderValueTo: 20
                     onCommitted: (value, thresholdPosition, ratio) =>{
                         Oran7Theme.saveComponentToken(componentName,tokenName,value)
                     }

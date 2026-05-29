@@ -16,6 +16,7 @@ Rectangle{
     property color borderColor: "#24161d"
     property string labelText: "undefined"
     property bool labelTextEnable: true
+    property color labelTextColor: "#24161d"
 
     // --- signal ---
     signal clicked()
@@ -77,6 +78,6 @@ Rectangle{
         font.family: "微软雅黑"
         font.italic: true
         text: root.labelText
-        color:"#24161d"
+        color:root.labelTextColor
     }
 }

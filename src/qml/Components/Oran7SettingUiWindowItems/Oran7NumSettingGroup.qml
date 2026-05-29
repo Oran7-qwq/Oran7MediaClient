@@ -43,9 +43,9 @@ Item {
                 anchors.left: parent.left
                 anchors.leftMargin: progressHandleWidth/2 + 1
                 anchors.verticalCenter: parent.verticalCenter
-                width:parent.width * 0.7
+                width:parent.width * 0.8
                 height: parent.height
-                trackHeight: Oran7MainUiSetting.itemHeight * 0.5
+                trackHeight: Oran7MainUiSetting.itemHeight * 0.35
                 sliderColor_themeIndex:0
                 progressHandleWidth:trackHeight*1.1
                 from: root.sliderValueFrom

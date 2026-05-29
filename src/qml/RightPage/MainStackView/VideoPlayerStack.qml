@@ -7,220 +7,218 @@ import Client 1.0
 import Oran7UI.Impl 1.0
 import BilibiliRoomAddressCatch 1.0
 
+
 Item {
-    id: root_parent
+    id: root
+
     property string pageName: ""
 
-    // 为每个实例分配唯一标识
+    property var mainWindow: null
+    function findMainWindow() {
+        return BasicConfig.mainWindow;
+    }
+
+    // 使用 Binding 动态绑定到父容器尺寸，确保在父容器尺寸变化时也能正确更新
+    Binding on width {
+        value: root.parent ? root.parent.width : 0
+        when: root.parent !== null
+    }
+    Binding on height {
+        value: root.parent ? root.parent.height : 0
+        when: root.parent !== null
+    }
+
+    // ==================== StackView 活动状态检测 ====================//
+    property bool isActive: false
+    property var _myStackView: null
+
+    function findAndSetupStackView() {
+        if (StackView.view) {
+            _myStackView = StackView.view;
+        } else {
+            var parent = container.parent;
+            var depth = 0;
+            while (parent && depth < 20) {
+                if (typeof parent.push === "function" && typeof parent.pop === "function") {
+                    _myStackView = parent;
+                    break;
+                }
+                parent = parent.parent;
+                depth++;
+            }
+        }
+
+        if (_myStackView) {
+            _myStackView.currentItemChanged.connect(updateActiveState);
+            updateActiveState();
+        }
+    }
+
+    function updateActiveState() {
+        if (!_myStackView || !_myStackView.currentItem) {
+            root.isActive = false;
+            return;
+        }
+
+        root.isActive = (_myStackView.currentItem === root.stackView_rootItemContainer);
+        if (root.isActive) {
+            //Page被激活 -> touch 业务
+            root.activeResponseTask()
+        }
+    }
+
+    //Page被激活 -> touch 业务
+    function activeResponseTask(){
+        //console.log("touch")
+    }
+
     Component.onCompleted: {
-        var timestamp = new Date().getTime()
-        var instanceId = "VideoPlayerStack_" + timestamp + "_" + Math.floor(Math.random() * 1000)
-        root_parent.objectName = instanceId
+        Qt.callLater(findAndSetupStackView);
+
+        // 延迟执行，确保BasicConfig.mainWindow已设置
+        Qt.callLater(function() {
+            mainWindow = findMainWindow();
+
+            // 检查blurSource状态
+            if(!videoPlayerMenue.blurSource){
+                console.warn("Warning: blurSource is null. mainWindow:", mainWindow);
+            }
+        });
     }
 
     Component.onDestruction: {
-        // 清理资源
+        if (_myStackView) {
+            _myStackView.currentItemChanged.disconnect(updateActiveState);
+        }
+    }
+    //================================================
+
+    //=============== 自定义组件 ===============
+    Oran7FileHelper {
+        id: fileHelper
+    }
+    Oran7VideoRendererItem {
+        id: videoRenderItem
+        anchors.fill: parent
+        renderObject: Client.VideoPlayerRender
+        openVideoInfo: false
+
+        radius: 10
+
+        layer.effect: DropShadow{
+            source: videoRenderItem
+            samples: 60
+            spread: 0.3
+            horizontalOffset: 10
+            verticalOffset: 0
+            radius:10
+            color:"black"
+        }
+    }
+    Connections {
+        target: Client
+        function onSigStop() {
+            Client.renderBlackFrame(videoRenderItem.renderObject);
+        }
     }
 
-    Item {
-        id: root
-        // 使用 Binding 动态绑定到父容器尺寸，确保在父容器尺寸变化时也能正确更新
-        Binding on width {
-            value: root.parent ? root.parent.width : 0
-            when: root.parent !== null
-        }
-        Binding on height {
-            value: root.parent ? root.parent.height : 0
-            when: root.parent !== null
-        }
-        layer.enabled: false
+    //openSemiCircleRect
+    Rectangle {
+        id: openSemiCircleRect
+        width: 40
+        height: 40
+        color: /*"#fef2e8"*/ "transparent"
+        radius: width * 0.3
+        anchors.right: videoPlayerMenue.left
+        anchors.rightMargin: -width / 2
+        anchors.top: videoPlayerMenue.top
+        anchors.topMargin: 20
 
-        //====================  VideoPlayerStack in MainStackView isActive ???  ==================///
-        property bool isActive: false
-        // 获取 StackView
-        property var _myStackView: null
-        // 尝试获取 StackView
-        function findAndSetupStackView() {
-            if (StackView.view) {
-                //console.log("通过 StackView.view 获取");
-                _myStackView = StackView.view;
-            } else {
-                //通过父级查找
-                //console.log("通过父级查找 StackView");
-                var parent = root.parent;
-                var depth = 0;
-                while (parent && depth < 20) {
-                    //console.log("查找深度", depth, "父级:", parent);
-                    if (typeof parent.push === "function" && typeof parent.pop === "function") {
-                        //console.log("找到 StackView");
-                        _myStackView = parent;
-                        break;
-                    }
-                    parent = parent.parent;
-                    depth++;
-                }
-            }
-            if (root._myStackView) {
-                //console.log("成功获取 StackView，开始监听");
-                // 监听 currentItem 变化
-                root._myStackView.currentItemChanged.connect(updateActiveState);
-                // 立即更新一次
-                root.updateActiveState();
-            } else {
-                //console.warn("无法获取 StackView");
-            }
-        }
-        // 更新活动状态
-        function updateActiveState() {
-            if (!_myStackView || !_myStackView.currentItem) {
-                root.isActive = false;
-                //console.log("_myStackView 或_myStackView.currentItem 无效-->isActive=false")
-                return;
-            }
-            const newActive = (_myStackView.currentItem === root.parent);
-            if (root.isActive !== newActive) {
-                // console.log("活动状态变化:", newActive);
-                root.isActive = newActive;
-                if (root.isActive === true) {}
-            } else {
-                // console.log("root.isActive !== newActive")
-                // console.log(_myStackView.currentItem)
-                // console.log(root.parent)
-            }
-        }
-        // 初始化
-        Component.onCompleted: {
-            Qt.callLater(function () {
-                findAndSetupStackView();
-            });
-        }
-        // 清理
-        Component.onDestruction: {
-            if (_myStackView) {
-                _myStackView.currentItemChanged.disconnect(updateActiveState);
-            }
-        }
-        //================================================
-
-        //=============== 自定义组件 ===============
-        Oran7FileHelper {
-            id: fileHelper
-        }
-        Oran7VideoRendererItem {
-            id: videoRenderItem
-            anchors.fill: parent
-            renderObject: Client.VideoPlayerRender
-            openVideoInfo: false
-
-            radius: 10
-
-            layer.effect: DropShadow{
-                source: videoRenderItem
-                samples: 60
-                spread: 0.3
-                horizontalOffset: 10
-                verticalOffset: 0
-                radius:10
-                color:"black"
-            }
-        }
         Connections {
-            target: Client
-            function onSigStop() {
-                Client.renderBlackFrame(videoRenderItem.renderObject);
-            }
-        }
-
-        //openSemiCircleRect
-        Rectangle {
-            id: openSemiCircleRect
-            width: 40
-            height: 40
-            color: /*"#fef2e8"*/ "transparent"
-            radius: width * 0.3
-            anchors.right: videoPlayerMenueRectangle.left
-            anchors.rightMargin: -width / 2
-            anchors.top: videoPlayerMenueRectangle.top
-            anchors.topMargin: 20
-
-            Connections {
-                target: BasicConfig
-                function onClearAllUi_inVIdeoRenderArea(ok) {
-                    if (ok === false) {
-                        openImage.visible = true;
-                    } else {
-                        openImage.visible = false;
-                        // 只在 root 有正确尺寸且不在页面切换期间时才隐藏菜单，避免布局错误
-                        if (root.width > 0) {
-                            openSemiCircleRect.openIngState = false;
-                        }
-                    }
-                }
-            }
-
-            property bool openIngState: false
-            Image {
-                id: openImage
-                scale: 2
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.leftMargin: 0 //4
-                source: "qrc:/image/stackback.png"
-
-                rotation: parent.openIngState ? 180 : 0
-                Behavior on rotation {
-                    NumberAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                    }
-                }
-                property color openImageColorOverlay_defaultColor: "#c74054"
-                property color openImageColorOverlay_selectedColor: "#fc3c55"
-                property color openImageColorOverlay_usedColor: openImage.openImageColorOverlay_defaultColor
-                layer.enabled: true
-                layer.effect: ColorOverlay {
-                    source: openImage
-                    anchors.fill: openImage
-                    color: openImage.openImageColorOverlay_usedColor
-                }
-                asynchronous: false
-                mipmap: true
-                cache: true
-                antialiasing: true
-            }
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                    if (parent.openIngState === true) {
-                        videoPlayerMenueRectangle.width = 0;
-                        parent.openIngState = false;
-                    } else {
-                        videoPlayerMenueRectangle.width = videoPlayerMenueRectangle.defaultWidth;
-                        parent.openIngState = true;
+            target: BasicConfig
+            function onClearAllUi_inVIdeoRenderArea(ok) {
+                if (ok === false) {
+                    openImage.visible = true;
+                } else {
+                    openImage.visible = false;
+                    // 只在 root 有正确尺寸且不在页面切换期间时才隐藏菜单，避免布局错误
+                    if (root.width > 0) {
+                        openSemiCircleRect.openIngState = false;
                     }
                 }
             }
         }
-        // =============== VideoPlayer Menue Rectangle ================
-        Rectangle {
-            id: videoPlayerMenueRectangle
 
-            property real defaultWidth: 300
-            property bool fileDialog_isOpen: inputFilePathWay_OpenFileDialog.isOpen
+        property bool openIngState: false
+        Image {
+            id: openImage
+            scale: 2
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: 0 //4
+            source: "qrc:/image/stackback.png"
 
-            width:openSemiCircleRect.openIngState ? defaultWidth : 0
-
-            Behavior on width {
+            rotation: parent.openIngState ? 180 : 0
+            Behavior on rotation {
                 NumberAnimation {
                     duration: 200
                     easing.type: Easing.OutCubic
                 }
             }
-            height: root.height > 0 ? root.height * 0.8 : 0
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            color: "#fef2e8"
-            radius: 10
+            property color openImageColorOverlay_defaultColor: "#c74054"
+            property color openImageColorOverlay_selectedColor: "#fc3c55"
+            property color openImageColorOverlay_usedColor: openImage.openImageColorOverlay_defaultColor
+            layer.enabled: true
+            layer.effect: ColorOverlay {
+                source: openImage
+                anchors.fill: openImage
+                color: openImage.openImageColorOverlay_usedColor
+            }
+            asynchronous: false
+            mipmap: true
+            cache: true
+            antialiasing: true
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: {
+                if (parent.openIngState === true) {
+                    videoPlayerMenue.width = 0;
+                    parent.openIngState = false;
+                } else {
+                    videoPlayerMenue.width = videoPlayerMenue.defaultWidth;
+                    parent.openIngState = true;
+                }
+            }
+        }
+    }
+    // =============== VideoPlayer Menue Rectangle ================
+    Oran7BlurCard{
+        id:videoPlayerMenue
+        property real defaultWidth: 300
+        width:openSemiCircleRect.openIngState ? videoPlayerMenue.defaultWidth : 0
+        Behavior on width {
+            NumberAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+        }
+        height: root.height > 0 ? root.height * 0.8 : 0
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+
+        blurEnabled: true
+        blurAmount: 1
+        borderRadius: 7
+        blurSource: root.mainWindow ? root.mainWindow.__Oran7WindowBackGround__ : null
+        themeColor: "#04FFFFFF"
+        Rectangle {
+            id: videoPlayerMenueRectangle
+            anchors.fill: parent
+
+            property bool fileDialog_isOpen: inputFilePathWay_OpenFileDialog.isOpen
+            color: "transparent"
+            radius: videoPlayerMenue.borderRadius
 
             Connections {
                 target: BasicConfig
@@ -244,7 +242,7 @@ Item {
                     font.family: "微软雅黑"
                     font.pixelSize: 20
                     font.bold: true
-                    color: "#2a1a22"
+                    color: Oran7Theme.Oran7MainGUI.themeColor
                 }
                 Rectangle {
                     id: inputBilibiliRoomNumRect
@@ -416,7 +414,7 @@ Item {
                     font.family: "微软雅黑"
                     font.pixelSize: 20
                     font.bold: true
-                    color: "#2a1a22"
+                    color: Oran7Theme.Oran7MainGUI.themeColor
                 }
                 //input file path rectangle
                 Rectangle {
@@ -582,7 +580,7 @@ Item {
                         layer.enabled: true
                         layer.effect: ColorOverlay {
                             source: inputFilePathWay_OpenFileBtnImage
-                            color: "#1eb074"
+                            color: Oran7Theme.Oran7MainGUI.themeColor
                         }
                         Oran7FileDialog {
                             id: inputFilePathWay_OpenFileDialog
@@ -616,6 +614,7 @@ Item {
                 Oran7ESelectRect {
                     id: openVIdeoInfo_eSelRect
                     labelText: "OpenVideoInfo"
+                    labelTextColor:Oran7Theme.Oran7MainGUI.themeColor
                     onClicked: {
                         if (checked === false) {
                             checked = true;
@@ -662,235 +661,158 @@ Item {
             }
             //in videoPlayerMenueRectangle
         }
+    }
+    //videoBottomControlBarRect
+    Rectangle {
+        id: videoBottomControlBarRect
+        anchors.left: root.left
+        anchors.right: root.right
+        anchors.bottom: root.bottom
+        height: 80
+        color: /*"#262626"*/ "transparent"
+        visible: true
+        opacity: 0
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 300
+                easing.type: Easing.OutCubic
+            }
+        }
 
-        //videoBottomControlBarRect
-        Rectangle {
-            id: videoBottomControlBarRect
-            anchors.left: root.left
-            anchors.right: root.right
-            anchors.bottom: root.bottom
-            height: 80
-            color: /*"#262626"*/ "transparent"
-            visible: true
-            opacity: 0
-            Behavior on opacity {
+        //PauseOrPlay_Image
+        Image {
+            id: playImage
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 7
+            anchors.left: parent.left
+            anchors.leftMargin: 15
+            sourceSize.width: 40
+            sourceSize.height: 40
+            scale: 0.9
+            Behavior on scale {
                 NumberAnimation {
                     duration: 300
                     easing.type: Easing.OutCubic
                 }
             }
+            property string playImageSourceUrl: "qrc:/image/ClearPlay.png"
+            property string pouseImageSourceUrl: "qrc:/image/ClearPause.png"
+            source: BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex && BasicConfig.isPlaying ? pouseImageSourceUrl : playImageSourceUrl
+            layer.enabled: true
+            layer.effect: ColorOverlay {
+                source: playImage
+                color: "white"
+            }
+            property bool isPlaying: false
+            MouseArea {
+                id: playIamgeMouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: {
+                    if (!(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex || BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex))
+                        return;
+                    if (BasicConfig.isPlaying === false) {
+                        if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
+                            bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_play();
+                        if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
+                            inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_play();
+                    } else {
+                        if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
+                            bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_pause();
+                        if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
+                            inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause();
+                    }
+                }
+                onExited: cursorShape = Qt.ArrowCursor
+                onEntered: cursorShape = Qt.PointingHandCursor
+                onPressed: playImage.scale = 0.7
+                onReleased: playImage.scale = 0.9
+            }
+            Connections {
+                target: BasicConfig
+                function onPlayerFocusChanged() {
+                    if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex) {
+                        inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
+                    }
+                }
+            }
+            //<---playImage
+        }
 
-            //PauseOrPlay_Image
-            Image {
-                id: playImage
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 7
-                anchors.left: parent.left
-                anchors.leftMargin: 15
-                sourceSize.width: 40
-                sourceSize.height: 40
-                scale: 0.9
-                Behavior on scale {
-                    NumberAnimation {
-                        duration: 300
-                        easing.type: Easing.OutCubic
-                    }
-                }
-                property string playImageSourceUrl: "qrc:/image/ClearPlay.png"
-                property string pouseImageSourceUrl: "qrc:/image/ClearPause.png"
-                source: BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex && BasicConfig.isPlaying ? pouseImageSourceUrl : playImageSourceUrl
-                layer.enabled: true
-                layer.effect: ColorOverlay {
-                    source: playImage
-                    color: "white"
-                }
-                property bool isPlaying: false
-                MouseArea {
-                    id: playIamgeMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: {
-                        if (!(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex || BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex))
-                            return;
-                        if (BasicConfig.isPlaying === false) {
-                            if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
-                                bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_play();
-                            if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
-                                inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_play();
-                        } else {
-                            if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
-                                bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_pause();
-                            if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
-                                inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause();
-                        }
-                    }
-                    onExited: cursorShape = Qt.ArrowCursor
-                    onEntered: cursorShape = Qt.PointingHandCursor
-                    onPressed: playImage.scale = 0.7
-                    onReleased: playImage.scale = 0.9
-                }
-                Connections {
-                    target: BasicConfig
-                    function onPlayerFocusChanged() {
-                        if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex) {
+        //Oran7ProgressSlider
+        Oran7ProgressSlider {
+            id: videoProgressSlider
+            width: parent.width * 0.98
+            height: 12
+            progressHandleWidth: 14
+            anchors.top: parent.top
+            anchors.topMargin: 10
+            anchors.horizontalCenter: parent.horizontalCenter
+            focusedPlayer: BasicConfig.globalPlayer_VideoPlayerIndex
+            property real ratio: 0
+            onPositionChanged: {
+                hideControlRectTimer.restart();
+            }
+            Connections {
+                target: Client
+                enabled: videoBottomControlBarRect.visible
+                             && videoBottomControlBarRect.enabled
+                             && videoBottomControlBarRect.Window
+                             && videoBottomControlBarRect.Window.active
+                function onUpdataQmlPlayProgressSliderCurPos(CurPos, CurTime_Second) {
+                    if (videoProgressSlider.isPressed === false && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
+                        //console.log(CurPos,CurTime_Second)
+                        videoProgressSlider.nowSecondTime = CurTime_Second;
+                        videoProgressSlider.ratio = CurPos / BasicConfig.max_Slider_Value;
+                        // console.log(videoProgressSlider.ratio)
+                        videoProgressSlider.progressHandleX = videoProgressSlider.width * videoProgressSlider.ratio - videoProgressSlider.progressHandleWidth / 2;
+                        videoProgressSlider.visibleProgressX = videoProgressSlider.width * videoProgressSlider.ratio;
+                        if (videoProgressSlider.nowSecondTime >= videoProgressSlider.allSecondTime) {
                             inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
                         }
                     }
                 }
-                //<---playImage
-            }
-
-            //Oran7ProgressSlider
-            Oran7ProgressSlider {
-                id: videoProgressSlider
-                width: parent.width * 0.98
-                height: 12
-                progressHandleWidth: 14
-                anchors.top: parent.top
-                anchors.topMargin: 10
-                anchors.horizontalCenter: parent.horizontalCenter
-                focusedPlayer: BasicConfig.globalPlayer_VideoPlayerIndex
-                property real ratio: 0
-                onPositionChanged: {
-                    hideControlRectTimer.restart();
-                }
-                Connections {
-                    target: Client
-                    enabled: videoBottomControlBarRect.visible
-                                 && videoBottomControlBarRect.enabled
-                                 && videoBottomControlBarRect.Window
-                                 && videoBottomControlBarRect.Window.active
-                    function onUpdataQmlPlayProgressSliderCurPos(CurPos, CurTime_Second) {
-                        if (videoProgressSlider.isPressed === false && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
-                            //console.log(CurPos,CurTime_Second)
-                            videoProgressSlider.nowSecondTime = CurTime_Second;
-                            videoProgressSlider.ratio = CurPos / BasicConfig.max_Slider_Value;
-                            // console.log(videoProgressSlider.ratio)
-                            videoProgressSlider.progressHandleX = videoProgressSlider.width * videoProgressSlider.ratio - videoProgressSlider.progressHandleWidth / 2;
-                            videoProgressSlider.visibleProgressX = videoProgressSlider.width * videoProgressSlider.ratio;
-                            if (videoProgressSlider.nowSecondTime >= videoProgressSlider.allSecondTime) {
-                                inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                            }
-                        }
-                    }
-                    function onUpdataQmlPlayNowFileAllTime(AllTime) {
-                        if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
-                            videoProgressSlider.allSecondTime = AllTime;
-                        }
-                    }
-                    function onUpdataQmlTransforStopIcon() {
-                        inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                        videoProgressSlider.progressHandleX = videoProgressSlider.width - videoProgressSlider.progressHandleWidth / 2;
-                        videoProgressSlider.visibleProgressX = videoProgressSlider.width;
-                        BasicConfig.isPlaying = false;
+                function onUpdataQmlPlayNowFileAllTime(AllTime) {
+                    if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
+                        videoProgressSlider.allSecondTime = AllTime;
                     }
                 }
-            }
-            Label {
-                id: progressTimeLabel
-                anchors.left: playImage.right
-                anchors.leftMargin: 15
-                anchors.verticalCenter: playImage.verticalCenter
-                color: "white"
-                font.family: "微软雅黑"
-                font.pixelSize: 20
-                text: videoProgressSlider.nowTimeText + " - " + videoProgressSlider.allTimeText
-            }
-
-            //Volume set
-            Oran7PlayerVolumeComponent {
-                id: videoPlayerStackBottomControl_playerVolumeControl
-                anchors.right: parent.right
-                anchors.rightMargin: 20
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 20
-            }
-
-            // ================ bottom Control Hidden logic=================
-            HoverHandler {
-                id: hover
-                acceptedDevices: PointerDevice.Mouse
-
-                property point lastPos: Qt.point(-99999, -99999)
-                property bool hasLast: false
-                property real moveThreshold: 2   // 像素阈值，防抖
-
-                onPointChanged: {
-                    if (!hovered) {
-                        hasLast = false;
-                        return;
-                    }
-
-                    const p = point.position;
-                    if (!hasLast) {
-                        // 第一次进入/第一次拿到点，不算“移动”
-                        lastPos = p;
-                        hasLast = true;
-                        return;
-                    }
-
-                    const dx = p.x - lastPos.x;
-                    const dy = p.y - lastPos.y;
-                    const dist2 = dx * dx + dy * dy;
-
-                    if (dist2 >= moveThreshold * moveThreshold) {
-                        //只有真的移动才显示并重置计时器
-                        videoBottomControlBarRect.opacity = 1;
-                        hideControlRectTimer.restart();
-                        lastPos = p;
-                    }
-                }
-
-                onHoveredChanged: {
-                    // 离开区域就立刻开始隐藏计时
-                    if (!hovered) {
-                        hasLast = false;
-                        hideControlRectTimer.restart();
-                    }
+                function onUpdataQmlTransforStopIcon() {
+                    inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
+                    videoProgressSlider.progressHandleX = videoProgressSlider.width - videoProgressSlider.progressHandleWidth / 2;
+                    videoProgressSlider.visibleProgressX = videoProgressSlider.width;
+                    BasicConfig.isPlaying = false;
                 }
             }
-
-            Timer {
-                id: hideControlRectTimer
-                repeat: false
-                interval: 1500
-                onTriggered: mouse => {
-                    videoBottomControlBarRect.opacity = 0;
-                }
-            }
-            //<--videoBottomControlBarRect
+        }
+        Label {
+            id: progressTimeLabel
+            anchors.left: playImage.right
+            anchors.leftMargin: 15
+            anchors.verticalCenter: playImage.verticalCenter
+            color: "white"
+            font.family: "微软雅黑"
+            font.pixelSize: 20
+            text: videoProgressSlider.nowTimeText + " - " + videoProgressSlider.allTimeText
         }
 
-        //============= VideoPlayerStack鼠标定时隐藏逻辑 =============//
-        property bool mouseHidden: false
-        onMouseHiddenChanged: {
-            if (root.isActive === false)
-                return;
-
-            if (root.mouseHidden === true && videoPlayerMenueHoverHandler.hovered === false && videoPlayerMenueRectangle.fileDialog_isOpen === false)
-                BasicConfig.clearAllUi_inVIdeoRenderArea(true);
-            else
-                BasicConfig.clearAllUi_inVIdeoRenderArea(false);
+        //Volume set
+        Oran7PlayerVolumeComponent {
+            id: videoPlayerStackBottomControl_playerVolumeControl
+            anchors.right: parent.right
+            anchors.rightMargin: 20
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 20
         }
 
-        Timer {
-            id: mouseHideTimer
-            interval: 2000
-            repeat: false
-            running: true
-            onTriggered: root.mouseHidden = true
-        }
-
+        // ================ bottom Control Hidden logic=================
         HoverHandler {
-            id: rootHover
+            id: hover
             acceptedDevices: PointerDevice.Mouse
-
-            //HoverHandler/PointerHandler of cursorShape
-            cursorShape: root.mouseHidden ? Qt.BlankCursor : Qt.ArrowCursor
 
             property point lastPos: Qt.point(-99999, -99999)
             property bool hasLast: false
-            property real threshold: 2
+            property real moveThreshold: 2   // 像素阈值，防抖
 
             onPointChanged: {
                 if (!hovered) {
@@ -900,6 +822,7 @@ Item {
 
                 const p = point.position;
                 if (!hasLast) {
+                    // 第一次进入/第一次拿到点，不算“移动”
                     lastPos = p;
                     hasLast = true;
                     return;
@@ -907,30 +830,99 @@ Item {
 
                 const dx = p.x - lastPos.x;
                 const dy = p.y - lastPos.y;
-                if (dx * dx + dy * dy >= threshold * threshold) {
-                    root.mouseHidden = false;
-                    mouseHideTimer.restart();
+                const dist2 = dx * dx + dy * dy;
+
+                if (dist2 >= moveThreshold * moveThreshold) {
+                    //只有真的移动才显示并重置计时器
+                    videoBottomControlBarRect.opacity = 1;
+                    hideControlRectTimer.restart();
                     lastPos = p;
                 }
             }
 
             onHoveredChanged: {
-                if (hovered) {
-                    root.mouseHidden = false;
-                    mouseHideTimer.restart();
-                } else {
+                // 离开区域就立刻开始隐藏计时
+                if (!hovered) {
                     hasLast = false;
+                    hideControlRectTimer.restart();
                 }
             }
         }
-        //====================================================//
 
-        //<---root
+        Timer {
+            id: hideControlRectTimer
+            repeat: false
+            interval: 1500
+            onTriggered: mouse => {
+                videoBottomControlBarRect.opacity = 0;
+            }
+        }
+        //<--videoBottomControlBarRect
     }
-    // Component.completed: {
-    //     if(openSemiCircleRect.openIngState === true)
-    //     {
-    //         openImage.rotation=180
-    //     }
-    // }
+
+    //============= VideoPlayerStack鼠标定时隐藏逻辑 =============//
+    property bool mouseHidden: false
+    onMouseHiddenChanged: {
+        if (root.isActive === false)
+            return;
+
+        if (root.mouseHidden === true && videoPlayerMenueHoverHandler.hovered === false && videoPlayerMenueRectangle.fileDialog_isOpen === false)
+            BasicConfig.clearAllUi_inVIdeoRenderArea(true);
+        else
+            BasicConfig.clearAllUi_inVIdeoRenderArea(false);
+    }
+
+    Timer {
+        id: mouseHideTimer
+        interval: 2000
+        repeat: false
+        running: true
+        onTriggered: root.mouseHidden = true
+    }
+
+    HoverHandler {
+        id: rootHover
+        acceptedDevices: PointerDevice.Mouse
+
+        //HoverHandler/PointerHandler of cursorShape
+        cursorShape: root.mouseHidden ? Qt.BlankCursor : Qt.ArrowCursor
+
+        property point lastPos: Qt.point(-99999, -99999)
+        property bool hasLast: false
+        property real threshold: 2
+
+        onPointChanged: {
+            if (!hovered) {
+                hasLast = false;
+                return;
+            }
+
+            const p = point.position;
+            if (!hasLast) {
+                lastPos = p;
+                hasLast = true;
+                return;
+            }
+
+            const dx = p.x - lastPos.x;
+            const dy = p.y - lastPos.y;
+            if (dx * dx + dy * dy >= threshold * threshold) {
+                root.mouseHidden = false;
+                mouseHideTimer.restart();
+                lastPos = p;
+            }
+        }
+
+        onHoveredChanged: {
+            if (hovered) {
+                root.mouseHidden = false;
+                mouseHideTimer.restart();
+            } else {
+                hasLast = false;
+            }
+        }
+    }
+    //====================================================//
+
+    //<---root
 }

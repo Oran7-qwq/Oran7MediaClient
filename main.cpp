@@ -107,6 +107,9 @@ int main(int argc, char *argv[])
     // 附加日志控制台窗口
     ATTACH_CONSOLE("Oran7MediaClient Logs");
 
+    // 确保 Qt 窗口 backing store 始终带 alpha 通道（透明窗口必须）
+    QQuickWindow::setDefaultAlphaBuffer(true);
+
     QGuiApplication app(argc, argv);
 
     // 设置场景图形后端-->Direct3D11

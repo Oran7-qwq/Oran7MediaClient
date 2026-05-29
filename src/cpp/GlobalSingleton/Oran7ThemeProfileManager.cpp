@@ -48,16 +48,28 @@ void Oran7ThemeProfileManager::initializeDefaultTheme(Oran7Theme *q)
         return;
 #endif
 
-   /*! @note 加载 Index.json 获取组件列表 */
+   /*! @note 加载 Index.json：优先 QRC，失败则文件系统兜底 */
+    QByteArray indexRaw;
     QFile indexFile(":/config/themeJson/Index.json");
-    if (!indexFile.exists() || !indexFile.open(QIODevice::ReadOnly)) {
-        ERROR_LOG << "Oran7ThemeProfileManager: Cannot find Index.json in resources";
+    if (indexFile.exists() && indexFile.open(QIODevice::ReadOnly)) {
+        indexRaw = indexFile.readAll();
+        indexFile.close();
+    } else {
+        QString fsPath = GlobalHelper::getConfigDir() + "/themeJson/Index.json";
+        QFile fsFile(fsPath);
+        if (fsFile.open(QIODevice::ReadOnly)) {
+            indexRaw = fsFile.readAll();
+            fsFile.close();
+        }
+    }
+
+    if (indexRaw.isEmpty()) {
+        ERROR_LOG << "Oran7ThemeProfileManager: Cannot find Index.json in resources or filesystem";
         return;
     }
 
     QJsonParseError error;
-    QJsonDocument indexDoc = QJsonDocument::fromJson(indexFile.readAll(), &error);
-    indexFile.close();
+    QJsonDocument indexDoc = QJsonDocument::fromJson(indexRaw, &error);
 
     if (error.error != QJsonParseError::NoError || !indexDoc.isObject()) {
         ERROR_LOG << "Oran7ThemeProfileManager: Failed to parse Index.json";
@@ -84,20 +96,31 @@ void Oran7ThemeProfileManager::initializeDefaultTheme(Oran7Theme *q)
             QString componentName = it.key();
             QString componentPath = it.value().toString();
 
+            QByteArray compRaw;
             QFile componentFile(componentPath);
-            if (componentFile.exists() && componentFile.open(QIODevice::ReadOnly))
-            {
-                QJsonDocument componentDoc = QJsonDocument::fromJson(componentFile.readAll());
+            if (componentFile.exists() && componentFile.open(QIODevice::ReadOnly)) {
+                compRaw = componentFile.readAll();
                 componentFile.close();
+            } else {
+                QString fileName = QFileInfo(componentPath).fileName();
+                QString fsPath = GlobalHelper::getConfigDir() + "/themeJson/" + fileName;
+                QFile fsFile(fsPath);
+                if (fsFile.open(QIODevice::ReadOnly)) {
+                    compRaw = fsFile.readAll();
+                    fsFile.close();
+                }
+            }
 
+            if (!compRaw.isEmpty()) {
+                QJsonDocument componentDoc = QJsonDocument::fromJson(compRaw);
                 if (!componentDoc.isNull() && componentDoc.isObject()) {
                     components[componentName] = componentDoc.object();
-                    CONFIG_LOG << "Oran7ThemeProfileManager: Loaded component" << componentName << "from" << componentPath;
+                    CONFIG_LOG << "Oran7ThemeProfileManager: Loaded component" << componentName;
                 }
                 else
-                    WARNING_LOG << "Oran7ThemeProfileManager: Failed to loaded component" << componentName << "from" << componentPath;
+                    WARNING_LOG << "Oran7ThemeProfileManager: Failed to parse component" << componentName;
             } else
-                WARNING_LOG << "Oran7ThemeProfileManager: Component file not found" << componentPath;
+                WARNING_LOG << "Oran7ThemeProfileManager: Component file not found:" << componentPath;
         }
 
         if (!components.isEmpty()) {

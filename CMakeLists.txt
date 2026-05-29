@@ -150,6 +150,20 @@ qt_add_shaders(Oran7MediaClient "shaders"
 )
 # =======================================================
 
+# ======== 配置资源直接嵌入 EXE（兜底 DLL 的 QRC 注册失败）=========
+qt_add_resources(Oran7MediaClient "config_resource"
+      PREFIX "/"
+      FILES
+          config/themeJson/Index.json
+          config/themeJson/Oran7MainGUI.json
+          config/themeJson/Oran7CaptionBar.json
+          config/themeJson/Oran7ProgressSlider.json
+          config/themeJson/Oran7MusicPlaylistView.json
+
+          config/default.json
+)
+# =======================================================
+
 # ===================== 运行时依赖自动拷贝 =====================
 if(WIN32)
     # ffmpeg/bin 目录

@@ -7,6 +7,7 @@
 
 #include <QQuickItem>
 #include <QMutex>
+#include <QQueue>
 #include <QSize>
 
 #include <QSGSimpleTextureNode>
@@ -35,6 +36,9 @@ public:
     void submitFrame(AVFrame *frameRef);
     void renderBlackFrame();
 
+    Q_INVOKABLE void setDebugLog(bool on) { m_debugLog.store(on, std::memory_order_release); }
+    Q_INVOKABLE bool debugLog() const { return m_debugLog.load(std::memory_order_acquire); }
+
 signals:
 
     void sourceSizeChanged(int w, int h);
@@ -50,6 +54,7 @@ protected:
 
 private:
     void hookWindow(QQuickWindow *window);
+    AVFrame* takeLatestQueuedFrame();  // 取队列里最新帧，丢弃旧帧
     bool initD3D11Resources();
     bool ensureRgbaTarget(int w, int h,DXGI_FORMAT fmt);
     bool ensureVideoProcessor(int srcW, int srcH);
@@ -73,6 +78,16 @@ private:
 
     std::atomic_bool m_updatePending{false};
     std::atomic<AVFrame*> m_latestFrame{nullptr};
+
+    // 帧队列：避免单槽 m_latestFrame 互相覆盖丢帧
+    QMutex m_frameMutex;
+    QQueue<AVFrame*> m_frameQueue;
+    static constexpr int kMaxQueued = 3;
+
+    // seq 追踪丢帧
+    std::atomic<uint64_t> m_submitSeq{0};
+    std::atomic<uint64_t> m_renderSeq{0};
+    std::atomic_bool m_debugLog{false};  // 默认开，QML 可 setDebugLog(false) 关闭
     D3D11VideoRenderNode *m_renderNode = nullptr;
     QQuickWindow *m_window = nullptr;
 };

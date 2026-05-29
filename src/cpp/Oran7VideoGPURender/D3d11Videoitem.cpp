@@ -20,36 +20,42 @@ D3D11VideoItem::D3D11VideoItem(QQuickItem *parent)
 
 void D3D11VideoItem::submitFrame(AVFrame *frameRef)
 {
-#if 0
-    static int submitCount = 0;
-    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-    submitCount++;
-    auto now = QDateTime::currentMSecsSinceEpoch();
-    if (now - t0 >= 1000) {
-        INFO_LOG << "submitFrame fps =" << submitCount;
-        submitCount = 0;
-        t0 = now;
-    }
-#endif
-    AVFrame* old = m_latestFrame.exchange(frameRef, std::memory_order_acq_rel);
-    if (old) av_frame_free(&old);
+    uint64_t seq = m_submitSeq.fetch_add(1, std::memory_order_relaxed) + 1;
 
-    bool expected = false;
-    /*if (m_updatePending.compare_exchange_strong(expected, true, std::memory_order_acq_rel))*/ {
-        QMetaObject::invokeMethod(this, [this]{
-#if 0
-            static int submitCount = 0;
-            static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-            submitCount++;
-            auto now = QDateTime::currentMSecsSinceEpoch();
-            if (now - t0 >= 1000) {
-                INFO_LOG << "update fps =" << submitCount;
-                submitCount = 0;
-                t0 = now;
-            }
-#endif
-            update();
-        }, Qt::QueuedConnection);
+    if (m_debugLog.load(std::memory_order_relaxed)) {
+        static int submitCount = 0;
+        static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+        submitCount++;
+        auto now = QDateTime::currentMSecsSinceEpoch();
+        if (now - t0 >= 1000) {
+            INFO_LOG << "submitFrame fps =" << submitCount << " seq =" << seq;
+            submitCount = 0;
+            t0 = now;
+        }
+    }
+
+    // 入队，队列容量 2（实时预览宁可丢旧帧也不积压）
+    {
+        QMutexLocker locker(&m_frameMutex);
+        m_frameQueue.enqueue(frameRef);
+        if (m_frameQueue.size() > 2) {
+            AVFrame *drop = m_frameQueue.dequeue();
+            av_frame_free(&drop);
+        }
+    }
+
+    // 双驱动：item update 触发 sync → updatePaintNode 兜底显示
+    //          window update 触发 beforeRendering → 采集场景低延迟渲染
+    auto request = [this] {
+        update();
+        if (auto *w = window())
+            w->update();
+    };
+
+    if (QThread::currentThread() == thread()) {
+        request();
+    } else {
+        QMetaObject::invokeMethod(this, request, Qt::QueuedConnection);
     }
 }
 
@@ -62,26 +68,54 @@ void D3D11VideoItem::renderBlackFrame()
 
 void D3D11VideoItem::onBeforeRendering()
 {
-    if (m_renderNode) {
-        AVFrame *cur = m_latestFrame.exchange(nullptr, std::memory_order_acq_rel);
-        if (cur) {
-            m_renderNode->setFrame(cur);
-#if 0
-            static int frame_count1 = 0;
-            static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
-            frame_count1++;
-            auto now1 = QDateTime::currentMSecsSinceEpoch();
-            if (now1 - t01 >= 1000)//1000ms
-            {
-                INFO_LOG<<"d3d11VideoItem updataPaintNode frameCount:"<<frame_count1<<" per second.";
-                frame_count1 = 0;t01 = now1;
-            }
-#endif
+    if (!m_renderNode)
+        return;
+
+    AVFrame *cur = takeLatestQueuedFrame();
+    if (!cur)
+        return;
+
+    //---------------- 帧间隔抖动检测 ----------------//
+    static qint64 lastMs = 0;
+    qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (lastMs != 0) {
+        qint64 dt = nowMs - lastMs;
+        if (dt > 22 && m_debugLog.load(std::memory_order_relaxed)) {
+            INFO_LOG << "render jitter dt =" << dt
+                     << "submitSeq =" << m_submitSeq.load(std::memory_order_acquire);
         }
     }
+    lastMs = nowMs;
 
-    if (window())
-        window()->update();
+    m_renderNode->setFrame(cur);
+
+    //==============  video info (每秒) ================//
+    static int frame_count = 0;
+    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+    frame_count++;
+    auto now = QDateTime::currentMSecsSinceEpoch();
+    if (now - t0 >= 1000) {
+        Oran7VideoInfo info;
+        info.srcSize = QSize(cur->width, cur->height);
+        info.srcFormat = cur->format;
+        info.srcFormatName = QString(av_get_pix_fmt_name(static_cast<AVPixelFormat>(cur->format)));
+        info.renderSize = QSize(boundingRect().width(), boundingRect().height());
+        m_renderNode->takePendingDxgifromat(info.dxgiFormat);
+        info.dxgiFormatName = dxgiFormatName(info.dxgiFormat);
+        info.fps = frame_count;
+        info.isFromHardWare = true;
+        info.decodeDevice = "d3d11va";
+        info.renderDevice = "d3d11va";
+
+        emit sendVideoFrameInfo(info);
+
+        if (m_debugLog.load(std::memory_order_relaxed)) {
+            INFO_LOG << "beforeRendering setFrame fps =" << frame_count
+                     << "submitSeq =" << m_submitSeq.load(std::memory_order_acquire);
+        }
+        frame_count = 0;
+        t0 = now;
+    }
 }
 
 
@@ -141,27 +175,27 @@ void D3D11VideoItem::hookWindow(QQuickWindow *w)
                 m_videoCtx.Reset();
             }, Qt::DirectConnection);
 
-    // static QMetaObject::Connection beforeConn1;
-    // if (beforeConn1)
-    //     disconnect(beforeConn1);
-    // beforeConn1 = connect(w, &QQuickWindow::beforeRendering,
-    //                      this, &D3D11VideoItem::onBeforeRendering,
-    //                      Qt::DirectConnection);
+    static QMetaObject::Connection beforeConn1;
+    if (beforeConn1)
+        disconnect(beforeConn1);
+    beforeConn1 = connect(w, &QQuickWindow::beforeRendering,
+                         this, &D3D11VideoItem::onBeforeRendering,
+                         Qt::DirectConnection);
 
-    // static QMetaObject::Connection beforeConn2;
-    // if (beforeConn2)
-    //     disconnect(beforeConn2);
-    // beforeConn2 = connect(w, &QQuickWindow::frameSwapped, this, [](){
-    //     static int count = 0;
-    //     static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-    //     count++;
-    //     auto now = QDateTime::currentMSecsSinceEpoch();
-    //     if (now - t0 >= 1000) {
-    //         INFO_LOG << "frameSwapped fps =" << count;
-    //         count = 0;
-    //         t0 = now;
-    //     }
-    // });
+    static QMetaObject::Connection beforeConn2;
+    if (beforeConn2)
+        disconnect(beforeConn2);
+    beforeConn2 = connect(w, &QQuickWindow::frameSwapped, this, [this](){
+        static int count = 0;
+        static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
+        count++;
+        auto now = QDateTime::currentMSecsSinceEpoch();
+        if (now - t0 >= 1000 && m_debugLog.load(std::memory_order_relaxed)) {
+            INFO_LOG << "frameSwapped fps =" << count;
+            count = 0;
+            t0 = now;
+        }
+    });
 
 
     w->setPersistentSceneGraph(true);
@@ -276,191 +310,6 @@ bool D3D11VideoItem::blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int srcH,
     return SUCCEEDED(hr);
 }
 
-// QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData* data)
-// {
-//     if (!m_window && window()) {
-//         hookWindow(window());
-//         INFO_LOG<<"By D3D11VideoItem::updatePaintNode hookWindow.";
-//     }
-
-//     auto *node = static_cast<QSGSimpleTextureNode*>(oldNode);
-//     if (!node) {
-//         node = new QSGSimpleTextureNode();
-//         node->setOwnsTexture(true);  // 节点管理纹理生命周期
-//     }
-
-//     AVFrame *cur = m_latestFrame.exchange(nullptr);;
-//     //=======================Render Black======================
-//     const bool needBlack = m_needClearBlack.exchange(false, std::memory_order_acq_rel);
-//     if (needBlack) {
-//         // 如果拿到了新视频帧，丢掉它，避免覆盖黑屏
-//         if (cur) {
-//             av_frame_free(&cur);
-//             cur = nullptr;
-//         }
-
-//         if (!m_dev) {
-//             if (!initD3D11Resources()) {
-//                 node->setRect(boundingRect());
-//                 delete node;
-//                 return nullptr;
-//             }
-//         }
-//         // 用当前 item 尺寸来建黑屏纹理
-//         int w = int(width());
-//         int h = int(height());
-//         if (w > 0 && h > 0) {
-//             const bool recreated = ensureRgbaTarget(w, h,DXGI_FORMAT_R8G8B8A8_UNORM);
-//             // 确保这张纹理是可 RTV 的
-//             ComPtr<ID3D11RenderTargetView> rtv;
-//             D3D11_RENDER_TARGET_VIEW_DESC desc = {};
-//             desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-//             desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-//             desc.Texture2D.MipSlice = 0;
-
-//             HRESULT hr = m_dev->CreateRenderTargetView(m_rgbaTex.Get(), &desc, rtv.GetAddressOf());
-//             if (SUCCEEDED(hr) && rtv) {
-//                 const float color[4] = {0.f, 0.f, 0.f, 1.f};
-//                 m_ctx->ClearRenderTargetView(rtv.Get(), color);
-//                 m_ctx->Flush();
-//             } else {
-//                 WARNING_LOG << "CreateRenderTargetView failed hr=" << QString::number(hr, 16).toStdString();
-//             }
-
-//             // 确保 node 有纹理 wrapper
-//             if (recreated || node->texture() == nullptr) {
-//                 QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
-//                     m_rgbaTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
-//                 if (tex) node->setTexture(tex);
-//             }
-//         }
-//         node->setRect(boundingRect());
-//         return node;
-//     }
-//     //=============================================================
-
-//     if (!cur) {
-//         if (node && node->texture()) {
-//             node->setRect(boundingRect());
-//             return node;
-//         }
-//         else
-//         {
-//             delete node;
-//             return nullptr;
-//         }
-//     }
-
-//     if (!m_dev) {
-//         if (!initD3D11Resources()) {
-//             av_frame_free(&cur);
-//             node->setRect(boundingRect());
-//             WARNING_LOG<<"Failed to initD3D11Resources().";
-//             delete node;
-//             return nullptr;
-//         }
-//     }
-
-//     auto *srcTex = reinterpret_cast<ID3D11Texture2D*>(cur->data[0]);
-//     D3D11_TEXTURE2D_DESC sdesc{};
-//     srcTex->GetDesc(&sdesc);
-//     int srcW = (int)sdesc.Width;
-//     int srcH = (int)sdesc.Height;
-
-//     if (srcW != m_lastSrcW || srcH != m_lastSrcH) {
-//         m_lastSrcW = srcW; m_lastSrcH = srcH;
-//         INFO_LOG<<"emitSourceSizeChanged"<<srcW<<"/"<<srcH;
-//         emit sourceSizeChanged(srcW, srcH);
-//     }
-
-//     const bool recreated = ensureRgbaTarget(srcW, srcH,DXGI_FORMAT_R8G8B8A8_UNORM);
-//     if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
-//         if (!m_vp || !m_vpEnum)
-//         {
-//             if (!ensureVideoProcessor(srcW, srcH)) {
-//                 av_frame_free(&cur);
-//                 return node;
-//             }
-//             if(!isFormatSupported(m_vpEnum.Get(),DXGI_FORMAT_R8G8B8A8_UNORM))
-//                 WARNING_LOG<<"DXGI_FORMAT_R8G8B8A8_UNORM not Supported";
-//             else
-//                 INFO_LOG<<"DXGI_FORMAT_R8G8B8A8_UNORM is Supported.";
-//         }
-//         int slice = (int)(intptr_t)cur->data[1];
-//         if (!blitNv12ToRgba(srcTex, srcW, srcH, slice))
-//         {
-//             av_frame_free(&cur);
-//             return node;
-//         }
-//     }
-//     else if (sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
-//              sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
-//         //RGBA -> RGBA，直接拷贝
-//         m_ctx->CopyResource(m_rgbaTex.Get(), srcTex);
-//         //INFO_LOG<<"Oran7ScreenCapture srcW:"<<srcW<<"-srcH:"<<srcH;
-//     }
-//     else {
-//         // 其他格式先不处理
-//         av_frame_free(&cur);
-//         return node;
-//     }
-
-//     // 只有当 BGRA 纹理重建，才需要创建新的 QSGTexture wrapper 并 setTexture
-//     if (recreated || node->texture() == nullptr) {
-//         INFO_LOG<<"QSGTexture wrapper recreated.";
-//         QSGTexture *tex = QNativeInterface::QSGD3D11Texture::fromNative(
-//             m_rgbaTex.Get(), window(), m_bgraSize, QQuickWindow::TextureHasAlphaChannel);
-
-//         if (tex)
-//             node->setTexture(tex);
-//         else
-//             WARNING_LOG<<"QSGTexture ERROR.";
-//     }
-//     node->setRect(boundingRect());
-
-// #if 0
-//     static int frame_count1 = 0;
-//     static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
-//     frame_count1++;
-//     auto now1 = QDateTime::currentMSecsSinceEpoch();
-//     if (now1 - t01 >= 1000)//1000ms
-//     {
-//         INFO_LOG<<"d3d11VideoItem updataPaintNode frameCount:"<<frame_count1<<" per second.";
-//         frame_count1 = 0;
-//         t01 = now1;
-//     }
-// #endif
-
-//     //==============  static video info ================//
-//     static int frame_count = 0;
-//     static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-//     frame_count++;
-//     auto now = QDateTime::currentMSecsSinceEpoch();
-//     if (now - t0 >= 1000)//1000ms
-//     {
-//         Oran7VideoInfo info;
-//         info.srcSize = QSize(cur->width,cur->height);
-//         info.srcFormat = cur->format;
-//         info.srcFormatName = QString(av_get_pix_fmt_name(static_cast<AVPixelFormat>(cur->format)));
-//         info.renderSize =QSize(boundingRect().width(),boundingRect().height());
-//         info.dxgiFormat = sdesc.Format;
-//         info.dxgiFormatName =dxgiFormatName(sdesc.Format);
-//         info.fps = frame_count;
-//         info.isFromHardWare = true;
-//         info.decodeDevice = "d3d11va";
-//         info.renderDevice = "d3d11va";
-
-//         emit sendVideoFrameInfo(info);
-
-//         frame_count = 0;
-//         t0 = now;
-//     }
-
-//     av_frame_free(&cur);
-
-//     return node;
-// }
-
 QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
     auto *node = static_cast<D3D11VideoRenderNode*>(oldNode);
@@ -475,65 +324,31 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *
     if (m_needClearBlack.exchange(false, std::memory_order_acq_rel))
         node->setNeedBlack(true);
 
-    AVFrame *cur = m_latestFrame.exchange(nullptr, std::memory_order_acq_rel);
-    if (cur){
-#if 0
-    static int count = 0;
-    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-    count++;
-    auto now = QDateTime::currentMSecsSinceEpoch();
-    if (now - t0 >= 1000) {
-        INFO_LOG << "setFrame fps =" << count;
-        count = 0;
-        t0 = now;
-    }
-#endif
+    // 兜底：播放器场景 beforeRendering 可能未触发，这里直接取帧渲染
+    AVFrame *cur = takeLatestQueuedFrame();
+    if (cur)
         node->setFrame(cur);
-        m_updatePending.store(false, std::memory_order_release);
-    }
 
     int w = 0, h = 0;
     if (node->takePendingSourceSizeChanged(w, h))
         emit sourceSizeChanged(w, h);
 
-    //==============  static video info ================//
-    static int frame_count = 0;
-    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-    frame_count++;
-    auto now = QDateTime::currentMSecsSinceEpoch();
-    if (now - t0 >= 1000 && cur != nullptr)//1000ms
-    {
-        Oran7VideoInfo info;
-        info.srcSize = QSize(cur->width,cur->height);
-        info.srcFormat = cur->format;
-        info.srcFormatName = QString(av_get_pix_fmt_name(static_cast<AVPixelFormat>(cur->format)));
-        info.renderSize =QSize(boundingRect().width(),boundingRect().height());
-        node->takePendingDxgifromat(info.dxgiFormat);
-        info.dxgiFormatName =dxgiFormatName(info.dxgiFormat);
-        info.fps = frame_count;
-        info.isFromHardWare = true;
-        info.decodeDevice = "d3d11va";
-        info.renderDevice = "d3d11va";
-
-        emit sendVideoFrameInfo(info);
-
-        frame_count = 0;
-        t0 = now;
-    }
-
-    #if 0
-    static int count = 0;
-    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-    count++;
-    auto now = QDateTime::currentMSecsSinceEpoch();
-    if (now - t0 >= 1000) {
-        INFO_LOG << "updatePaintNode fps =" << count;
-        count = 0;
-        t0 = now;
-    }
-    #endif
-
     return node;
+}
+
+AVFrame* D3D11VideoItem::takeLatestQueuedFrame()
+{
+    AVFrame *cur = nullptr;
+
+    QMutexLocker locker(&m_frameMutex);
+    while (!m_frameQueue.isEmpty()) {
+        AVFrame *f = m_frameQueue.dequeue();
+        if (cur)
+            av_frame_free(&cur);   // 丢旧帧
+        cur = f;                    // 留最新
+    }
+
+    return cur;
 }
 
 

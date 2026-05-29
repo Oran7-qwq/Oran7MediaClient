@@ -18,49 +18,6 @@ enum ERROR_CODE
     ErrorFileInvalid
 };
 
-class GlobalHelper
-{
-public:
-    GlobalHelper();
-
-    static QString getConfigDir()
-    {
-        // 检查 QCoreApplication 是否仍然有效（防止析构时崩溃）
-        if (!QCoreApplication::instance() || QCoreApplication::closingDown()) {
-            static QString cachedDir;
-            if (!cachedDir.isEmpty()) {
-                return cachedDir;
-            }
-            return QString();
-        }
-
-        // 缓存结果，避免重复计算和访问已析构的对象
-        static QString cachedConfigDir;
-        if (!cachedConfigDir.isEmpty()) {
-            return cachedConfigDir;
-        }
-
-        QString appDir = QCoreApplication::applicationDirPath();
-        QString devConfigPath = QFileInfo(appDir).absolutePath() + "/config";
-        QString releaseConfigPath = appDir + "/config";
-
-        QString configDir;
-
-        if (QDir(devConfigPath).exists()) {
-            configDir = devConfigPath;
-        } else {
-            configDir = releaseConfigPath;
-        }
-
-        if (!QDir(configDir).exists()) {
-            QDir().mkpath(configDir);
-        }
-
-        cachedConfigDir = configDir;
-        return configDir;
-    }
-};
-
 //==================<Self define logInfo Out>=================//
 #pragma once
 #include <QDebug>
@@ -169,6 +126,37 @@ private:
 #define ERROR_LOG Logger(Logger::Level::Error, __FILE__,__LINE__)
 #define NETWORK_LOG  Logger(Logger::Level::Network, __FILE__, __LINE__)
 #define CONFIG_LOG   Logger(Logger::Level::Config,  __FILE__, __LINE__)
+
+class GlobalHelper
+{
+public:
+    GlobalHelper();
+
+    static QString getConfigDir()
+    {
+        QString appDir;
+        if (QCoreApplication::instance() && !QCoreApplication::closingDown()) {
+            appDir = QCoreApplication::applicationDirPath();
+        } else {
+            // 退化路径：使用当前工作目录
+            appDir = QDir::currentPath();
+        }
+
+        QString configDir = QDir::cleanPath(appDir + "/Config");
+
+        // 确保文件夹存在
+        if (!QDir(configDir).exists()) {
+            if (!QDir().mkpath(configDir)) {
+                qWarning() << "Failed to create Config directory:" << configDir;
+            }
+        }
+
+        INFO_LOG << "ConfigDir:"<<configDir;
+
+        static QString cachedConfigDir = configDir;
+        return cachedConfigDir;
+    }
+};
 
 
 #include <QString>

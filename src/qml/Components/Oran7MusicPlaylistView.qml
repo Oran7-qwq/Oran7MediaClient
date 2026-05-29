@@ -24,9 +24,9 @@ Item {
     // ===== 模型数据 =====
     property var titleModel: null
     property ListModel listModel: null
-    property alias curPlayingIndex: playlistColumn.playingIndex
-    property alias curSelectingIndex: playlistColumn.itemSeleted_index
-    property alias curHoveredIndex: playlistColumn.itemHovered_index
+    property alias curPlayingIndex: playlistFlickable.playingIndex
+    property alias curSelectingIndex: playlistFlickable.itemSeleted_index
+    property alias curHoveredIndex: playlistFlickable.itemHovered_index
     property bool isMultiSelected: false
 
     property var blurSource: null
@@ -52,6 +52,8 @@ Item {
     property int dragSourceIndex: -1
     property int dragTargetIndex: -1
     property int hoveredGapIndex: -1
+    property bool dragActive: false
+    property bool dragHasMoved: false
 
     property bool mouseInPlaylist: false
 
@@ -241,7 +243,7 @@ Item {
                     cache: false
                     mipmap: true
 
-                    property color colorOverlay: "#2a1a22"
+                    property color colorOverlay: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     layer.enabled: true
                     layer.effect: ColorOverlay {
                         source: multiSelectIcon
@@ -252,11 +254,11 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         onEntered: {
-                            multiSelectIcon.colorOverlay = "#616161";
+                            multiSelectIcon.colorOverlay = Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"];
                             cursorShape = Qt.PointingHandCursor;
                         }
                         onExited: {
-                            multiSelectIcon.colorOverlay = "#2a1a22";
+                            multiSelectIcon.colorOverlay = Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"];
                             cursorShape = Qt.ArrowCursor;
                         }
                         onClicked: {
@@ -299,12 +301,12 @@ Item {
                     mipmap: true
                     antialiasing: true
 
-                    property color colorOverlay: "#2a1a22"
                     source: "qrc:/image/selectAll.png"
                     layer.enabled: true
                     layer.effect: ColorOverlay {
                         source: selectAllIcon
-                        color: multiSelectMenu.checked ? "#ff3a3a" : "#2a1a22"
+                        color: multiSelectMenu.checked ? Oran7Theme.Oran7MusicPlaylistView["textColorBase-7"] :
+                                    Oran7Theme.Oran7MusicPlaylistView["textColorBase-5"]
                     }
 
                     MouseArea {
@@ -327,7 +329,7 @@ Item {
                     anchors.left: selectAllIcon.right
                     anchors.leftMargin: 4
                     anchors.verticalCenter: selectAllIcon.verticalCenter
-                    color: "#2a1a22"
+                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     text: "全选"
                     font.pixelSize: 18
                     font.family: "微软雅黑"
@@ -340,7 +342,7 @@ Item {
                 id: dive1
                 width: parent.width - 24
                 height: 1
-                color: "#2a1a22"
+                color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                 anchors.left: parent.left
                 anchors.top: listTopRow.bottom
                 anchors.topMargin: 6
@@ -370,7 +372,7 @@ Item {
                     text: " # "
                     font.family: "微软雅黑"
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                    //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                 }
@@ -384,7 +386,7 @@ Item {
                     text: "   标题"
                     font.family: "微软雅黑"
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                    //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                     background: Rectangle {
@@ -418,7 +420,7 @@ Item {
 
                     font.family: "微软雅黑"
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                    //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                     background: Rectangle {
@@ -452,7 +454,7 @@ Item {
 
                     font.family: "微软雅黑"
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                    //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: "#2a1a22"
                 }
                 // 时长
@@ -468,7 +470,7 @@ Item {
 
                     font.family: "微软雅黑"
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                    //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                     background: Rectangle {
@@ -496,11 +498,19 @@ Item {
             Rectangle {
                 id: insertLine
                 visible: false
-                z: playlistColumn.z + 1
+                z: playlistFlickable.z + 1
                 y: dive1.y
                 height: 4
-                width: playlistColumn.width - 40
+                width: playlistFlickable.width - 40
                 radius: 2
+
+                Behavior on y {
+                    enabled: insertLine.visible
+                    NumberAnimation {
+                        duration: 80
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 // 渐变效果：两侧淡色，中间原色
                 gradient: Gradient {
@@ -532,18 +542,6 @@ Item {
                         duration: 100
                         easing.type: Easing.OutQuad
                     }
-                }
-
-                property int insertLineYChangeAnimation_fromY: 0
-                property int insertLineYChangeAnimation_toY: 0
-                PropertyAnimation {
-                    id: insertLineYChangeAnimation
-                    target: insertLine
-                    property: "y"
-                    from: insertLine.insertLineYChangeAnimation_fromY
-                    to: insertLine.insertLineYChangeAnimation_toY
-                    duration: 100
-                    easing.type: Easing.OutQuad
                 }
             }
             //<----The dragElementFloatTag Ui
@@ -658,7 +656,7 @@ Item {
                         font.family: "微软雅黑"
                         font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7 < 10 ? 10 :
                                                                                    Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7
-                        Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                        //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     }
                 }
                 Label {
@@ -674,22 +672,84 @@ Item {
                 }
             }
 
-            // ---- 拖动选中位置时，未在当前Flickable页码，自定义拖动至边缘触发--->代码控制滑动效果的Timer
+            // ---- 拖动到边缘时自动滚动 ----
             Timer {
                 id: flickTimer
                 repeat: true
                 running: false
-                interval: 16 //60fps
-                property real flickYValue: 0
+                interval: 16
+
+                property int direction: 0
+                property real speed: 0
+
                 onTriggered: {
-                    playlistFlickable.flick(0, flickTimer.flickYValue);
+                    if (!root.dragActive || direction === 0) {
+                        direction = 0;
+                        speed = 0;
+                        stop();
+                        return;
+                    }
+
+                    var minY = container.minContentY();
+                    var maxY = container.maxContentY();
+
+                    var cy = container.clampValue(playlistFlickable.contentY, minY, maxY);
+                    if (playlistFlickable.contentY !== cy)
+                        playlistFlickable.contentY = cy;
+
+                    if ((direction < 0 && cy <= minY) ||
+                        (direction > 0 && cy >= maxY)) {
+                        direction = 0;
+                        speed = 0;
+                        stop();
+                        container.updateInsertLineOnly(container.dragMouseYInContainer);
+                        return;
+                    }
+
+                    var newY = container.clampValue(cy + direction * speed, minY, maxY);
+
+                    if (Math.abs(newY - cy) < 0.01) {
+                        direction = 0;
+                        speed = 0;
+                        stop();
+                        return;
+                    }
+
+                    playlistFlickable.contentY = newY;
+                    container.updateInsertLineOnly(container.dragMouseYInContainer);
                 }
             }
             //  ----------  drag of algorithm function ----------
 
-            //计算每个项的位置和高度
+            property real dragMouseYInContainer: -1
+
+            // ---- 基础工具函数 ----
+            function clampValue(v, minValue, maxValue) {
+                return Math.max(minValue, Math.min(v, maxValue));
+            }
+
+            function minContentY() {
+                return playlistFlickable.originY;
+            }
+
+            function maxContentY() {
+                return Math.max(
+                    minContentY(),
+                    playlistFlickable.originY + playlistFlickable.contentHeight - playlistFlickable.height
+                );
+            }
+
+            function clampContentY() {
+                var minY = minContentY();
+                var maxY = maxContentY();
+                playlistFlickable.contentY = clampValue(playlistFlickable.contentY, minY, maxY);
+            }
+
+            function _slotHeight() { return root.elementRectangleHeight + root.listColumSpacing }
+
+            // 返回 item 在「内容坐标」中的矩形（不含 contentY 偏移）
             function calculateItemRect(index) {
-                var itemY = index * (root.listColumSpacing + root.elementRectangleHeight) + playlistFlickable.contentY;
+                var itemY = playlistFlickable.topMargin + index * _slotHeight();
                 return {
                     y: itemY,
                     top: itemY,
@@ -698,147 +758,340 @@ Item {
                 };
             }
 
-            // 查找鼠标所在的位置是哪个项之间
+            // 用 ListView.indexAt() 取真实索引，不手算
+            function listLocalPosToIndex(localX, localY) {
+                clampContentY();
+
+                // ListView.indexAt() 使用 content 坐标
+                var contentX = localX;
+                var contentY = localY + playlistFlickable.contentY;
+
+                var idx = playlistFlickable.indexAt(contentX, contentY);
+
+                if (idx < 0 || idx >= root.listModel.count)
+                    return -1;
+
+                return idx;
+            }
+
+            // 判断 (localX, localY) 是否命中拖拽手柄，返回索引或 -1
+            function dragHandleIndexAt(localX, localY) {
+                var left = playlistFlickable.timeLeftMargin + 4;
+                var right = left + 44;
+
+                if (localX < left || localX > right)
+                    return -1;
+
+                return listLocalPosToIndex(localX, localY);
+            }
+
+            // 鼠标位置 → 插入到的间隙索引
+            // ---- 基于 delegate 真实位置的坐标函数 ----
+
+            // 获取 item 顶部在 container 坐标系中的 Y
+            function itemTopYInContainer(index) {
+                var item = playlistFlickable.itemAtIndex(index);
+                if (!item)
+                    return NaN;
+                return item.mapToItem(container, 0, 0).y;
+            }
+
+            // 获取 item 底部在 container 坐标系中的 Y
+            function itemBottomYInContainer(index) {
+                var item = playlistFlickable.itemAtIndex(index);
+                if (!item)
+                    return NaN;
+                return item.mapToItem(container, 0, item.height).y;
+            }
+
+            // gap 索引 → 提示线中心点的 container 坐标
+            function gapCenterYInContainer(gapIndex) {
+                var count = root.listModel.count;
+
+                if (count <= 0)
+                    return playlistFlickable.y;
+
+                gapIndex = clampValue(gapIndex, 0, count);
+
+                var spacing = playlistFlickable.spacing;
+
+                if (gapIndex === 0) {
+                    var firstTop = itemTopYInContainer(0);
+                    if (!isNaN(firstTop))
+                        return firstTop - spacing / 2;
+                }
+
+                if (gapIndex === count) {
+                    var lastBottom = itemBottomYInContainer(count - 1);
+                    if (!isNaN(lastBottom))
+                        return lastBottom + Math.max(spacing / 2, insertLine.height + 4);
+                }
+
+                var nextTop = itemTopYInContainer(gapIndex);
+                if (!isNaN(nextTop))
+                    return nextTop - spacing / 2;
+
+                var prevBottom = itemBottomYInContainer(gapIndex - 1);
+                if (!isNaN(prevBottom))
+                    return prevBottom + spacing / 2;
+
+                // 兜底：itemAtIndex 拿不到时用旧公式
+                var fallbackContentY = playlistFlickable.topMargin + gapIndex * _slotHeight();
+                return playlistFlickable.y + fallbackContentY - playlistFlickable.contentY;
+            }
+
+            // 鼠标位置 → 插入到的间隙索引（基于真实 delegate 位置）
             function findHoveredGap(mouseY) {
                 var count = root.listModel.count;
-                if (count === 0)
+                if (count <= 0)
                     return 0;
 
-                var relativeY = mouseY - playlistFlickable.y + playlistFlickable.contentY;
+                clampContentY();
 
-                // 计算每个"槽位"（项+间距）的高度
-                var slotHeight = root.elementRectangleHeight + root.listColumSpacing;
+                var localY = mouseY - playlistFlickable.y;
+                var contentY = localY + playlistFlickable.contentY;
 
-                // 计算应该在哪一个槽位
-                var slotIndex = Math.floor(relativeY / slotHeight);
-                //过半偏移检测标准
-                var offsetInSlot = relativeY % slotHeight;
+                // 先让 ListView 自己判断鼠标在哪个 delegate 上
+                var idx = playlistFlickable.indexAt(playlistFlickable.width / 2, contentY);
 
-                // 检查边界
-                if (slotIndex < 0)
-                    return 0;
-                else if (slotIndex >= count) {
-                    // 检查是否在最后一项之后
-                    if (relativeY > calculateItemRect(count - 1).bottom)
-                        return root.listModel.count;
-                        // 在最后一项之后
-                    else
-                        return count;
+                if (idx >= 0 && idx < count) {
+                    var item = playlistFlickable.itemAtIndex(idx);
+                    if (item) {
+                        var topY = item.mapToItem(container, 0, 0).y;
+                        var centerY = topY + item.height / 2;
+                        return mouseY < centerY ? idx : idx + 1;
+                    }
+                }
+
+                // 鼠标在 spacing 空隙里时，indexAt 可能返回 -1
+                // 用可见 delegate 的边界找最近 gap
+                var bestGap = root.dragTargetIndex >= 0 ? root.dragTargetIndex : 0;
+                var bestDistance = 999999;
+
+                for (var i = 0; i < count; i++) {
+                    var visibleItem = playlistFlickable.itemAtIndex(i);
+                    if (!visibleItem)
+                        continue;
+
+                    var itemTop = visibleItem.mapToItem(container, 0, 0).y;
+                    var itemBottom = itemTop + visibleItem.height;
+
+                    var beforeGapY = itemTop - playlistFlickable.spacing / 2;
+                    var afterGapY = itemBottom + playlistFlickable.spacing / 2;
+
+                    var beforeDistance = Math.abs(mouseY - beforeGapY);
+                    if (beforeDistance < bestDistance) {
+                        bestDistance = beforeDistance;
+                        bestGap = i;
+                    }
+
+                    var afterDistance = Math.abs(mouseY - afterGapY);
+                    if (afterDistance < bestDistance) {
+                        bestDistance = afterDistance;
+                        bestGap = i + 1;
+                    }
+                }
+
+                return clampValue(bestGap, 0, count);
+            }
+
+            // 内容坐标 → 容器坐标（仅作兜底用）
+            function contentYToContainerY(contentYValue) {
+                return playlistFlickable.y + contentYValue - playlistFlickable.contentY;
+            }
+
+            // 设置浮动标签位置（直接定位，不用动画）
+            function setFloatTagByMouseY(mouseY) {
+                dragElementFloatTag_ParallelAnimation.stop();
+                var minY = playlistFlickable.y;
+                var maxY = playlistFlickable.y + playlistFlickable.height - dragElementFloatTag.height;
+                dragElementFloatTag.y = clampValue(mouseY - dragElementFloatTag.height / 2, minY, maxY);
+            }
+
+            // 自动滚动控制
+            function updateAutoScroll(mouseY) {
+                if (!root.dragActive) {
+                    flickTimer.direction = 0;
+                    flickTimer.speed = 0;
+                    flickTimer.stop();
+                    return;
+                }
+
+                // 不要在这里 clampContentY()，否则会把 contentY 提前钳到错误的 maxY
+
+                var minY = minContentY();
+                var maxY = maxContentY();
+
+                if (maxY <= minY) {
+                    flickTimer.direction = 0;
+                    flickTimer.speed = 0;
+                    flickTimer.stop();
+                    return;
+                }
+
+                var relY = mouseY - playlistFlickable.y;
+                var edge = 48;
+                var minSpeed = 1.5;
+                var maxSpeed = 7.0;
+                var cy = playlistFlickable.contentY;
+
+                if (relY >= 0 && relY < edge && cy > minY) {
+                    var tTop = (edge - relY) / edge;
+                    flickTimer.direction = -1;
+                    flickTimer.speed = minSpeed + tTop * (maxSpeed - minSpeed);
+                    if (!flickTimer.running)
+                        flickTimer.start();
+                } else if (relY <= playlistFlickable.height &&
+                           relY > playlistFlickable.height - edge &&
+                           cy < maxY) {
+                    var tBottom = (relY - (playlistFlickable.height - edge)) / edge;
+                    flickTimer.direction = 1;
+                    flickTimer.speed = minSpeed + tBottom * (maxSpeed - minSpeed);
+                    if (!flickTimer.running)
+                        flickTimer.start();
                 } else {
-                    // 在槽位内部，根据位置决定插入点
-                    if (offsetInSlot <= root.elementRectangleHeight / 2)// 在上半部分
-                        return slotIndex;
-                    else
-                        // 在下半部分
-                        return slotIndex + 1;
+                    flickTimer.direction = 0;
+                    flickTimer.speed = 0;
+                    flickTimer.stop();
                 }
             }
 
-            //填充渲染insertLine <<----主要接口
-            function renderInsertLine(mouseY) {
-                //判断是否越界 , 越上界--->向下滑动 ; 越下界--->向上滑动 ；；；深度边界检测在Flickable中的onContentYChanged:
-                //console.log("contentY:",musicListFlickables.contentY)
-                //console.log("maxContentY:",musicListFlickables.maxContentY - 1.0)
-                if (mouseY - playlistFlickable.y <= 0 && !playlistFlickable.contentY_atTop) {
-                    flickTimer.flickYValue = (root.elementRectangleHeight + root.listColumSpacing) * 10;
-                    flickTimer.restart();
-                } else if (mouseY - playlistFlickable.y > playlistFlickable.height && !playlistFlickable.contentY_atBottom) {
-                    flickTimer.flickYValue = -(root.elementRectangleHeight + root.listColumSpacing) * 10;
-                    flickTimer.restart();
-                } else
-                    flickTimer.stop();
-
-                root.dragTargetIndex = findHoveredGap(mouseY);
-                //console.log("dragTargetIndex:", root.dragTargetIndex)
-
-                var lineY;
-                if (root.dragTargetIndex === 0) {
-                    // 在第一项之前
-                    lineY = playlistFlickable.y;
-                } else if (root.dragTargetIndex === root.count) {
-                    // 在最后一项之后
-                    var lastItemRect = calculateItemRect(root.dragTargetIndex - 1);
-                    lineY = playlistFlickable.y + (lastItemRect.bottom - playlistFlickable.contentY * 2);
-                } else {
-                    // 在两项之间
-                    var prevItemRect = calculateItemRect(root.dragTargetIndex - 1);
-                    lineY = playlistFlickable.y + (prevItemRect.bottom - playlistFlickable.contentY * 2); //注意：*2
-                }
-                insertLine.visible = false;//reset
-                insertLine.opacity = 0;
-
-                if (lineY <= dive1.y)
+            // 只更新提示线位置，不触发自动滚动
+            function updateInsertLineOnly(mouseY) {
+                if (!root.dragActive || mouseY < 0)
                     return;
 
-                insertLine.insertLineYChangeAnimation_fromY = insertLine.y;
-                insertLine.insertLineYChangeAnimation_toY = lineY;
-                insertLineYChangeAnimation.restart();
+                root.dragTargetIndex = findHoveredGap(mouseY);
+
+                var count = root.listModel.count;
+                root.dragTargetIndex = clampValue(root.dragTargetIndex, 0, count);
+
+                var centerY = gapCenterYInContainer(root.dragTargetIndex);
+
+                // clamp 提示线中心点，不是 top
+                var minCenterY = playlistFlickable.y + insertLine.height / 2;
+                var maxCenterY = playlistFlickable.y + playlistFlickable.height - insertLine.height / 2;
+                centerY = clampValue(centerY, minCenterY, maxCenterY);
 
                 insertLine.x = playlistFlickable.x + 10;
-
+                insertLine.y = centerY - insertLine.height / 2;
                 insertLine.visible = true;
                 insertLine.opacity = 1;
+            }
 
-                //console.log("insertLine.y:", lineY, "contentY:", musicListFlickables.contentY)
+            // 渲染insertLine <<----主接口（可以启动自动滚动）
+            function renderInsertLine(mouseY) {
+                if (!root.dragActive || mouseY < 0)
+                    return;
+
+                dragMouseYInContainer = mouseY;
+                setFloatTagByMouseY(mouseY);
+                updateAutoScroll(mouseY);
+                updateInsertLineOnly(mouseY);
+            }
+
+            // 开始拖拽
+            function beginDrag(sourceIndex, mouseYInContainer) {
+                if (sourceIndex < 0 || sourceIndex >= root.listModel.count)
+                    return;
+
+                playlistFlickable.cancelFlick();
+                playlistFlickable.interactive = false;
+                clampContentY();
+
+                var item = root.listModel.get(sourceIndex);
+
+                dragElementFloatTag.musicTagIconImageSource = item.icon;
+                dragElementFloatTag.musicTagName = item.music_name;
+                dragElementFloatTag.musicTagArtist = item.music_artist;
+
+                root.dragSourceIndex = sourceIndex;
+                root.dragTargetIndex = sourceIndex;
+                root.dragActive = true;
+                root.dragHasMoved = false;
+
+                dragMouseYInContainer = mouseYInContainer;
+
+                root.show_dragElement_floatTag = true;
+
+                dragElementFloatTag_ParallelAnimation.stop();
+
+                dragElementFloatTag.dragElementFloatTag_OpacityChangeAnimation_fromValue = 0;
+                dragElementFloatTag.dragElementFloatTag_OpacityChangeAnimation_toValue = 1;
+                dragElementFloatTag_OpacityChangeAnimation.restart();
+
+                renderInsertLine(mouseYInContainer);
+            }
+
+            // 结束拖拽
+            function endDrag(commitReorder) {
+                flickTimer.direction = 0;
+                flickTimer.speed = 0;
+                flickTimer.stop();
+
+                playlistFlickable.cancelFlick();
+                playlistFlickable.interactive = true;
+                clampContentY();
+
+                var shouldReorder =
+                    commitReorder &&
+                    root.dragHasMoved &&
+                    root.dragSourceIndex >= 0 &&
+                    root.dragTargetIndex >= 0 &&
+                    !(root.dragTargetIndex === root.dragSourceIndex ||
+                      root.dragTargetIndex === root.dragSourceIndex + 1);
+
+                root.show_dragElement_floatTag = false;
+                insertLine.visible = false;
+
+                root.dragActive = false;
+                root.dragHasMoved = false;
+                dragMouseYInContainer = -1;
+
+                if (shouldReorder)
+                    reOrder();
+
+                root.dragSourceIndex = -1;
+                root.dragTargetIndex = -1;
             }
 
             //重排序reOrder <<---主要接口
+            // 直接在 ListModel 上原地 move，不清空不重建
             function reOrder() {
-                var flickable_orignContentY = playlistFlickable.contentY;
+                var fromIdx = root.dragSourceIndex;
+                var toIdx = root.dragTargetIndex;
+
+                // move() 的 to 是"移动后应到达的索引"
+                // 向下拖：item 被移走后，目标位置会前移一位，所以 to = toIdx - 1
+                // 向上拖：目标位置不受影响，to = toIdx
+                var insertIdx;
+
+                if (fromIdx < toIdx) {
+                    // 向下拖：先移除 fromIdx，后面元素前移，所以插入到 toIdx - 1
+                    insertIdx = toIdx - 1;
+                } else {
+                    // 向上拖：直接插入到 toIdx
+                    insertIdx = toIdx;
+                }
+
+                // ListModel.move(from, to, 1) — 原地移动单条
+                root.listModel.move(fromIdx, insertIdx, 1);
+
+                // 通知后台新的文件顺序
                 var listCount = root.listModel.count;
-                // 使用 JSON 创建深拷贝
-                var items = [];
-                for (var i = 0; i < listCount; i++) {
-                    var original = root.listModel.get(i);
-                    var copy = JSON.parse(JSON.stringify(original));
-                    items.push(copy);
-                }
-
-                // for(i=0 ;i<listCount;i++)
-                // {
-                //     items.push(root.listModel.get(i ))
-                // }
-
-                if (root.dragSourceIndex < root.dragTargetIndex - 1)
-                    moveItem(items, root.dragSourceIndex, root.dragTargetIndex - 1 < 0 ? 0 : root.dragTargetIndex - 1);
-                else if (root.dragSourceIndex > root.dragTargetIndex)
-                    moveItem(items, root.dragSourceIndex, root.dragTargetIndex);
-
                 var itemsPath = [];
-                for (i = 0; i < listCount; i++) {
-                    itemsPath.push(items[i].filepath);
+                for (var i = 0; i < listCount; i++) {
+                    itemsPath.push(root.listModel.get(i).filepath);
                 }
+                Client.reOrder_localMusicList(itemsPath);
 
-                Client.reOrder_localMusicList(itemsPath);//emit signal
-
-                root.listModel.clear();
-                for (i = 0; i < listCount; i++) {
-                    root.listModel.clear();
-                    for (i = 0; i < listCount; i++) {
-                        root.listModel.append({
-                            icon: items[i].icon,
-                            music_name: items[i].music_name,
-                            music_artist: items[i].music_artist,
-                            music_album: items[i].music_album,
-                            timesize: items[i].timesize,
-                            filepath: items[i].filepath
-                        });
-                    }
+                // 强制触发可视区域所有项的 fadeIn 动画
+                playlistFlickable.forceLayout();
+                for (var vi = 0; vi < listCount; vi++) {
+                    var visibleItem = playlistFlickable.itemAtIndex(vi);
+                    if (visibleItem)
+                        visibleItem.animateIn();
                 }
-                playlistFlickable.animateRecentItems(0);//started by index of "0"
-                //reset back
-                playlistFlickable.contentY = flickable_orignContentY;
-            }
-            // function--->用 splice 实现元素移动
-            function moveItem(array, fromIndex, toIndex) {
-                if (fromIndex === toIndex)
-                    return array;
-                // 删除原位置的元素
-                var element = array[fromIndex];
-                array.splice(fromIndex, 1);
-                // 插入到新位置
-                array.splice(toIndex, 0, element);
-                return array;
             }
 
             //-----------------------滑动列表右下的手动添加导入本地文件"+"-----------------------//
@@ -936,15 +1189,42 @@ Item {
             }
 
             // ======== main of playlistFlickable ========
-            Flickable {
+            ListView {
                 id: playlistFlickable
-                contentHeight: root.listModel ? root.listModel.count * (root.elementRectangleHeight + root.listColumSpacing) + (root.elementRectangleHeight + root.listColumSpacing) : 0
+                model: root.listModel
+
+                boundsBehavior: Flickable.StopAtBounds
+                reuseItems: false
+
+                spacing: root.listColumSpacing
+                topMargin: root.listColumSpacing
+
+                footer: Item {
+                    width: playlistFlickable.width
+                    height: root.elementRectangleHeight + root.listColumSpacing * 2
+                }
+
+                cacheBuffer: root.elementRectangleHeight * 3
                 anchors.top: dive1.bottom
                 anchors.topMargin: 2
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 clip: true
+
+                property int playingIndex: -1 // '-1' of no item isPlaying ,what is paused statue
+                property int itemSeleted_index: -1
+                property int itemHovered_index: -1
+
+                property int indexWidth: 30
+                property int titleWidth: root.titleTopLabelWidth
+                property int albumWidth: root.albumTopLabelWidth
+                property int timeWidth: root.timeSizeTopLabelWidth
+
+                property int indexLeftMargin: 10
+                property int titleLeftMargin: 45
+                property int albumLeftMargin: titleLeftMargin + titleWidth + 10
+                property int timeLeftMargin: albumLeftMargin + albumWidth + 20
 
                 ScrollBar.vertical: ScrollBar {
                     anchors.right: parent.right
@@ -954,21 +1234,22 @@ Item {
 
                 // 对外接口--->触发指定元素的动画
                 function animateItem(index) {
-                    var item = playListRepeater.itemAt(index);
+                    root.listModel.setProperty(index, "needsAnimateIn", true);
+                    var item = playlistFlickable.itemAtIndex(index);
                     if (item) {
-                        //console.log(index)
+                        item.needsAnimateIn = true;
                         item.animateIn();
-                        return true;
-                    } else {
-                        console.log("Item at index", index, "is not created yet");
-                        return false;
                     }
                 }
                 // 对外接口--->触发所有最近添加的元素的动画
                 function animateRecentItems(startIndex) {
-                    //console.log(startIndex)
                     for (var i = startIndex; i < root.listModel.count; i++) {
-                        playlistFlickable.animateItem(i);
+                        root.listModel.setProperty(i, "needsAnimateIn", true);
+                        var item = playlistFlickable.itemAtIndex(i);
+                        if (item) {
+                            item.needsAnimateIn = true;
+                            item.animateIn();
+                        }
                     }
                 }
 
@@ -976,65 +1257,33 @@ Item {
                 property bool contentY_atTop: true
                 property bool contentY_atBottom: false
                 onContentYChanged: {
-                    var maxContentY = contentHeight - height;
+                    var minY = container.minContentY();
+                    var maxY = container.maxContentY();
                     var tolerance = 1.0;
-                    playlistFlickable.contentY_atBottom = contentY >= (maxContentY - tolerance);
-                    playlistFlickable.contentY_atTop = contentY <= 0;
-
-                    if (playlistFlickable.contentY_atBottom || playlistFlickable.contentY_atTop) {
-                        flickTimer.stop();
-                    }
+                    playlistFlickable.contentY_atBottom = contentY >= (maxY - tolerance);
+                    playlistFlickable.contentY_atTop = contentY <= (minY + tolerance);
                 }
 
                 HoverHandler {
                     id: playlistHoverHandler
                     acceptedDevices: PointerDevice.Mouse
-                    // HoverHandler 不会拦截事件，也不会被子元素影响
                     onHoveredChanged: {
                         root.mouseInPlaylist = playlistHoverHandler.hovered;
                         if (!playlistHoverHandler.hovered) {
-                            playlistColumn.itemHovered_index = -1;
+                            playlistFlickable.itemHovered_index = -1;
                         }
                     }
                 }
 
-                Column {
-                    id: playlistColumn
-                    anchors.fill: parent
-                    anchors.topMargin: root.listColumSpacing
-                    spacing: root.listColumSpacing
-
-                    property int playingIndex: -1 // '-1' of no item isPlaying ,what is paused statue
-                    property int itemSeleted_index: -1
-                    property int itemHovered_index: -1
-
-                    // 定义统一的列宽
-                    property int indexWidth: 30
-                    property int titleWidth: root.titleTopLabelWidth
-                    property int albumWidth: root.albumTopLabelWidth
-                    property int timeWidth: root.timeSizeTopLabelWidth
-
-                    // 定义统一的列位置
-                    property int indexLeftMargin: 10
-                    property int titleLeftMargin: 45
-                    property int albumLeftMargin: titleLeftMargin + titleWidth + 10
-                    property int timeLeftMargin: albumLeftMargin + albumWidth + 20
-
-                    function opacityAnimate_fromIndex(index) {
-                    }
-
-                    Repeater {
-                        id: playListRepeater
-                        model: root.listModel
-                        delegate: Rectangle {
+                delegate: Rectangle {
                             id: playlistItem
 
                             height: root.elementRectangleHeight
-                            width: playlistColumn.width - 20
+                            width: playlistFlickable.width - 20
                             radius: 10
                             color: root.isMultiSelected ? "transparent" :
-                                                          playlistItem.itemIsSelected ? "#8Efef2e8" :
-                                                                                        playlistItem.itemIsHovered && root.mouseInPlaylist ? "#8EBEBEBE" : "transparent"
+                                            playlistItem.itemIsSelected ? "#8Efef2e8" :
+                                                    playlistItem.itemIsHovered && root.mouseInPlaylist ? "#8EBEBEBE" : "transparent"
 
                             Behavior on color {PropertyAnimation {duration: 500 ;easing.type: Easing.OutCubic}}
 
@@ -1045,23 +1294,27 @@ Item {
                             property string itemAlbum: model.music_album
                             property string itemDuration: model.timesize
                             property string itemFilepath: model.filepath
+                            property bool needsAnimateIn: model.needsAnimateIn === true
 
-                            property bool itemIsSelected: model.index === playlistColumn.itemSeleted_index //bind
-                            property bool itemIsHovered: model.index === playlistColumn.itemHovered_index //bind
-                            property bool itemIsPlaying: model.index === playlistColumn.playingIndex //bind
+                            property bool itemIsSelected: model.index === playlistFlickable.itemSeleted_index //bind
+                            property bool itemIsHovered: model.index === playlistFlickable.itemHovered_index //bind
+                            property bool itemIsPlaying: model.index === playlistFlickable.playingIndex //bind
 
                             // --- item opacity Animation ---
-                            property bool animationEnabled: true// 控制动画的状态
+                            property bool animationEnabled: true
                             property bool isAnimating: false
-                            opacity: /*musicElementRectangle.animationEnabled === true ? 0 : */ 1// 初始透明度
-                            function animateIn()// --->触发opacity Animation动画对外接口
-                            {
+                            opacity: playlistItem.needsAnimateIn ? 0 : 1
+                            Component.onCompleted: {
+                                if (playlistItem.needsAnimateIn)
+                                    playlistItem.animateIn();
+                            }
+                            function animateIn() {
                                 if (playlistItem.animationEnabled && !playlistItem.isAnimating) {
                                     playlistItem.isAnimating = true;
                                     fadeInAnimation.start();
                                 }
                             }
-                            SequentialAnimation {// 动画行为
+                            SequentialAnimation {
                                 id: fadeInAnimation
                                 NumberAnimation {
                                     target: playlistItem
@@ -1072,7 +1325,10 @@ Item {
                                     easing.type: Easing.OutCubic
                                 }
                                 ScriptAction {
-                                    script: playlistItem.isAnimating = false
+                                    script: {
+                                        playlistItem.isAnimating = false;
+                                        playlistItem.needsAnimateIn = false;
+                                    }
                                 }
                             }
                             //-----------------------------  Connections -----------------------------//
@@ -1092,7 +1348,7 @@ Item {
                                 id: checkBox
                                 width: 20
                                 anchors.left: parent.left
-                                anchors.leftMargin: playlistColumn.indexLeftMargin
+                                anchors.leftMargin: playlistFlickable.indexLeftMargin
                                 anchors.verticalCenter: parent.verticalCenter
                                 z: 2
                                 labelTextEnable: false
@@ -1119,13 +1375,12 @@ Item {
                             // 序号/播放图标
                             Rectangle {
                                 id: indexRect
-                                width: playlistColumn.indexWidth
+                                width: playlistFlickable.indexWidth
                                 height: width
                                 anchors.left: parent.left
-                                anchors.leftMargin: playlistColumn.indexLeftMargin
+                                anchors.leftMargin: playlistFlickable.indexLeftMargin
                                 anchors.verticalCenter: parent.verticalCenter
                                 color: "transparent"
-
                                 Label {
                                     id: indexLabel
                                     visible: !root.isMultiSelected && (!playlistItem.itemIsHovered || !root.mouseInPlaylist) && !playlistItem.itemIsSelected
@@ -1135,7 +1390,7 @@ Item {
                                     text: model.index < 9 ? "0" + (model.index + 1) : (model.index + 1)
                                     font.family: "微软雅黑"
                                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                    //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                     color:Oran7Theme.Oran7MusicPlaylistView["textColorBase-5"]
                                 }
 
@@ -1153,7 +1408,7 @@ Item {
                                     layer.enabled: true
                                     layer.effect: ColorOverlay {
                                         source: playIcon
-                                        color: "#FF8F6E"
+                                        color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                                     }
                                 }
                                 Oran7WaveBarChart {
@@ -1165,6 +1420,7 @@ Item {
                                     visible: !root.isMultiSelected&& !playlistItem.itemIsHovered && playlistItem.itemIsSelected
 
                                     animationEnabled: playlistItem.itemIsPlaying
+                                    waveColor: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                                 }
 
                                 MouseArea {
@@ -1211,7 +1467,7 @@ Item {
                                     color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                                     Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                                    Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                    //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                     font.family: "微软雅黑"
                                     width: parent.width - 100
                                 }
@@ -1233,19 +1489,19 @@ Item {
                                         font.family: "微软雅黑"
                                         font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7 < 10 ? 10 :
                                                                                     Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7
-                                        Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                        //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                         Label {
                                             id: artistLabel
                                             text: playlistItem.itemArtist
                                             anchors.left: parent.right
                                             anchors.leftMargin: 4
                                             anchors.bottom: parent.bottom
-                                            width: playlistColumn.titleWidth - typeRect.width - coverRect.width - 7
+                                            width: playlistFlickable.titleWidth - typeRect.width - coverRect.width - 7
                                             clip: true
                                             font.family: "微软雅黑"
                                             font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5 < 12 ? 12 :
                                                                                     Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5
-                                            Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                            //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                             color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                                             Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                                         }
@@ -1257,13 +1513,13 @@ Item {
                             Label {
                                 id: albumLabel
                                 anchors.left: parent.left
-                                anchors.leftMargin: playlistColumn.albumLeftMargin
+                                anchors.leftMargin: playlistFlickable.albumLeftMargin
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 200
                                 text: itemAlbum
                                 font.family: "微软雅黑"
                                 font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                                Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                 color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"]
                                 Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                             }
@@ -1272,98 +1528,36 @@ Item {
                             Label {
                                 id: durationLabel
                                 anchors.left: parent.left
-                                anchors.leftMargin: playlistColumn.timeLeftMargin + 4
+                                anchors.leftMargin: playlistFlickable.timeLeftMargin + 4
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 50
                                 text: formatDuration(itemDuration)
                                 font.family: "微软雅黑"
                                 font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                                Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
+                                //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                 color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-7"]
                                 Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
                                 visible: !root.isMultiSelected
                             }
 
-                            // 拖拽图标
+                            // 拖拽图标（仅显示，不处理事件）
                             Image {
                                 id: dragIcon
                                 anchors.left: parent.left
-                                anchors.leftMargin: playlistColumn.timeLeftMargin + 4
+                                anchors.leftMargin: playlistFlickable.timeLeftMargin + 4
                                 anchors.verticalCenter: parent.verticalCenter
                                 sourceSize.width: 40
                                 sourceSize.height: 40
                                 source: "qrc:/image/drag.png"
                                 visible: root.isMultiSelected && root.allowDragReorder
 
-                                property bool item_isDraging: false
+                                property bool item_isDraging: root.dragActive && root.dragSourceIndex === playlistItem.itemIndex
 
                                 layer.enabled: true
                                 layer.effect: ColorOverlay {
                                     source: dragIcon
                                     color: dragIcon.item_isDraging ? Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"] :
                                                                      Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    property bool hasMoved: false
-                                    onPositionChanged: mouse => {
-                                        var posInParent = mapToItem(root, mouse.x, mouse.y);
-
-                                        // console.log("父控件坐标:", posInParent.x, posInParent.y)
-                                        // console.log("全局坐标:", mapToGlobal(mouse.x, mouse.y))
-                                        // //相对坐标
-                                        // var relativeX = mouse.x/* + dragImage.x*/
-                                        // var relativeY = mouse.y/* + dragImage.y*/
-                                        // console.log("相对坐标:", relativeX, relativeY)
-
-                                        //initilization dragElementFloatTag_ParallelAnimation-->Value
-                                        dragElementFloatTag.dragElementFloatTag_YChangeAmination_fromY = dragElementFloatTag.y;
-                                        dragElementFloatTag.dragElementFloatTag_YChangeAmination_toY = posInParent.y - dragElementFloatTag.height / 2;
-                                        //dragElementFloatTag_ParallelAnimation --->restart
-                                        dragElementFloatTag_ParallelAnimation.restart();
-
-                                        //渲染填充GopLine
-                                        container.renderInsertLine(dragElementFloatTag.y);
-                                        hasMoved = true;
-                                    }
-                                    onPressed: mouse => {
-                                        dragElementFloatTag.musicTagIconImageSource = icon;
-                                        dragElementFloatTag.musicTagName = music_name;
-                                        dragElementFloatTag.musicTagArtist = music_artist;
-
-                                        playlistFlickable.interactive = false;
-                                        root.show_dragElement_floatTag = true;
-
-                                        var posInParent = mapToItem(root, mouse.x, mouse.y);
-                                        dragElementFloatTag.y = posInParent.y - dragElementFloatTag.height / 2;
-                                        insertLine.y = dragElementFloatTag.y;
-                                        //initilization dragElementFloatTag_OpacityChangeAnimation---> Value
-                                        dragElementFloatTag.dragElementFloatTag_OpacityChangeAnimation_fromValue = 0;
-                                        dragElementFloatTag.dragElementFloatTag_OpacityChangeAnimation_toValue = 1;
-                                        //dragElementFloatTag_OpacityChangeAnimation--->restart
-                                        dragElementFloatTag_OpacityChangeAnimation.restart();
-
-                                        dragIcon.item_isDraging = true;
-                                        root.dragSourceIndex = playlistItem.itemIndex;
-                                    }
-                                    onReleased: {
-                                        playlistFlickable.interactive = true;
-                                        root.show_dragElement_floatTag = false;
-                                        dragIcon.item_isDraging = false;
-
-                                        insertLine.visible = false;
-                                        //insertLine.y=dive1.y
-
-                                        //makesure flickTimer stop
-                                        flickTimer.stop();
-
-                                        //reOrder
-                                        if (!(root.dragTargetIndex === root.dragSourceIndex || root.dragTargetIndex === root.dragSourceIndex + 1) && hasMoved) {
-                                            container.reOrder();
-                                            hasMoved = false;
-                                        }
-                                    }
                                 }
                             }
                             // 鼠标交互
@@ -1399,7 +1593,7 @@ Item {
 
                                 onEntered: {
                                     if (!root.isMultiSelected) {
-                                        playlistColumn.itemHovered_index = playlistItem.itemIndex;
+                                        playlistFlickable.itemHovered_index = playlistItem.itemIndex;
                                     }
                                 }
                             }
@@ -1411,7 +1605,61 @@ Item {
                                 return Math.floor(minutes / 10) + (minutes % 10) + ":" + Math.floor(secs / 10) + (secs % 10);
                             }
                         }
+            }
+
+            // ===== 统一拖拽控制器（在 ListView 外部，不会因 delegate 回收而丢失） =====
+            MouseArea {
+                id: dragController
+
+                anchors.fill: parent
+                z: playlistFlickable.z + 20
+
+                enabled: root.isMultiSelected && root.allowDragReorder
+                hoverEnabled: false
+                preventStealing: true
+                acceptedButtons: Qt.LeftButton
+
+                property bool pressedOnDragHandle: false
+
+                onPressed: mouse => {
+                    pressedOnDragHandle = false;
+
+                    // 坐标映射到 ListView 内部再判断命中
+                    var posInList = mapToItem(playlistFlickable, mouse.x, mouse.y);
+                    var sourceIndex = container.dragHandleIndexAt(posInList.x, posInList.y);
+                    if (sourceIndex < 0) {
+                        mouse.accepted = false;
+                        return;
                     }
+
+                    mouse.accepted = true;
+                    pressedOnDragHandle = true;
+
+                    var posInContainer = mapToItem(container, mouse.x, mouse.y);
+                    container.beginDrag(sourceIndex, posInContainer.y);
+                }
+
+                onPositionChanged: mouse => {
+                    if (!pressedOnDragHandle || !root.dragActive)
+                        return;
+
+                    var posInContainer = mapToItem(container, mouse.x, mouse.y);
+
+                    root.dragHasMoved = true;
+                    container.renderInsertLine(posInContainer.y);
+                }
+
+                onReleased: {
+                    if (!pressedOnDragHandle)
+                        return;
+
+                    pressedOnDragHandle = false;
+                    container.endDrag(true);
+                }
+
+                onCanceled: {
+                    pressedOnDragHandle = false;
+                    container.endDrag(false);
                 }
             }
         }

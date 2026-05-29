@@ -16,49 +16,66 @@ import Oran7UI.Impl
 
 ApplicationWindow {
     id: root
-    visible: Oran7Theme.Oran7MainGUI.OpenSettingWin
-    flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    visible: false
+    flags: Qt.Window | Qt.FramelessWindowHint
     width: Screen.width
-    height: Screen.height - root.taskbarHeight // 动态减去任务栏高度
-    color: "transparent" // 全透明背景
+    height: Screen.height - root.taskbarHeight
+    x: 0
+    y: 0
+    color: "transparent"
+    objectName: "__Oran7SettingsContainerWindow__"
 
     property real taskbarHeight: 50
-    property bool isAnimating: false // 动画进行中锁，防止快速操作导致状态不一致
+    property bool isAnimating: false
+    property bool requestedVisible: Oran7Theme.Oran7MainGUI.OpenSettingWin
+    property bool enable__dwmBlur__: true
 
-    // 当设置窗口需要恢复主窗口焦点时发出
     signal restoreMainWindowFocusRequested
 
+    Oran7WindowAgent {
+        id: __windowAgent
+    }
 
     Component.onCompleted: {
-        detectTaskbarHeight();
-        //groupChangeTimer.start();
-        //textureAnimationTimer.start();
+        detectTaskbarHeight()
 
-        // 预加载所有设置窗口
-        preloadTimer.start();
+        //setup 只做一次，并且在 QML 组件完成后做
+        __windowAgent.setup(root)
+        root.color = "transparent"
+
+        preloadTimer.start()
+
+        if (requestedVisible)
+            openWindow()
     }
 
     onScreenChanged: {
-        detectTaskbarHeight();
+        detectTaskbarHeight()
     }
 
-    function detectTaskbarHeight() {
-        root.taskbarHeight = 50;
+    onRequestedVisibleChanged: {
+        if (requestedVisible)
+            openWindow()
+        else
+            closeWindow()
     }
 
-    onVisibleChanged: {
-        if (!visible)
-            restoreMainWindowFocus()
-    }
-
-    // background: Oran7BlurCard{
-    //     anchors.fill: parent
-    //     blurEnabled: true
-    //     borderWidth: 1
-    //     visible: true
-    //     themeColor: "#24FFFFFF"
-    //     blurSource: root
+    // onEnable__dwmBlur__Changed: {
+    //     if(root.enable__dwmBlur__){
+    //         __blurTimer.stop()
+    //          __windowAgent.setWindowAttribute("dwm-blur", false)
+    //     }
     // }
+
+    Timer {
+        id: __blurTimer
+        interval: 16
+        repeat: false
+        onTriggered: {
+            root.color = "transparent"
+            __windowAgent.setWindowAttribute("dwm-blur", true)
+        }
+    }
 
     Item {
         id: content
@@ -118,8 +135,6 @@ ApplicationWindow {
             id: mainUiSettingComponent
             Oran7MainUiSettingWindow {
                 winIndex: 0
-                Behavior on x { enabled: !isAnimating; NumberAnimation { duration: 50 } }
-                Behavior on y { enabled: !isAnimating; NumberAnimation { duration: 50 } }
             }
         }
 
@@ -134,8 +149,6 @@ ApplicationWindow {
             id: mediaPlayerSettingComponent
             Oran7MediaPlayerSettingWindow {
                 winIndex: 1
-                Behavior on x { enabled: !isAnimating; NumberAnimation { duration: 50 } }
-                Behavior on y { enabled: !isAnimating; NumberAnimation { duration: 50 } }
             }
         }
 
@@ -150,8 +163,6 @@ ApplicationWindow {
             id: screenCaptureSettingComponent
             Oran7ScreenCaptureSettingWindow {
                 winIndex: 2
-                Behavior on x { enabled: !isAnimating; NumberAnimation { duration: 50 } }
-                Behavior on y { enabled: !isAnimating; NumberAnimation { duration: 50 } }
             }
         }
 
@@ -166,8 +177,6 @@ ApplicationWindow {
             id: musicPlayListSettingComponent
             Oran7MusicPlayListSettingWindow {
                 winIndex: 3
-                Behavior on x { enabled: !isAnimating; NumberAnimation { duration: 50 } }
-                Behavior on y { enabled: !isAnimating; NumberAnimation { duration: 50 } }
             }
         }
 
@@ -218,6 +227,39 @@ ApplicationWindow {
     }
 
     // --- functions ---
+    function detectTaskbarHeight() {
+        root.taskbarHeight = 50
+    }
+
+    function openWindow() {
+        if(root.enable__dwmBlur__)
+            __blurTimer.stop()
+
+        // 先清一次，避免第二次打开 true -> true 没有真正重新应用
+        if(root.enable__dwmBlur__)
+             __windowAgent.setWindowAttribute("dwm-blur", false)
+
+        if (root.visibility !== Window.Maximized)
+            root.showMaximized()
+        else
+            root.visible = true
+
+        if(root.enable__dwmBlur__)
+            __blurTimer.start()
+    }
+
+    function closeWindow() {
+        if(root.enable__dwmBlur__)
+            __blurTimer.stop()
+
+        // 关闭前清掉 native blur 状态
+        if(root.enable__dwmBlur__)
+            __windowAgent.setWindowAttribute("dwm-blur", false)
+
+        root.visible = false
+        restoreMainWindowFocus()
+    }
+
     function restoreMainWindowFocus() {
         // 延迟一小段时间确保设置窗口完全关闭后再发出信号
         root.restoreMainWindowFocusRequested();
@@ -346,24 +388,24 @@ ApplicationWindow {
     // Up key timer - moves GUI upward
     Timer{
         id:handle_upKeyTimer
-        interval: 50
+        interval: 16
         repeat: true
         running: false
         onTriggered: {
             if (mainUiSettingLoader.item) {
-                mainUiSettingLoader.item.y -= 10
+                mainUiSettingLoader.item.y -= 4
                 mainUiSettingLoader.item.savedNormalY = mainUiSettingLoader.item.y
             }
             if (mediaPlayerSettingLoader.item) {
-                mediaPlayerSettingLoader.item.y -= 10
+                mediaPlayerSettingLoader.item.y -= 4
                 mediaPlayerSettingLoader.item.savedNormalY = mediaPlayerSettingLoader.item.y
             }
             if (screenCaptureSettingLoader.item) {
-                screenCaptureSettingLoader.item.y -= 10
+                screenCaptureSettingLoader.item.y -= 4
                 screenCaptureSettingLoader.item.savedNormalY = screenCaptureSettingLoader.item.y
             }
             if (musicPlayListSettingLoader.item) {
-                musicPlayListSettingLoader.item.y -= 10
+                musicPlayListSettingLoader.item.y -= 4
                 musicPlayListSettingLoader.item.savedNormalY = musicPlayListSettingLoader.item.y
             }
         }
@@ -372,24 +414,24 @@ ApplicationWindow {
     // Down key timer - moves GUI downward
     Timer{
         id:handle_downKeyTimer
-        interval: 50
+        interval: 16
         repeat: true
         running: false
         onTriggered: {
             if (mainUiSettingLoader.item) {
-                mainUiSettingLoader.item.y += 10
+                mainUiSettingLoader.item.y += 4
                 mainUiSettingLoader.item.savedNormalY = mainUiSettingLoader.item.y
             }
             if (mediaPlayerSettingLoader.item) {
-                mediaPlayerSettingLoader.item.y += 10
+                mediaPlayerSettingLoader.item.y += 4
                 mediaPlayerSettingLoader.item.savedNormalY = mediaPlayerSettingLoader.item.y
             }
             if (screenCaptureSettingLoader.item) {
-                screenCaptureSettingLoader.item.y += 10
+                screenCaptureSettingLoader.item.y += 4
                 screenCaptureSettingLoader.item.savedNormalY = screenCaptureSettingLoader.item.y
             }
             if (musicPlayListSettingLoader.item) {
-                musicPlayListSettingLoader.item.y += 10
+                musicPlayListSettingLoader.item.y += 4
                 musicPlayListSettingLoader.item.savedNormalY = musicPlayListSettingLoader.item.y
             }
         }
@@ -398,24 +440,24 @@ ApplicationWindow {
     // Left key timer - moves GUI leftward
     Timer{
         id:handle_leftKeyTimer
-        interval: 50
+        interval: 16
         repeat: true
         running: false
         onTriggered: {
             if (mainUiSettingLoader.item) {
-                mainUiSettingLoader.item.x -= 10
+                mainUiSettingLoader.item.x -= 4
                 mainUiSettingLoader.item.savedNormalX = mainUiSettingLoader.item.x
             }
             if (mediaPlayerSettingLoader.item) {
-                mediaPlayerSettingLoader.item.x -= 10
+                mediaPlayerSettingLoader.item.x -= 4
                 mediaPlayerSettingLoader.item.savedNormalX = mediaPlayerSettingLoader.item.x
             }
             if (screenCaptureSettingLoader.item) {
-                screenCaptureSettingLoader.item.x -= 10
+                screenCaptureSettingLoader.item.x -= 4
                 screenCaptureSettingLoader.item.savedNormalX = screenCaptureSettingLoader.item.x
             }
             if (musicPlayListSettingLoader.item) {
-                musicPlayListSettingLoader.item.x -= 10
+                musicPlayListSettingLoader.item.x -= 4
                 musicPlayListSettingLoader.item.savedNormalX = musicPlayListSettingLoader.item.x
             }
         }
@@ -424,24 +466,24 @@ ApplicationWindow {
     // Right key timer - moves GUI rightward
     Timer{
         id:handle_rightKeyTimer
-        interval: 50
+        interval: 16
         repeat: true
         running: false
         onTriggered: {
             if (mainUiSettingLoader.item) {
-                mainUiSettingLoader.item.x += 10
+                mainUiSettingLoader.item.x += 4
                 mainUiSettingLoader.item.savedNormalX = mainUiSettingLoader.item.x
             }
             if (mediaPlayerSettingLoader.item) {
-                mediaPlayerSettingLoader.item.x += 10
+                mediaPlayerSettingLoader.item.x += 4
                 mediaPlayerSettingLoader.item.savedNormalX = mediaPlayerSettingLoader.item.x
             }
             if (screenCaptureSettingLoader.item) {
-                screenCaptureSettingLoader.item.x += 10
+                screenCaptureSettingLoader.item.x += 4
                 screenCaptureSettingLoader.item.savedNormalX = screenCaptureSettingLoader.item.x
             }
             if (musicPlayListSettingLoader.item) {
-                musicPlayListSettingLoader.item.x += 10
+                musicPlayListSettingLoader.item.x += 4
                 musicPlayListSettingLoader.item.savedNormalX = musicPlayListSettingLoader.item.x
             }
         }

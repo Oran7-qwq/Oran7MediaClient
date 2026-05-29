@@ -478,10 +478,20 @@ bool Oran7ThemePrivate::reloadComponentImport(QJsonObject &style, const QString 
     {
         const auto themePath = __component__[componentName].toString();
 
-        if(QFile theme(themePath); theme.open(QIODevice::ReadOnly))
-        {
-            QByteArray data = theme.readAll();
+        QByteArray data;
+        // 优先 QRC，失败则文件系统兜底
+        if (QFile theme(themePath); theme.open(QIODevice::ReadOnly)) {
+            data = theme.readAll();
+        } else {
+            QString fileName = QFileInfo(themePath).fileName();
+            QString fsPath = GlobalHelper::getConfigDir() + "/themeJson/" + fileName;
+            QFile fsFile(fsPath);
+            if (fsFile.open(QIODevice::ReadOnly))
+                data = fsFile.readAll();
+        }
 
+        if (!data.isEmpty())
+        {
             QJsonParseError error;
             QJsonDocument themeDoc = QJsonDocument::fromJson(data,&error);
             if(error.error == QJsonParseError::NoError)
@@ -508,7 +518,9 @@ bool Oran7ThemePrivate::reloadComponentImport(QJsonObject &style, const QString 
                 ERROR_LOG << QString("Parse import component theme [%1] faild:").arg(themePath) << error.errorString();
         }
         else
-            ERROR_LOG << "Open import component theme faild:" << theme.errorString() << themePath;
+            ERROR_LOG << "Open import component theme faild:" << themePath
+                      << "(also tried FS:"
+                      << GlobalHelper::getConfigDir() + "/themeJson/" + QFileInfo(themePath).fileName() << ")";
 
         return true;
     }
@@ -810,26 +822,36 @@ void Oran7Theme::reloadTheme()
 {
     Q_D(Oran7Theme);
 
-    if(QFile index(d->themIndexJsonPath); index.open(QIODevice::ReadOnly)){
+    // 优先 QRC，失败则从文件系统 ../Config/themeJson/ 兜底
+    QByteArray raw;
+
+    if (QFile index(d->themIndexJsonPath); index.open(QIODevice::ReadOnly)) {
+        raw = index.readAll();
+    } else {
+        QString fsPath = GlobalHelper::getConfigDir() + "/themeJson/Index.json";
+        QFile fsFile(fsPath);
+        if (fsFile.open(QIODevice::ReadOnly)) {
+            raw = fsFile.readAll();
+            INFO_LOG << "Oran7Theme: Loaded Index.json from filesystem:" << fsPath;
+        }
+    }
+
+    if (!raw.isEmpty()) {
         QJsonParseError error;
-        QJsonDocument indexDoc = QJsonDocument::fromJson(index.readAll(),&error);
-        if(error.error == QJsonParseError::NoError)
-        {
+        QJsonDocument indexDoc = QJsonDocument::fromJson(raw, &error);
+        if (error.error == QJsonParseError::NoError) {
             d->m_indexJsonObject = indexDoc.object();
             d->reloadIndexTheme();
             Oran7ThemeProfileManager::instance().initializeDefaultTheme(this);
             d->loadCurrentThemeProfile();
             d->reloadDefaultComponentTheme();
-            //d->reloadCustomComponentTheme();
+        } else {
+            ERROR_LOG << "Index.json parse error:" << error.errorString();
         }
-        else
-        {
-            ERROR_LOG<<"Index.json parse error:"<<error.errorString();
-        }
-    }
-    else
-    {
-       ERROR_LOG << "Index.json file open failed:"<<index.errorString();
+    } else {
+        ERROR_LOG << "Index.json file open failed (QRC:"
+                   << d->themIndexJsonPath << ", FS:"
+                   << GlobalHelper::getConfigDir() + "/themeJson/Index.json" << ")";
     }
 
 #if 0

@@ -24,9 +24,59 @@ Item {
         return BasicConfig.mainWindow;
     }
 
+    property var stackView_rootItemContainer: root //包含此组件的外部作为stackViewItem的根项
     property var mainWindow: null
 
+    // ==================== StackView 活动状态检测 ====================//
+    property bool isActive: false
+    property var _myStackView: null
+
+    function findAndSetupStackView() {
+        if (StackView.view) {
+            _myStackView = StackView.view;
+        } else {
+            var parent = container.parent;
+            var depth = 0;
+            while (parent && depth < 20) {
+                if (typeof parent.push === "function" && typeof parent.pop === "function") {
+                    _myStackView = parent;
+                    break;
+                }
+                parent = parent.parent;
+                depth++;
+            }
+        }
+
+        if (_myStackView) {
+            _myStackView.currentItemChanged.connect(updateActiveState);
+            updateActiveState();
+        }
+    }
+
+    function updateActiveState() {
+        if (!_myStackView || !_myStackView.currentItem) {
+            root.isActive = false;
+            return;
+        }
+
+        root.isActive = (_myStackView.currentItem === root.stackView_rootItemContainer);
+        if (root.isActive) {
+            //Page被激活 -> touch 业务
+            root.activeResponseTask()
+        }
+    }
+
+    //Page被激活 -> touch 业务
+    function activeResponseTask(){
+        //-->Focus item
+        //console.log("touch")
+        localMusciStack_playlistView.focus_current_playlistItem()
+        localMusciStack_playlistView.animateItemsFromIndex(0)
+    }
+
     Component.onCompleted: {
+        Qt.callLater(findAndSetupStackView);
+
         // 延迟执行，确保BasicConfig.mainWindow已设置
         Qt.callLater(function() {
             mainWindow = findMainWindow();
@@ -36,6 +86,12 @@ Item {
                 console.warn("Warning: blurSource is null. mainWindow:", mainWindow);
             }
         });
+    }
+
+    Component.onDestruction: {
+        if (_myStackView) {
+            _myStackView.currentItemChanged.disconnect(updateActiveState);
+        }
     }
 
     //=======================  Ui  ====================//

@@ -96,6 +96,18 @@ void Oran7ScreenCaptureController::setFps(int fps)
     m_fps = fps;
 }
 
+void Oran7ScreenCaptureController::setDebugLog(bool on)
+{
+    m_debugLog.store(on, std::memory_order_release);
+    // 同步到正在运行的 worker
+    auto *worker = static_cast<DdaGrabWorker*>(m_workerObj);
+    if (worker)
+        worker->setDebugLog(on);
+    // 同步到 video item
+    if (m_item)
+        m_item->setDebugLog(on);
+}
+
 void Oran7ScreenCaptureController::onProviderReady()
 {
     ID3D11Device* newDev = D3D11DeviceProvider::instance()->acquireDevice(); // AddRef
@@ -144,6 +156,7 @@ void Oran7ScreenCaptureController::onProviderLost()
 
 void Oran7ScreenCaptureController::onSharedHandlesReady(int w, int h,const QVector<quintptr>& hs)
 {
+    QMutexLocker locker(&m_texMutex);
     m_texW = w; m_texH = h;
     for (int i=0;i<kPool;i++) {
         m_handle[i] = (i < hs.size()) ? hs[i] : 0;
@@ -172,27 +185,20 @@ void Oran7ScreenCaptureController::onNewFrameIndex(int idx)
 {
     if (!m_item) return;
     if (idx < 0 || idx >= 3) return;
-    if (!m_qtTex[idx]) return;
 
-    AVFrame* frame = makeD3D11FrameFromTexture(m_qtTex[idx].Get(), m_texW, m_texH);
-    if (!frame) return;
-
-#if 0
-    static int frame_count1 = 0;
-    static qint64 t01 = QDateTime::currentMSecsSinceEpoch();
-    frame_count1++;
-    auto now1 = QDateTime::currentMSecsSinceEpoch();
-    if (now1 - t01 >= 1000)//1000ms
+    // DirectConnection → 在 worker 线程执行，加锁读共享纹理池
+    ComPtr<ID3D11Texture2D> tex;
+    int w = 0, h = 0;
     {
-        INFO_LOG<<"submitFrame:"<<frame_count1<<" per second.";
-        frame_count1 = 0;
-        t01 = now1;
+        QMutexLocker locker(&m_texMutex);
+        if (!m_qtTex[idx]) return;
+        tex = m_qtTex[idx];  // AddRef
+        w = m_texW;
+        h = m_texH;
     }
-#endif
 
-    // if(!m_item){av_frame_free(&frame);return;}
-    // AVFrame* safe = av_frame_clone(frame);
-    // av_frame_free(&frame);
+    AVFrame* frame = makeD3D11FrameFromTexture(tex.Get(), w, h);
+    if (!frame) return;
 
     m_item->submitFrame(frame);
 }
@@ -226,6 +232,7 @@ void Oran7ScreenCaptureController::startWorkerIfPossible()
     auto* worker = nullptr;
 #endif
     worker->bind_DdaGrab_d3dqtDev(m_d3dqtDev.Get());
+    worker->setDebugLog(m_debugLog.load(std::memory_order_acquire));
     m_workerObj = worker;
     worker->moveToThread(m_thread);
 
@@ -248,7 +255,7 @@ void Oran7ScreenCaptureController::startWorkerIfPossible()
             Qt::QueuedConnection);
     connect(worker, &DdaGrabWorker::newFrameReady,
             this, &Oran7ScreenCaptureController::onNewFrameIndex,
-            Qt::QueuedConnection);
+            Qt::DirectConnection);  // 串行化：避免 GUI 线程批处理两个帧导致单槽覆盖
 
     connect(m_thread, &QThread::finished, worker, &QObject::deleteLater);
     connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
@@ -320,20 +327,20 @@ QString DdaGrabWorker::initGraph()
     m_capDev->QueryInterface(IID_ID3D11VideoDevice, (void**)&m_capVideoDev);
     m_capCtx->QueryInterface(IID_ID3D11VideoContext, (void**)&m_capVideoCtx);
 
-    // 2) Build filter graph: ddagrab -> fps(optional) -> buffersink
+    // 2) Build filter graph: ddagrab -> buffersink（去掉 fps filter，源头直接设置帧率）
     m_graph = avfilter_graph_alloc();
     if (!m_graph) return "avfilter_graph_alloc failed.";
 
     const AVFilter* f_src  = avfilter_get_by_name("ddagrab");
-    const AVFilter* f_fps  = avfilter_get_by_name("fps");
     const AVFilter* f_sink = avfilter_get_by_name("buffersink");
     if (!f_src || !f_sink) return "ddagrab/buffersink filter not found (check FFmpeg build).";
 
-    // ddagrab options
+    // ddagrab options: 显式指定 framerate，不依赖 fps filter 补帧
     char srcArgs[256];
     snprintf(srcArgs, sizeof(srcArgs),
-             "output_idx=%d:draw_mouse=%d",
-             m_outputIndex, m_drawMouse ? 1 : 0);
+             "output_idx=%d:draw_mouse=%d:framerate=%d",
+             m_outputIndex, m_drawMouse ? 1 : 0,
+             m_fps > 0 ? m_fps : 60);
 
     ret = avfilter_graph_create_filter(&m_src, f_src, "src", srcArgs, nullptr, m_graph);
     if (ret < 0) return "create ddagrab failed: " + ffErrStr(ret);
@@ -346,26 +353,9 @@ QString DdaGrabWorker::initGraph()
     //m_sink 绑定 hwdevice
     m_sink->hw_device_ctx = av_buffer_ref(m_hwdev);
 
-    // optional fps
-    if (f_fps && m_fps > 0) {
-        char fpsArgs[64];
-        snprintf(fpsArgs, sizeof(fpsArgs), "fps=%d", m_fps);
-        ret = avfilter_graph_create_filter(&m_fpsCtx, f_fps, "fps", fpsArgs, nullptr, m_graph);
-        if (ret < 0) return "create fps filter failed: " + ffErrStr(ret);
-        //m_fpsCtx 绑定 hwdevice
-        m_fpsCtx->hw_device_ctx = av_buffer_ref(m_hwdev);
-
-        ret = avfilter_link(m_src, 0, m_fpsCtx, 0);
-        if (ret < 0) return "link src->fps failed: " + ffErrStr(ret);
-
-        ret = avfilter_link(m_fpsCtx, 0, m_sink, 0);
-        if (ret < 0) return "link fps->sink failed: " + ffErrStr(ret);
-    }
-    else
-    {
-        ret = avfilter_link(m_src, 0, m_sink, 0);
-        if (ret < 0) return "link src->sink failed: " + ffErrStr(ret);
-    }
+    // 直接 src -> sink，不用 fps filter 补帧
+    ret = avfilter_link(m_src, 0, m_sink, 0);
+    if (ret < 0) return "link src->sink failed: " + ffErrStr(ret);
 
     ret = avfilter_graph_config(m_graph, nullptr);
     if (ret < 0) return "avfilter_graph_config failed: " + ffErrStr(ret);
@@ -423,9 +413,13 @@ void DdaGrabWorker::grabLoop()
 {
     int idx = 0;
 
+    // pts 检测：确认源头是否真 60fps
+    static int64_t lastPts = AV_NOPTS_VALUE;
+    static int rawCount = 0;
+    static qint64 rawT0 = QDateTime::currentMSecsSinceEpoch();
+
     while (m_running.load()) {
         //主动请求上游产一帧（驱动 ddagrab）
-        //INFO_LOG << "Before avfilter_graph_request_oldest: m_graph=" << m_graph << ", m_sink=" << m_sink;
         int r = avfilter_graph_request_oldest(m_graph);
         //INFO_LOG << "After avfilter_graph_request_oldest, ret=" << r;
         //INFO_LOG<<"avfilter_graph_request_oldest of ret:"<<r;
@@ -466,6 +460,24 @@ void DdaGrabWorker::grabLoop()
             auto* srcTex = reinterpret_cast<ID3D11Texture2D*>(f->data[0]);
             if (srcTex)
             {
+                //------- pts 检测：确认源头真帧率 -------//
+                if (m_debugLog.load(std::memory_order_relaxed)) {
+                    rawCount++;
+                    if (f->pts == lastPts && lastPts != AV_NOPTS_VALUE) {
+                        INFO_LOG << "DUP frame pts=" << f->pts << " rawCount=" << rawCount;
+                    }
+                    lastPts = f->pts;
+
+                    auto rawNow = QDateTime::currentMSecsSinceEpoch();
+                    if (rawNow - rawT0 >= 2000) {
+                        INFO_LOG << "sink raw fps=" << (rawCount * 1000 / (rawNow - rawT0))
+                                 << " pts=" << f->pts << " rawCount=" << rawCount;
+                        rawCount = 0;
+                        rawT0 = rawNow;
+                    }
+                }
+                //------------------------------------------//
+
                 D3D11_TEXTURE2D_DESC sdesc{};
                 srcTex->GetDesc(&sdesc);
                 int w = (int)sdesc.Width;
@@ -513,7 +525,6 @@ void DdaGrabWorker::cleanup()
     if (m_graph) avfilter_graph_free(&m_graph);
     m_graph = nullptr;
     m_src = nullptr;
-    m_fpsCtx = nullptr;
     m_sink = nullptr;
 
     if (m_hwdev) av_buffer_unref(&m_hwdev);
