@@ -1,5 +1,6 @@
 #include "Oran7ThemeProfileManager.h"
 #include "GlobalHelper.h"
+#include "Oran7Theme.h"
 
 #include <QStandardPaths>
 #include <QDir>

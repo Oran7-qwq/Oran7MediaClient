@@ -53,6 +53,7 @@ Item {
     property real maxTiltAngle: 35
     property color textColor: "white"
     property color fullscreenColor: "white"
+    property bool showCloseButton: true   // 是否显示内置关闭按钮
 
     default property alias contentData: contentArea.data  // 允许外部添加子项
 
@@ -200,8 +201,8 @@ Item {
                 anchors.margins: 20
                 width: 40
                 height: width
-                radius:windowContentCloseBtnRectangle.width/2
-                visible: windowContent.opacity === 1;
+                radius: windowContentCloseBtnRectangle.width/2
+                visible: windowContent.opacity === 1 && animationWrapper.showCloseButton;
                 color:"#f8c7c7"
                 layer.enabled: true
                 layer.effect:DropShadow{

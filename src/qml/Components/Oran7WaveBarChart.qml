@@ -172,18 +172,14 @@ Rectangle {
     }
 
     // ===== 监听动画开关 =====
-    Connections {
-        target: root
-        function onAnimationEnabledChanged() {
-            toggleAnimation(root.animationEnabled)
-        }
+    onAnimationEnabledChanged: {
+        toggleAnimation(animationEnabled)
     }
 
     // ===== 组件初始化 =====
     Component.onCompleted: {
-        // 初始化为静态状态
-        bar1.height = staticHeights[0]
-        bar2.height = staticHeights[1]
-        bar3.height = staticHeights[2]
+        if (animationEnabled && !isAnimating) {
+            startWaveAnimation()
+        }
     }
 }

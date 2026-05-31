@@ -31,18 +31,34 @@ extern "C" {
 class D3D11VideoItem : public QQuickItem
 {
     Q_OBJECT
+    // Fit 模式下视频实际绘制区域（item 自身几何，在 parent 坐标系中）。
+    // QML 毛玻璃卡片、遮罩等组件应绑定此 rect，而非 host 全区域。
+    // Fit/Fill 后视频真实绘制区域（item-local 坐标）。
+    // QML 毛玻璃卡片可绑定此 rect 来只覆盖视频内容区域。
+    Q_PROPERTY(QRectF videoContentRect READ videoContentRect NOTIFY videoContentRectChanged)
 public:
     explicit D3D11VideoItem(QQuickItem *parent = nullptr);
     void submitFrame(AVFrame *frameRef);
     void renderBlackFrame();
 
+    // 由 syncVideoItemSize() 调用：计算 Fit/Fill 后的真实绘制区域。
+    void setContentRect(const QRectF &r) {
+        if (m_contentRect != r) {
+            m_contentRect = r;
+            emit videoContentRectChanged();
+            update(); // 触发 updatePaintNode，把新 contentRect 传给 render node
+        }
+    }
+
+    QRectF videoContentRect() const { return m_contentRect; }
+
     Q_INVOKABLE void setDebugLog(bool on) { m_debugLog.store(on, std::memory_order_release); }
     Q_INVOKABLE bool debugLog() const { return m_debugLog.load(std::memory_order_acquire); }
 
 signals:
-
     void sourceSizeChanged(int w, int h);
     void sendVideoFrameInfo(Oran7VideoInfo info);
+    void videoContentRectChanged();
 private slots:
     void onBeforeRendering();
 
@@ -90,6 +106,7 @@ private:
     std::atomic_bool m_debugLog{false};  // 默认开，QML 可 setDebugLog(false) 关闭
     D3D11VideoRenderNode *m_renderNode = nullptr;
     QQuickWindow *m_window = nullptr;
+    QRectF m_contentRect;  // Fit/Fill 后的视频绘制区域（item-local 坐标）
 };
 
 static bool isFormatSupported(ID3D11VideoProcessorEnumerator* e, DXGI_FORMAT fmt) {

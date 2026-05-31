@@ -17,13 +17,13 @@ import Oran7UI.Impl 1.0
 ApplicationWindow {
     id: mainWindow
     objectName: "__Oran7Window__"
-    width: 1180
-    height: 680
+    width: 990 //miniSize default
+    height: 564 //miniSize default
     visible: true
     color: "transparent"
     title: "Oran7MediaClient"
-    minimumWidth: 1180
-    minimumHeight: 680
+    minimumWidth: 990
+    minimumHeight: 564
 
     property alias __Oran7WindowBackGround__: mainWindowBackground
 
@@ -546,8 +546,8 @@ ApplicationWindow {
         //-- AnimatedWindow --
         Oran7AnimatedWindow {
             id: animatedWindowWarper
-            buttonColor: "#f8c7c7"
-            fullscreenColor: "#f8c7c7"
+            buttonColor: "#f8c7c7"/*"transparent"*/
+            fullscreenColor: "#f8c7c7"/*"transparent"*/
             maxTiltAngle: 30
             animDuration: 500
             onStateChanged: {
@@ -580,7 +580,57 @@ ApplicationWindow {
                 themeColor: "#04FFFFFF"
                 Oran7AuthorBriefItem {
                     id: oran7Brief
-                    start_gradientLayerColorAnimation: false
+                }
+                Rectangle {
+                    id:windowContentCloseBtnRectangle
+                    anchors.top: parent.top;
+                    anchors.left: parent.left
+                    anchors.margins: 20
+                    width: 40
+                    height: width
+                    radius:windowContentCloseBtnRectangle.width/2
+                    visible: parent.visible;
+                    color:"#f8c7c7"
+                    layer.enabled: true
+                    layer.effect:DropShadow{
+                        id:windowContentCloseBtnDropShadow
+                        anchors.fill: windowContentCloseBtnRectangle
+                        source: windowContentCloseBtnRectangle
+                        z:windowContentCloseBtnRectangle.z
+                        spread: 0.4
+                        samples: 60
+                        radius:windowContentCloseBtnRectangle.radius + windowContentCloseBtnRectangle.width*spread
+                        horizontalOffset: 0
+                        verticalOffset: 0
+                        SequentialAnimation on color{
+                            id: shadowAnimation_inner
+                            running: BasicConfig.runningInfinitePropertyAnimation
+                            loops: Animation.Infinite
+                            property real transDuration: 500
+
+                            PropertyAnimation { to: "#FFA500"; duration: shadowAnimation_inner.transDuration}
+                            PropertyAnimation { to: "#FFFF00"; duration: shadowAnimation_inner.transDuration }
+                            PropertyAnimation { to: "#00FF00"; duration: shadowAnimation_inner.transDuration }
+                            PropertyAnimation { to: "#00FFFF"; duration: shadowAnimation_inner.transDuration }
+                            PropertyAnimation { to: "#0000FF"; duration: shadowAnimation_inner.transDuration }
+                            PropertyAnimation { to: "#800080"; duration: shadowAnimation_inner.transDuration }
+                            PropertyAnimation { to: "#FF0000"; duration: shadowAnimation_inner.transDuration }
+                        }
+                    }
+                    Image {
+                        anchors.fill: parent
+                        source: "qrc:/image/Oran7.png"
+                        mipmap: true
+                        antialiasing: true
+                    }
+                    MouseArea{
+                        anchors.fill: parent
+                        onClicked: {
+                            if (animatedWindowWarper.isAnimating) return;
+                            animatedWindowWarper.isAnimating = true;
+                            animatedWindowWarper.state = "iconState";
+                        }
+                    }
                 }
             }
         }

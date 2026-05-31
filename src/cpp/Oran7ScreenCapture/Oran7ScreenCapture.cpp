@@ -469,9 +469,9 @@ void DdaGrabWorker::grabLoop()
                     lastPts = f->pts;
 
                     auto rawNow = QDateTime::currentMSecsSinceEpoch();
-                    if (rawNow - rawT0 >= 2000) {
+                    if (rawNow - rawT0 >= 1000) {
                         INFO_LOG << "sink raw fps=" << (rawCount * 1000 / (rawNow - rawT0))
-                                 << " pts=" << f->pts << " rawCount=" << rawCount;
+                                 << " pts=" << f->pts << " rawCount=" << rawCount <<",persecond.";
                         rawCount = 0;
                         rawT0 = rawNow;
                     }

@@ -20,14 +20,21 @@ Item {
     property bool allowDragReorder: true
     property bool showDuration: true
 
-    property bool isPlaying: false //bind  property
     // ===== 模型数据 =====
     property var titleModel: null
     property ListModel listModel: null
     property alias curPlayingIndex: playlistFlickable.playingIndex
-    property alias curSelectingIndex: playlistFlickable.itemSeleted_index
+    property alias curSelectingIndex: playlistFlickable.itemSelected_index
     property alias curHoveredIndex: playlistFlickable.itemHovered_index
     property bool isMultiSelected: false
+    onIsMultiSelectedChanged: {
+        if (!root.isMultiSelected && root.listModel) {
+            for (var i = 0; i < root.listModel.count; i++) {
+                root.listModel.setProperty(i, "isSelected", false);
+            }
+            multiSelectMenu.checked = false;
+        }
+    }
 
     property var blurSource: null
     property bool enableListBlurEffect: false
@@ -57,6 +64,12 @@ Item {
 
     property bool mouseInPlaylist: false
 
+    // ===== 搜索过滤状态 =====
+    property bool searchActive: false
+    property string searchQuery: ""
+    property string _savedPlayingPath: ""
+    property string _savedSelectedPath: ""
+
     // ===== 事件信号 =====
     signal itemClicked(int index)
     signal itemDoubleClicked(int index)
@@ -72,12 +85,88 @@ Item {
     signal focus_current_playlistItem
 
     signal addNewItemOfFiles(var filesArray)
+    signal removeItemOfFiles(var filesArray)
+    signal updateCurGlobalFocusMediaFile(var filepath)
 
     // ===== 功能函数 =====
+
+    //重新Focus playingItm 和 selectedItem
+    function getfocusItem() {
+        var playingPath = "";
+        var selectedPath = "";
+
+        if (playlistFlickable.playingIndex >= 0 &&
+            playlistFlickable.playingIndex < root.listModel.count) {
+            playingPath = root.listModel.get(playlistFlickable.playingIndex).filepath;
+        }
+        if (playlistFlickable.itemSelected_index >= 0 &&
+            playlistFlickable.itemSelected_index < root.listModel.count) {
+            selectedPath = root.listModel.get(playlistFlickable.itemSelected_index).filepath;
+        }
+        return {
+            playingPath: playingPath,
+            selectedPath: selectedPath
+        };
+    }
+
+    function refocusItem(focusedItem) {
+        if (!focusedItem) {
+            return;
+        }
+        var playingPath = focusedItem.playingPath;
+        var selectedPath = focusedItem.selectedPath;
+
+        var newPlayingIndex = -1;
+        var newSelectedIndex = -1;
+
+        for (var k = 0; k < root.listModel.count; k++) {
+            var fp = root.listModel.get(k).filepath;
+            if (playingPath !== "" && fp === playingPath) {
+                newPlayingIndex = k;
+            }
+            if (selectedPath !== "" && fp === selectedPath) {
+                newSelectedIndex = k;
+            }
+        }
+
+        playlistFlickable.playingIndex = newPlayingIndex;
+        playlistFlickable.itemSelected_index = newSelectedIndex;
+    }
 
     //从指定索引开始触发所有 playlistItem 的 animateIn 动画
     function animateItemsFromIndex(startIndex) {
         playlistFlickable.animateRecentItems(startIndex);
+    }
+
+    // 搜索匹配：检查 music_name / music_artist / music_album 是否包含关键字（不区分大小写）
+    function matchesSearch(name, artist, album) {
+        if (!root.searchActive) return true;
+        var q = root.searchQuery.toLowerCase();
+        return name.toLowerCase().indexOf(q) >= 0 ||
+               artist.toLowerCase().indexOf(q) >= 0 ||
+               album.toLowerCase().indexOf(q) >= 0;
+    }
+
+    // 根据 filepath 反查 model index
+    function indexForFilepath(filepath) {
+        if (!root.listModel) return -1;
+        for (var k = 0; k < root.listModel.count; k++) {
+            if (root.listModel.get(k).filepath === filepath) return k;
+        }
+        return -1;
+    }
+
+    // 搜索关闭时恢复播放/选中索引
+    onSearchActiveChanged: {
+        if (!root.searchActive) {
+            if (_savedPlayingPath !== "")
+                playlistFlickable.playingIndex = indexForFilepath(_savedPlayingPath);
+            if (_savedSelectedPath !== "")
+                playlistFlickable.itemSelected_index = indexForFilepath(_savedSelectedPath);
+            _savedPlayingPath = "";
+            _savedSelectedPath = "";
+            playlistFlickable.itemHovered_index = -1;
+        }
     }
 
     // ===== 根容器 =====
@@ -113,7 +202,8 @@ Item {
                         font.family: "微软雅黑"
                         font.bold: true
                         font.pixelSize: 24
-                        color: index === titleRepeater.focIndex ? "#FF7381" : "#2a1a22"
+                        color: index === titleRepeater.focIndex ? Oran7Theme.Oran7MusicPlaylistView["colorPrimaryBase-5"] :
+                                             Oran7Theme.Oran7MusicPlaylistView["colorPrimaryBase-8"]
 
                         Rectangle {
                             id: underline
@@ -123,7 +213,7 @@ Item {
                             anchors.top: parent.bottom
                             anchors.topMargin: 3
                             anchors.horizontalCenter: parent.horizontalCenter
-                            color: index === titleRepeater.focIndex ? "#ff3a3a" : "transparent"
+                            color: index === titleRepeater.focIndex ? Oran7Theme.Oran7MusicPlaylistView["colorPrimaryBase-7"] : "transparent"
                         }
 
                         MouseArea {
@@ -166,6 +256,8 @@ Item {
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     color: "cyan"
+                    font.pixelSize: 16
+                    font.family: "微软雅黑"
                     background: Rectangle {
                         color: "transparent"
                     }
@@ -173,6 +265,29 @@ Item {
                     onFocusChanged: {
                         if (focus) {
                             BasicConfig.newTextAreaFocused(searchField);
+                            searchRectParallelAnimation_maxsize.restart();
+                        }
+                        else{
+                            if(searchField.text.length === 0)
+                                searchRectParallelAnimation_minisize.restart();
+                        }
+
+                    }
+
+                    onTextChanged: {
+                        var text = searchField.text.trim();
+                        if (text.length === 0) {
+                            root.searchActive = false;
+                            root.searchQuery = "";
+                        } else {
+                            if (!root.searchActive) {
+                                _savedPlayingPath = playlistFlickable.playingIndex >= 0 ?
+                                    root.listModel.get(playlistFlickable.playingIndex).filepath : "";
+                                _savedSelectedPath = playlistFlickable.itemSelected_index >= 0 ?
+                                    root.listModel.get(playlistFlickable.itemSelected_index).filepath : "";
+                            }
+                            root.searchActive = true;
+                            root.searchQuery = text;
                         }
                     }
                 }
@@ -204,20 +319,20 @@ Item {
                         easing.type: Easing.OutCubic
                     }
                 }
-                MouseArea {
-                    hoverEnabled: true
-                    anchors.fill: parent
-                    onEntered: {
-                        searchRectParallelAnimation_maxsize.start();
-                    }
-                    onExited: {
-                        searchRectParallelAnimation_minisize.start();
-                        // searchRectangle.forceActiveFocus()
-                    }
-                    onClicked: {
-                        searchField.forceActiveFocus();
-                    }
-                }
+                // MouseArea {
+                //     hoverEnabled: true
+                //     anchors.fill: parent
+                //     onEntered: {
+                //         searchRectParallelAnimation_maxsize.start();
+                //     }
+                //     onExited: {
+                //         searchRectParallelAnimation_minisize.start();
+                //         // searchRectangle.forceActiveFocus()
+                //     }
+                //     onClicked: {
+                //         searchField.forceActiveFocus();
+                //     }
+                // }
             }
 
             // ===== 多选按钮 =====
@@ -281,10 +396,23 @@ Item {
 
                 property bool checked: false
                 onCheckedChanged: {
-                    if (checked === true)
-                        root.itemSelectAll();
-                    else
-                        root.itemClearSelectAll();
+                    if (!root.listModel)
+                        return;
+                    if (checked) {
+                        for (var i = 0; i < root.listModel.count; i++) {
+                            if (root.searchActive) {
+                                if (root.matchesSearch(root.listModel.get(i).music_name,
+                                                       root.listModel.get(i).music_artist,
+                                                       root.listModel.get(i).music_album))
+                                    root.listModel.setProperty(i, "isSelected", true);
+                            } else {
+                                root.listModel.setProperty(i, "isSelected", true);
+                            }
+                        }
+                    } else {
+                        for (var j = 0; j < root.listModel.count; j++)
+                            root.listModel.setProperty(j, "isSelected", false);
+                    }
                 }
 
                 Image {
@@ -335,6 +463,81 @@ Item {
                     font.family: "微软雅黑"
                     font.bold: false
                 }
+
+                Image{
+                    id:deleteBtn
+                    width: 37
+                    height: 37
+                    sourceSize:Qt.size(512,512) //分辨率
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: parent.right
+                    anchors.rightMargin: 32
+                    source: "qrc:/image/material-symbols_delete-outline-rounded.png"
+
+                    property bool hovered: false
+                    layer.enabled: true
+                    layer.effect:ColorOverlay{
+                        source:deleteBtn
+                        color:deleteBtn.hovered ? Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"] :
+                                                Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                    }
+                    HoverHandler{
+                        acceptedDevices: PointerDevice.Mouse
+                        onHoveredChanged: {
+                            parent.hovered = hovered
+                        }
+                    }
+                    MouseArea{
+                        anchors.fill: parent
+                        onClicked: {
+                            if (!root.listModel) return;
+                            var selectedPaths = [];
+                            var curPlayingFilePath = BasicConfig.currentMediaFilePath
+                            var deletedPlaying = false;
+                            for (var i = 0; i < root.listModel.count; i++)
+                            {
+                                if (root.listModel.get(i).isSelected === true) {
+                                    selectedPaths.push(root.listModel.get(i).filepath);
+                                    if (String(curPlayingFilePath) === String(root.listModel.get(i).filepath))
+                                        deletedPlaying = true;
+                                }
+                            }
+                            if (selectedPaths.length > 0)
+                            {
+                                // C++ 端内部会同步停止播放器再删文件，无需手动 sigStop()
+                                root.removeItemOfFiles(selectedPaths);
+                                // 从后往前移除，避免索引偏移
+                                for (var j = root.listModel.count - 1; j >= 0; j--)
+                                {
+                                    if (root.listModel.get(j).isSelected === true) {
+                                        root.listModel.remove(j);
+                                    }
+                                }
+
+                                // 移除后用 filepath 重查索引（与 reOrder 相同模式）
+                                if (root.listModel.count > 0) {
+                                    var newPlayIdx = -1;
+                                    for (var k = 0; k < root.listModel.count; k++) {
+                                        var fp = root.listModel.get(k).filepath;
+                                        if (curPlayingFilePath !== "" && String(fp) === String(curPlayingFilePath))
+                                            newPlayIdx = k;
+                                    }
+                                    playlistFlickable.playingIndex = newPlayIdx;
+                                    playlistFlickable.itemSelected_index = newPlayIdx;
+                                }
+                            }
+
+                            // 当前播放的文件被删，重新 focus 列表首个元素
+                            if (deletedPlaying && root.listModel.count > 0) {
+                                root.updateCurGlobalFocusMediaFile(root.listModel.get(0).filepath);
+                                BasicConfig.isPlaying = false
+                            }
+
+                        }
+                    }
+                }
+
+                //<--multiSelectMenu END
             }
 
             //-----------------------  分割线1 -----------------------//
@@ -545,7 +748,7 @@ Item {
                 }
             }
             //<----The dragElementFloatTag Ui
-            Rectangle {
+            Oran7BlurCard {
                 id: dragElementFloatTag
                 x: root.x + 100
                 y: 0
@@ -553,21 +756,11 @@ Item {
                 clip: true
                 width: 300
                 height: 48
-                radius: 4
-                color: "#fef2e8"
+                borderRadius: 7
+                themeColor: "#04FFFFFF"
+                blurSource: BasicConfig.mainWindow ? BasicConfig.mainWindow.__Oran7WindowBackGround__ : null
                 opacity: 1
                 visible: root.show_dragElement_floatTag
-                layer.enabled: root.show_dragElement_floatTag
-                layer.effect: DropShadow {
-                    anchors.fill: dragElementFloatTag
-                    z: dragElementFloatTag.z
-                    source: dragElementFloatTag
-                    color: "#40000000"
-                    radius: 15
-                    samples: 30
-                    horizontalOffset: 5
-                    verticalOffset: 5
-                }
                 //这些都是默认甚至是无效的初值，需要外部预先初始化设定
                 property int dragElementFloatTag_ParallelAniamtion_Duration: 200
                 property int dragElementFloatTag_YChangeAmination_fromY: 0
@@ -596,10 +789,10 @@ Item {
                 }
 
                 property string musicTagIconImageSource: "qrc:/image/Oran7.jpg"
-                property string musicTagName: "Funny"
-                property string musicTagArtist: "zzz"
+                property string musicTagName: "Oran7"
+                property string musicTagArtist: "Oran柒"
 
-                Rectangle {
+                Oran7RoundedImage{
                     id: musicTagIconImageRectangle
                     width: 36
                     height: width
@@ -607,31 +800,20 @@ Item {
                     anchors.leftMargin: 7
                     anchors.verticalCenter: parent.verticalCenter
                     radius: 7
-                    visible: false
-                }
-                OpacityMask {
-                    anchors.fill: musicTagIconImageRectangle
-                    anchors.centerIn: musicTagIconImageRectangle
-                    source: Image {
-                        source: dragElementFloatTag.musicTagIconImageSource
-                        asynchronous: false
-                        cache: true
-                        mipmap: true
-                        antialiasing: true
-                    }
-                    maskSource: musicTagIconImageRectangle
+                    source: dragElementFloatTag.musicTagIconImageSource
                 }
 
                 Label {
                     text: dragElementFloatTag.musicTagName
-                    color: "#2a1a22"
+                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     clip: true
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                     font.family: "微软雅黑"
-                    width: dragElementFloatTag.width - 40
+                    font.bold: true
+                    width: parent.width
                     anchors.left: musicTagIconImageRectangle.right
                     anchors.leftMargin: 4
-                    anchors.top: dragElementFloatTag.top
+                    anchors.top: parent.top
                     anchors.topMargin: 2
                 }
 
@@ -643,17 +825,18 @@ Item {
                     height: 16
                     anchors.left: musicTagIconImageRectangle.right
                     anchors.leftMargin: 4
-                    anchors.bottom: dragElementFloatTag.bottom
-                    anchors.bottomMargin: 6
-                    border.color: "#d3a03b"
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin:6
+                    border.color: Oran7Theme.Oran7MusicPlaylistView["colorPrimaryBase-8"]
                     border.width: 0.8
                     radius: 2
                     Label {
                         text: "超清母带"
-                        color: "#d3a03b"
+                        color: Oran7Theme.Oran7MusicPlaylistView["colorPrimaryBase-5"]
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.horizontalCenter: parent.horizontalCenter
                         font.family: "微软雅黑"
+                        font.bold: true
                         font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7 < 10 ? 10 :
                                                                                    Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7
                         //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
@@ -661,10 +844,13 @@ Item {
                 }
                 Label {
                     text: dragElementFloatTag.musicTagArtist
-                    color: "#2a1a22"
+                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     clip: true
-                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5 < 12 ? 12 :
+                                                    Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5
                     font.family: "微软雅黑"
+                    font.bold: true
+                    font.italic: true
                     width: dragElementFloatTag.width - 100
                     anchors.left: audioTagTypeRectangle.right
                     anchors.leftMargin: 2
@@ -1074,8 +1260,27 @@ Item {
                     insertIdx = toIdx;
                 }
 
+                // move 前记录当前播放/选中项的 filepath，move 后按 filepath 重新定位
+                var playingPath = "";
+                var selectedPath = "";
+                if (playlistFlickable.playingIndex >= 0 && playlistFlickable.playingIndex < root.listModel.count)
+                    playingPath = root.listModel.get(playlistFlickable.playingIndex).filepath;
+                if (playlistFlickable.itemSelected_index >= 0 && playlistFlickable.itemSelected_index < root.listModel.count)
+                    selectedPath = root.listModel.get(playlistFlickable.itemSelected_index).filepath;
+
                 // ListModel.move(from, to, 1) — 原地移动单条
                 root.listModel.move(fromIdx, insertIdx, 1);
+
+                // move 后根据 filepath 找到新索引并更新
+                var newPlayingIdx = -1;
+                var newSelectedIdx = -1;
+                for (var k = 0; k < root.listModel.count; k++) {
+                    var fp = root.listModel.get(k).filepath;
+                    if (fp === playingPath)  newPlayingIdx = k;
+                    if (fp === selectedPath) newSelectedIdx = k;
+                }
+                playlistFlickable.playingIndex = newPlayingIdx;
+                playlistFlickable.itemSelected_index = newSelectedIdx;
 
                 // 通知后台新的文件顺序
                 var listCount = root.listModel.count;
@@ -1083,7 +1288,7 @@ Item {
                 for (var i = 0; i < listCount; i++) {
                     itemsPath.push(root.listModel.get(i).filepath);
                 }
-                Client.reOrder_localMusicList(itemsPath);
+                root.reorderCompleted(itemsPath)
 
                 // 强制触发可视区域所有项的 fadeIn 动画
                 playlistFlickable.forceLayout();
@@ -1213,7 +1418,7 @@ Item {
                 clip: true
 
                 property int playingIndex: -1 // '-1' of no item isPlaying ,what is paused statue
-                property int itemSeleted_index: -1
+                property int itemSelected_index: -1
                 property int itemHovered_index: -1
 
                 property int indexWidth: 30
@@ -1278,10 +1483,12 @@ Item {
                 delegate: Rectangle {
                             id: playlistItem
 
-                            height: root.elementRectangleHeight
+                            height: root.matchesSearch(model.music_name, model.music_artist, model.music_album)
+                                    ? root.elementRectangleHeight : 0
+                            visible: root.matchesSearch(model.music_name, model.music_artist, model.music_album)
                             width: playlistFlickable.width - 20
                             radius: 10
-                            color: root.isMultiSelected ? "transparent" :
+                            color: root.isMultiSelected ? (model.isSelected === true ? "#8Efef2e8" : "transparent") :
                                             playlistItem.itemIsSelected ? "#8Efef2e8" :
                                                     playlistItem.itemIsHovered && root.mouseInPlaylist ? "#8EBEBEBE" : "transparent"
 
@@ -1296,7 +1503,7 @@ Item {
                             property string itemFilepath: model.filepath
                             property bool needsAnimateIn: model.needsAnimateIn === true
 
-                            property bool itemIsSelected: model.index === playlistFlickable.itemSeleted_index //bind
+                            property bool itemIsSelected: model.index === playlistFlickable.itemSelected_index //bind
                             property bool itemIsHovered: model.index === playlistFlickable.itemHovered_index //bind
                             property bool itemIsPlaying: model.index === playlistFlickable.playingIndex //bind
 
@@ -1356,19 +1563,9 @@ Item {
                                 border.color: "cyan"
                                 visible: root.isMultiSelected
 
-                                checked: false
+                                checked: model.isSelected === true
                                 onClicked: {
-                                    checked = !checked;
-                                    //console.log("clicked")
-                                }
-                                Connections {
-                                    target: root
-                                    function onItemSelectAll() {
-                                        checkBox.checked = true;
-                                    }
-                                    function onItemClearSelectAll() {
-                                        checkBox.checked = false;
-                                    }
+                                    root.listModel.setProperty(model.index, "isSelected", !(model.isSelected === true));
                                 }
                             }
 
@@ -1389,6 +1586,7 @@ Item {
                                     anchors.leftMargin: 5
                                     text: model.index < 9 ? "0" + (model.index + 1) : (model.index + 1)
                                     font.family: "微软雅黑"
+                                    font.bold: true
                                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                                     //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                     color:Oran7Theme.Oran7MusicPlaylistView["textColorBase-5"]
@@ -1432,32 +1630,20 @@ Item {
                                 }
                             }
                             // 专辑封面
-                            Rectangle {
-                                id: coverRect
+                            Oran7RoundedImage{
+                                id:coverImage
                                 width: 36
                                 height: width
                                 anchors.left: parent.left
                                 anchors.leftMargin: 50
                                 anchors.verticalCenter: parent.verticalCenter
                                 radius: 7
-                                visible: true
-
-                                OpacityMask {
-                                    anchors.fill: coverRect
-                                    source: Image {
-                                        source: playlistItem.itemIcon
-                                        asynchronous: true
-                                        cache: true
-                                        mipmap: true
-                                        antialiasing: true
-                                    }
-                                    maskSource: coverRect
-                                }
+                                source:playlistItem.itemIcon
                             }
 
                             // 标题和艺术家
                             Column {
-                                anchors.left: coverRect.right
+                                anchors.left: coverImage.right
                                 anchors.leftMargin: 8
                                 anchors.verticalCenter: parent.verticalCenter
 
@@ -1477,16 +1663,17 @@ Item {
                                     width: 44
                                     height: 16
                                     color: "transparent"
-                                    border.color: "#d3a03b"
+                                    border.color: Oran7Theme.Oran7MusicPlaylistView["colorPrimaryBase-8"]
                                     border.width: 0.8
                                     radius: 2
 
                                     Label {
                                         text: "超清母带"
-                                        color: "#d3a03b"
+                                        color: Oran7Theme.Oran7MusicPlaylistView["colorPrimaryBase-5"]
                                         anchors.verticalCenter: parent.verticalCenter
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         font.family: "微软雅黑"
+                                        font.bold: true
                                         font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7 < 10 ? 10 :
                                                                                     Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7
                                         //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
@@ -1496,9 +1683,11 @@ Item {
                                             anchors.left: parent.right
                                             anchors.leftMargin: 4
                                             anchors.bottom: parent.bottom
-                                            width: playlistFlickable.titleWidth - typeRect.width - coverRect.width - 7
+                                            width: playlistFlickable.titleWidth - typeRect.width - coverImage.width - 7
                                             clip: true
                                             font.family: "微软雅黑"
+                                            font.bold: true
+                                            font.italic: true
                                             font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5 < 12 ? 12 :
                                                                                     Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5
                                             //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
@@ -1518,6 +1707,8 @@ Item {
                                 width: 200
                                 text: itemAlbum
                                 font.family: "微软雅黑"
+                                font.bold: true
+                                font.italic: true
                                 font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                                 //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                 color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"]
@@ -1533,6 +1724,7 @@ Item {
                                 width: 50
                                 text: formatDuration(itemDuration)
                                 font.family: "微软雅黑"
+                                font.bold: true
                                 font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                                 //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                 color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-7"]
@@ -1614,7 +1806,7 @@ Item {
                 anchors.fill: parent
                 z: playlistFlickable.z + 20
 
-                enabled: root.isMultiSelected && root.allowDragReorder
+                enabled: root.isMultiSelected && root.allowDragReorder && !root.searchActive
                 hoverEnabled: false
                 preventStealing: true
                 acceptedButtons: Qt.LeftButton

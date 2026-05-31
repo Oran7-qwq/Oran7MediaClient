@@ -18,6 +18,11 @@ Item {
 
     property bool blurEnabled: true
 
+    // 当 blurSource 是 C++ 自定义渲染节点（QSGRenderNode）时设为 true。
+    // 此模式下 sourceRect 直接使用 local 坐标（-padding, -padding），
+    // 而不用 mapToItem()——避免 LeftPage/TopBar 等全局布局偏移被带入。
+    property bool forceLocalSourceRect: false
+
     // 给 blur 预留额外采样区域
     property real blurPadding: Math.ceil(root.blurMax * root.blurAmount) + 4
 
@@ -54,6 +59,17 @@ Item {
                 effectSource.width + effectSource.height +
                 (root.parent ? root.parent.width + root.parent.height : 0) +
                 root.blurSource.width + root.blurSource.height
+
+            if (root.forceLocalSourceRect) {
+                // 直接使用 local 坐标，不经过 mapToItem()。
+                // 避免 LeftPage/TopBar 等窗口级偏移被混入 sourceRect。
+                return Qt.rect(
+                    -root.blurPadding,
+                    -root.blurPadding,
+                    effectSource.width,
+                    effectSource.height
+                )
+            }
 
             var pos = root.mapToItem(
                 root.blurSource,

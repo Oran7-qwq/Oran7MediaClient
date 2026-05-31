@@ -20,8 +20,19 @@ void D3D11VideoRenderNode::setFrame(AVFrame *f)
 
 void D3D11VideoRenderNode::setRect(const QRectF &rect)
 {
-    m_rect = rect;
-    m_verticesDirty = true;   //quad 顶点要跟着尺寸变
+    if (m_rect != rect) {
+        m_rect = rect;
+        // Fill 模式下 contentRect == m_rect，布局变化时顶点必须刷新
+        m_verticesDirty = true;
+    }
+}
+
+void D3D11VideoRenderNode::setContentRect(const QRectF &rect)
+{
+    if (m_contentRect != rect) {
+        m_contentRect = rect;
+        m_verticesDirty = true;   // quad 顶点要跟着 content rect 变
+    }
 }
 
 void D3D11VideoRenderNode::setNeedBlack(bool on)
@@ -206,9 +217,7 @@ void D3D11VideoRenderNode::clearBlack()
     m_ctx->ClearRenderTargetView(rtv.Get(), color);
     m_ctx->Flush();
 
-    INFO_LOG<<"New Render black;";
-
-    m_importDirty = true;
+    // INFO_LOG<<"New Render black;";
     m_srbDirty = true;
 }
 
@@ -272,128 +281,109 @@ void D3D11VideoRenderNode::prepare()
     D3D11_TEXTURE2D_DESC sdesc{};
     srcTex->GetDesc(&sdesc);
 
-    const int srcW = int(sdesc.Width);
-    const int srcH = int(sdesc.Height);
+    // 分配尺寸（含 D3D padding，如 4096×1808）vs 可见尺寸（视频真实分辨率，如 4096×1800）
+    const int allocW = int(sdesc.Width);
+    const int allocH = int(sdesc.Height);
+    const int visibleW = cur->width;
+    const int visibleH = cur->height;
 
-    if (srcW != m_lastSrcW || srcH != m_lastSrcH) {
-        m_lastSrcW = srcW;
-        m_lastSrcH = srcH;
-        m_pendingW = srcW;
-        m_pendingH = srcH;
+    if (allocW != m_lastSrcW || allocH != m_lastSrcH) {
+        m_lastSrcW = allocW;
+        m_lastSrcH = allocH;
+        // 传递可见尺寸给 QML 层，用于 contentRect 宽高比计算
+        m_pendingW = visibleW;
+        m_pendingH = visibleH;
         m_hasPendingSizeChanged = true;
     }
     if(sdesc.Format != m_pendingDxgiFmt)
     {
         m_pendingDxgiFmt = sdesc.Format;
         m_hasPendingDXGIFormatChanged = true;
-        INFO_LOG<<"DXGI_FORMAT_NAME:"<<dxgiFormatName(sdesc.Format);
     }
 
-    ensureRgbaTarget(srcW, srcH, DXGI_FORMAT_B8G8R8A8_UNORM);
+    // RGBA 目标纹理使用可见尺寸，不含 D3D padding
+    ensureRgbaTarget(visibleW, visibleH, DXGI_FORMAT_B8G8R8A8_UNORM);
 
     if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
+        // VideoProcessor 使用分配尺寸创建（源纹理完整尺寸）
         if (!m_vp || !m_vpEnum) {
-            if (!ensureVideoProcessor(srcW, srcH)) {
+            if (!ensureVideoProcessor(allocW, allocH)) {
                 av_frame_free(&cur);
                 return;
             }
         }
         const int slice = int(reinterpret_cast<intptr_t>(cur->data[1]));
-        blitNv12ToRgba(srcTex, srcW, srcH, slice);
+        // blit 只转换可见区域，排除 D3D padding
+        blitNv12ToRgba(srcTex, visibleW, visibleH, slice);
     } else if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
                sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) {
-        m_ctx->CopyResource(m_rgbaTex.Get(), srcTex);
+        // 只复制可见区域到 RGBA 目标纹理
+        D3D11_BOX box{};
+        box.left = 0;
+        box.top = 0;
+        box.front = 0;
+        box.right = visibleW;
+        box.bottom = visibleH;
+        box.back = 1;
+        m_ctx->CopySubresourceRegion(m_rgbaTex.Get(), 0, 0, 0, 0, srcTex, 0, &box);
     }
 
     av_frame_free(&cur);
 }
 
-void D3D11VideoRenderNode::render(const RenderState *)
+void D3D11VideoRenderNode::render(const RenderState *state)
 {
     if (!renderTarget() || !commandBuffer())
         return;
 
+    QRhiRenderTarget *rt = renderTarget();
+
     if (!ensureImportedTexture())
         return;
-    // if (!createDebugGreenTexture())
-    //     return;
 
     createSampler();
     createBuffers();
 
-    if (!m_sampler || !m_vbuf || !m_ubuf || !m_rhiTex)
+    // ensureImportedTexture() 内部会调 rebuildSrbAndPipelineIfNeeded()，
+    // 但首次进入时 m_sampler / m_ubuf 可能还没创建，SRB 创建会跳过。
+    // 在 createSampler/createBuffers 之后补调一次，确保 SRB 一定创建成功。
+    rebuildSrbAndPipelineIfNeeded();
+
+    if (!m_sampler || !m_vbuf || !m_ubuf || !m_rhiTex || !m_srb)
         return;
+
+    // ---- 按 render pass descriptor 查找或创建 pipeline ----
+    // 同一帧内 render() 被调用两次（先 offscreen 后 main），
+    // 两个 render target 的 renderPassDescriptor 不同，各自持有独立 pipeline。
+    // 缓存机制保证不会在 offscreen→main 切换时销毁 offscreen pipeline。
+    QRhiRenderPassDescriptor *rpDesc = rt->renderPassDescriptor();
+    QRhiGraphicsPipeline *pipeline = m_pipelineCache.value(rpDesc);
+    if (!pipeline) {
+        pipeline = createPipelineFor();
+        if (!pipeline)
+            return;
+        m_pipelineCache.insert(rpDesc, pipeline);
+    }
+    // ---------------------------------------------------------
 
     uploadStaticVerticesIfNeeded();
-    rebuildSrbAndPipelineIfNeeded();
-    updateUniforms();
-
-    if (!m_ps || !m_srb)
-        return;
+    updateUniforms(state);
 
     QRhiCommandBuffer *cb = commandBuffer();
-    QRhiRenderTarget *rt = renderTarget();
 
-    cb->setGraphicsPipeline(m_ps.get());
+    // viewport 使用当前 render target 的实际像素尺寸（不是 item 尺寸）。
+    // 主窗口时是窗口尺寸，offscreen 时是 ShaderEffectSource 创建的扩大纹理尺寸。
+    const QSize rtPixelSize = rt->pixelSize();
+    cb->setGraphicsPipeline(pipeline);
     cb->setViewport(QRhiViewport(0, 0,
-                                 rt->pixelSize().width(),
-                                 rt->pixelSize().height()));
+                                  float(rtPixelSize.width()),
+                                  float(rtPixelSize.height())));
     cb->setShaderResources(m_srb.get());
 
     const QRhiCommandBuffer::VertexInput vb(m_vbuf.get(), 0);
     cb->setVertexInput(0, 1, &vb);
     cb->draw(4);
 }
-
-// void D3D11VideoRenderNode::prepare()
-// {
-//     AVFrame* cur = m_latestFrame.exchange(nullptr, std::memory_order_acq_rel);
-//     if (!cur)
-//         return;
-
-//     auto* srcTex = reinterpret_cast<ID3D11Texture2D*>(cur->data[0]);
-//     if (!srcTex) {
-//         av_frame_free(&cur);
-//         return;
-//     }
-
-//     // 如果纹理还没 wrap，或者源 texture 改变了，创建 QRhiTexture
-//     if (!m_rhiTex || m_lastImportedTex != srcTex) {
-//         QRhiTexture::NativeTexture nt{};
-//         nt.object = quint64(srcTex);
-
-//         const QSize size(cur->width, cur->height);
-//         m_rhiTex.reset(m_rhi->newTexture(QRhiTexture::BGRA8, size, 1, QRhiTexture::Flags{}));
-//         if (!m_rhiTex->createFrom(nt)) {
-//             m_rhiTex.reset();
-//             m_lastImportedTex = nullptr;
-//             av_frame_free(&cur);
-//             return;
-//         }
-
-//         m_lastImportedTex = srcTex;
-//         m_srbDirty = true;
-//     }
-
-//     av_frame_free(&cur);
-// }
-
-// void D3D11VideoRenderNode::render(const RenderState*)
-// {
-//     if (!m_rhiTex || !m_ps || !m_srb)
-//         return;
-
-//     QRhiCommandBuffer* cb = commandBuffer();
-//     cb->setGraphicsPipeline(m_ps.get());
-//     cb->setViewport(QRhiViewport(0, 0,
-//                                  renderTarget()->pixelSize().width(),
-//                                  renderTarget()->pixelSize().height()));
-//     cb->setShaderResources(m_srb.get());
-
-//     const QRhiCommandBuffer::VertexInput vb(m_vbuf.get(), 0);
-//     cb->setVertexInput(0, 1, &vb);
-//     cb->draw(4);
-// }
 
 void D3D11VideoRenderNode::releaseResources()
 {
@@ -409,8 +399,9 @@ void D3D11VideoRenderNode::doReleaseResources()
     }
 
     //先释放 QRhi 资源
-    //    顺序上先 pipeline / srb / buffers / sampler / texture
-    m_ps.reset();
+    //    顺序上先 pipeline cache / srb / buffers / sampler / texture
+    qDeleteAll(m_pipelineCache);
+    m_pipelineCache.clear();
     m_srb.reset();
     m_vbuf.reset();
     m_ubuf.reset();
@@ -431,7 +422,6 @@ void D3D11VideoRenderNode::doReleaseResources()
     m_lastImportedTex = nullptr;
 
     m_rhiInited = false;
-    m_pipelineDirty = true;
     m_verticesDirty = true;
     m_importDirty = true;
     m_srbDirty = true;
@@ -524,9 +514,9 @@ bool D3D11VideoRenderNode::ensureImportedTexture()
         WARNING_LOG<<"Failed to m_rhiTex->createFrom(nt).";
         return false;
     }
-    INFO_LOG<<"m_rhiTex->nativeTexture().layout:"<<m_rhiTex->nativeTexture().layout;
-    INFO_LOG<<"m_rhiTex->nativeTexture().object:"<<m_rhiTex->nativeTexture().object;
-    INFO_LOG<<"m_rhiTex->pixelSize():"<<m_rhiTex->pixelSize();
+    // INFO_LOG<<"m_rhiTex->nativeTexture().layout:"<<m_rhiTex->nativeTexture().layout;
+    // INFO_LOG<<"m_rhiTex->nativeTexture().object:"<<m_rhiTex->nativeTexture().object;
+    // INFO_LOG<<"m_rhiTex->pixelSize():"<<m_rhiTex->pixelSize();
     m_srbDirty = true;
 
     m_lastImportedTex = m_rgbaTex.Get();
@@ -559,7 +549,7 @@ void D3D11VideoRenderNode::createSampler()
 void D3D11VideoRenderNode::createBuffers()
 {
     if (!m_vbuf) {
-        m_vbuf.reset(m_rhi->newBuffer(QRhiBuffer::Immutable,
+        m_vbuf.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic,
                                       QRhiBuffer::VertexBuffer,
                                       sizeof(Vertex) * 4));
         if (!m_vbuf->create()) {
@@ -588,11 +578,15 @@ void D3D11VideoRenderNode::uploadStaticVerticesIfNeeded()
     if (!m_verticesDirty || !m_vbuf)
         return;
 
+    // 顶点使用 contentRect（Fit/Fill 后的真实视频绘制区域）。
+    // contentRect 是 item-local 坐标，在 PreserveAspectFit 时可能小于 m_rect。
+    const QRectF &cr = m_contentRect;
+
     Vertex quad[4] = {
-        { 0.0f,                 0.0f,                  0.0f, 0.0f },
-        { 0.0f,                 float(m_rect.height()), 0.0f, 1.0f },
-        { float(m_rect.width()), 0.0f,                  1.0f, 0.0f },
-        { float(m_rect.width()), float(m_rect.height()), 1.0f, 1.0f }
+        { float(cr.left()),  float(cr.top()),     0.0f, 0.0f },
+        { float(cr.left()),  float(cr.bottom()),   0.0f, 1.0f },
+        { float(cr.right()), float(cr.top()),      1.0f, 0.0f },
+        { float(cr.right()), float(cr.bottom()),    1.0f, 1.0f }
     };
 
     // Vertex quad[4] = {
@@ -604,18 +598,18 @@ void D3D11VideoRenderNode::uploadStaticVerticesIfNeeded()
 
 
     QRhiResourceUpdateBatch *rub = m_rhi->nextResourceUpdateBatch();
-    rub->uploadStaticBuffer(m_vbuf.get(), 0, sizeof(quad), quad);
+    rub->updateDynamicBuffer(m_vbuf.get(), 0, sizeof(quad), quad);
     commandBuffer()->resourceUpdate(rub);
 
     m_verticesDirty = false;
 }
 
-void D3D11VideoRenderNode::createPipeline()
+QRhiGraphicsPipeline *D3D11VideoRenderNode::createPipelineFor()
 {
     if (!m_rhi || !renderTarget() || !m_srb)
-        return;
+        return nullptr;
 
-    m_ps.reset(m_rhi->newGraphicsPipeline());
+    QRhiGraphicsPipeline *ps = m_rhi->newGraphicsPipeline();
 
     QRhiGraphicsPipeline::TargetBlend blend;
     blend.enable = true;
@@ -637,37 +631,61 @@ void D3D11VideoRenderNode::createPipeline()
     const QShader fs = loadShader(":/shaders/video.frag.qsb");
     if (!vs.isValid() || !fs.isValid()) {
         WARNING_LOG << "Shader load failed.";
-        m_ps.reset();
-        return;
+        delete ps;
+        return nullptr;
     }
 
-    m_ps->setTopology(QRhiGraphicsPipeline::TriangleStrip);
-    m_ps->setShaderStages({
+    ps->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+    ps->setShaderStages({
         { QRhiShaderStage::Vertex, vs },
         { QRhiShaderStage::Fragment, fs }
     });
-    m_ps->setVertexInputLayout(inputLayout);
-    m_ps->setShaderResourceBindings(m_srb.get());
-    m_ps->setRenderPassDescriptor(renderTarget()->renderPassDescriptor());
-    m_ps->setTargetBlends({ blend });
+    ps->setVertexInputLayout(inputLayout);
+    ps->setShaderResourceBindings(m_srb.get());
+    ps->setRenderPassDescriptor(renderTarget()->renderPassDescriptor());
+    ps->setTargetBlends({ blend });
 
-    if (!m_ps->create()) {
+    if (!ps->create()) {
         WARNING_LOG << "create graphics pipeline failed";
-        m_ps.reset();
-        return;
+        delete ps;
+        return nullptr;
     }
 
-    m_pipelineDirty = false;
+    return ps;
 }
 
 
-void D3D11VideoRenderNode::updateUniforms()
+void D3D11VideoRenderNode::updateUniforms(const RenderState *state)
 {
     if (!m_ubuf)
         return;
 
-    UbufData ubuf;
-    ubuf.mvp = (*projectionMatrix()) * (*matrix());
+    UbufData ubuf = {};
+
+    QRhiRenderTarget *rt = renderTarget();
+    if (!rt || !m_window) return;
+
+    // 用 scissorEnabled + 窗口像素尺寸双条件检测 offscreen pass。
+    // MAIN pass:      scissorEnabled = true, rtPixelSize == windowPx
+    // OFFSCREEN pass: scissorEnabled = false, rtPixelSize != windowPx
+    const QSize rtSize = rt->pixelSize();
+    const qreal dpr = m_window->devicePixelRatio();
+    const QSize windowPx(qRound(m_window->width() * dpr),
+                          qRound(m_window->height() * dpr));
+    const bool isOffscreen = !state->scissorEnabled() || rtSize != windowPx;
+
+    if (isOffscreen) {
+        // ShaderEffectSource offscreen 捕获：
+        // projectionMatrix() 已经从 item local 坐标映射到 offscreen NDC。
+        // matrix() 包含 LeftPage/TopBar 的窗口偏移，乘进去会导致 offscreen 纹理内容偏移。
+        ubuf.mvp = *projectionMatrix();
+    } else {
+        // 主窗口 pass：
+        // projectionMatrix() 从 scene 坐标映射到 NDC。
+        // matrix() 从 item local 映射到 scene（含 LeftPage/TopBar 偏移）。
+        ubuf.mvp = (*projectionMatrix()) * (*matrix());
+    }
+
     ubuf.opacity = float(inheritedOpacity());
 
     QRhiResourceUpdateBatch *rub = m_rhi->nextResourceUpdateBatch();
@@ -701,11 +719,10 @@ void D3D11VideoRenderNode::rebuildSrbAndPipelineIfNeeded()
         }
 
         m_srbDirty = false;
-        m_pipelineDirty = true; // 如果 pipeline 当前还没绑定这个 srb，就重建
-    }
-
-    if (m_pipelineDirty || !m_ps) {
-        createPipeline();
+        // SRB 变了，所有缓存的 pipeline 绑定的都是旧 SRB，全部失效。
+        // 此处在 render() 早期（draw 命令之前）调用，上一帧的 pipeline 可以安全销毁。
+        qDeleteAll(m_pipelineCache);
+        m_pipelineCache.clear();
     }
 }
 
@@ -731,7 +748,8 @@ bool D3D11VideoRenderNode::createDebugGreenTexture()
     commandBuffer()->resourceUpdate(rub);
 
     m_srbDirty = true;
-    m_pipelineDirty = true;
+    qDeleteAll(m_pipelineCache);
+    m_pipelineCache.clear();
     return true;
 }
 

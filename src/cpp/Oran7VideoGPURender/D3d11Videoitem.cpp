@@ -88,6 +88,8 @@ void D3D11VideoItem::onBeforeRendering()
     lastMs = nowMs;
 
     m_renderNode->setFrame(cur);
+    // 通知场景图节点内容已变更，使 ShaderEffectSource 等采集组件能感知到更新
+    m_renderNode->markDirty(QSGNode::DirtyMaterial);
 
     //==============  video info (每秒) ================//
     static int frame_count = 0;
@@ -320,14 +322,18 @@ QSGNode* D3D11VideoItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *
     m_renderNode = node;
 
     node->setRect(boundingRect());
+    node->setContentRect(m_contentRect);
 
     if (m_needClearBlack.exchange(false, std::memory_order_acq_rel))
         node->setNeedBlack(true);
 
     // 兜底：播放器场景 beforeRendering 可能未触发，这里直接取帧渲染
     AVFrame *cur = takeLatestQueuedFrame();
-    if (cur)
+    if (cur) {
         node->setFrame(cur);
+        // 通知场景图节点内容已变更，使 ShaderEffectSource 等采集组件能感知到更新
+        node->markDirty(QSGNode::DirtyMaterial);
+    }
 
     int w = 0, h = 0;
     if (node->takePendingSourceSizeChanged(w, h))

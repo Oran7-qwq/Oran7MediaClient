@@ -63,8 +63,37 @@ set(PROJECT_MAIN_SOURCES
 )
 
 file(GLOB_RECURSE CORE_SOURCES "src/cpp/*.cpp" "src/cpp/*.h")
+# 排除已移至 Oran7Core 共享库的单例文件（避免 EXE/DLL 各自编译一份）
+list(FILTER CORE_SOURCES EXCLUDE REGEX "src/cpp/GlobalSingleton/(GlobalHelper|AppJsonConfigManager|Oran7ThemeProfileManager)\\.")
 # 排除 QtQuicCppExtend 目录（用于 QML 模块）
 #list(FILTER CORE_SOURCES EXCLUDE REGEX "src/cpp/QtQuicCppExtend/.*")
+
+
+# ======== Oran7Core 共享库（单例唯一所在，EXE 和 QML 插件共享）========
+set(ORAN7_CORE_SOURCES
+    src/cpp/GlobalSingleton/GlobalHelper.h
+    src/cpp/GlobalSingleton/GlobalHelper.cpp
+    src/cpp/GlobalSingleton/AppJsonConfigManager.h
+    src/cpp/GlobalSingleton/AppJsonConfigManager.cpp
+    src/cpp/GlobalSingleton/Oran7ThemeProfileManager.h
+    src/cpp/GlobalSingleton/Oran7ThemeProfileManager.cpp
+)
+
+qt_add_library(Oran7Core SHARED ${ORAN7_CORE_SOURCES})
+
+target_include_directories(Oran7Core
+    PUBLIC
+        ${GLOBAL_SINGLETON_DIR}
+    PRIVATE
+        ${QtQuicCppExtend_DIR}
+        ${ORAN7_UTILS_DIR}
+)
+
+target_link_libraries(Oran7Core PUBLIC Qt6::Core Qt6::Gui Qt6::Qml)
+
+set_target_properties(Oran7Core PROPERTIES
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+)
 
 
 # ======== 创建 QML 模块用于导出 C++ 类 ======
@@ -96,11 +125,6 @@ qt_add_qml_module(Oran7UI_Impl
         src/cpp/QtQuicCppExtend/Oran7RadiusGenerator.cpp
         src/cpp/QtQuicCppExtend/Oran7SizeGenerator.h
         src/cpp/QtQuicCppExtend/Oran7SizeGenerator.cpp
-
-        src/cpp/GlobalSingleton/AppJsonConfigManager.h
-        src/cpp/GlobalSingleton/AppJsonConfigManager.cpp
-        src/cpp/GlobalSingleton/Oran7ThemeProfileManager.h
-        src/cpp/GlobalSingleton/Oran7ThemeProfileManager.cpp
 )
 
 qt_add_resources(Oran7UI_Impl "resource"
@@ -131,6 +155,7 @@ target_link_libraries(Oran7UI_Impl
         Qt6::Qml
         QWKCore
         QWKQuick
+        Oran7Core
 )
 
 #==================< qt_add_executable：Oran7MediaClient >============================
@@ -233,6 +258,8 @@ target_link_libraries(Oran7MediaClient
     QWKQuick
     # 链接创建的 QML 模块库
     Oran7UI_Impl
+    # 链接核心单例库（Config、Theme 等）
+    Oran7Core
     # FFmpeg 库
     avcodec avformat avutil avdevice avfilter swresample swscale
     # SDL2 库

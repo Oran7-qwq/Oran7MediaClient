@@ -11,6 +11,7 @@ Rectangle {
     property bool openVideoInfo: false
 
     property int renderObject: Client.VideoPlayerRender
+    property Item videoTextureItem: null
 
     // 确保在窗口可见时才尝试连接
     visible: true
@@ -18,14 +19,37 @@ Rectangle {
 
     Item {
         id: videoHost
-        width: root.width
-        height: root.height
-        clip:true
+        width: parent.width
+        height: parent.height
+        clip: true
+    }
+
+    Item {
+        id: overlayLayer
+        anchors.fill: parent
+        clip: false
+
+        Oran7BlurCard{
+            id: blurCard
+            // 直接跟随 D3D11VideoItem 的位置和尺寸
+            x: root.videoTextureItem ? root.videoTextureItem.x : 0
+            y: root.videoTextureItem ? root.videoTextureItem.y : 0
+            width: root.videoTextureItem ? root.videoTextureItem.width : 0
+            height: root.videoTextureItem ? root.videoTextureItem.height : 0
+            blurSource: root.videoTextureItem
+            blurEnabled: false
+            // blurSource 是 C++ QSGRenderNode 视频 item，mapToItem() 会混入
+            // LeftPage/TopBar 等窗口级偏移到 sourceRect。强制使用 local 坐标。
+            forceLocalSourceRect: true
+            z: 10
+            themeColor: "#04FFFFFF"
+            visible: root.videoTextureItem !== null
+        }
     }
 
     Connections{
         target:Client
-        function onUpdateQmlRenderedVideoInfo(info)
+        function onVideoRenderInfoUpdated(info)
         {
             root.videoInfo = info
         }
@@ -64,6 +88,8 @@ Rectangle {
         if (!videoHost) return false
         console.log("--->Client.attachVideoItem() : ",videoHost)
         Client.attachVideoItem(root.renderObject,videoHost)
+        // 获取 C++ 创建的 D3D11VideoItem 引用，供 Oran7BlurCard 等组件采集
+        root.videoTextureItem = Client.getVideoItem(root.renderObject)
         return true
     }
 
@@ -103,6 +129,7 @@ Rectangle {
         if (!videoHost) return false
         //console.log("--->Client.attachVideoItem() : ",videoHost)
         Client.attachVideoItem(root.renderObject,videoHost)
+        root.videoTextureItem = Client.getVideoItem(root.renderObject)
     }
     Component.onDestruction: {
         if (attachTimer) attachTimer.stop()

@@ -7,7 +7,7 @@
 #include <QStringList>
 
 #include "GlobalHelper.h"
-#include "Oran7Theme.h"
+class Oran7Theme;
 
 /**
  * @brief Oran7ThemeProfileManager - 主题配置文件管理器

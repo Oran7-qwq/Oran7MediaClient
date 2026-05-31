@@ -22,9 +22,6 @@ Item {
     //use in LeftPage focusCurrent_SelectedMenuModel
     signal focusCurrent_SelectedMenuModel(var pageName)
 
-    //use in MainStackView for SettingStack Top of subTitle maxiHightLight Clear
-    signal clearElementSubTitleMaxiHightLight_InSettingStack
-
     //use in RightPage.qml mainStackView for push SuggestStack into ----at LeftPage
     signal pushVideoPlayerStackInto_RightPageMainStackView
     //use in RightPage.qml mainStackView for push MyFavoriteMusicStack into ----at LeftPage
@@ -34,20 +31,7 @@ Item {
     //use in RightPage.qml mainStackView for push screenCaptureStack into ----at LeftPage
     signal pushScreenCaptureStackInto_RightPageMainStackView
 
-    //use in MainStackView for MyFavoriteMusicStack Top of subTitle maxiHightLight Clear
-    signal clearElementSubTitleMaxiHightLight_InMyFavoriteMusicStack
-    //use in MainStackView for LocalMusicStack Top of subTitle maxiHightLight Clear
-    signal clearElementSubTitleMaxiHightLight_InLocalMusicStack
 
-    //use in MyFavoriteMusicStack && LocalMusicStack && BottomPage PlayIcon Updata to Current PlayingState
-    signal updatePlayIconToCurrentPlayingState
-    //use in MyFavoriteMusicStack && LocalMusicStack for Reset all playlist header Icon to "ClearPlay"
-    signal resetAllPlayListHeadicon
-    //use in MyFavoriteMusicStack && LocalMusicStack for updata bottomPage to new display MusicMeida information
-    signal updataBottomMusicMediaDisplayInformation
-
-    // //use in MyFavoriteMusicStack && LocalMusicStack for focus current music in display list//-->Discard 2026/5/4
-    // signal focusCurrentMusicInDisplayList()
 
     //use in localMusicStack of MainStackView for trigger addly amination
     signal triggerLoad_localMusicList_Aniamtion(var index)
@@ -94,25 +78,10 @@ Item {
     property int globalPlayer_MusicPlayerIndex: 0
     property int globalPlayer_VideoPlayerIndex: 1
     property int globalPlayer_LivePlayerIndex: 2
-    //全局播放器使用foucus工厂
-    property var globalPlayerItems: [
-        {
-            focusedPlayingItem: "MusicPlayer"
-        }//0
-        ,
-        {
-            focusedPlayingItem: "VideoPlayer"
-        }//1
-    ]
     signal playerFocusChanged
     onGlobalPlayingFocusChanged: {
         playerFocusChanged();
     }
-
-    //记录当前播放列表的当前索引#index
-    property int playingIndex: -1
-    //save last addLocalMusic opend fileDialog direction path
-    property string lastAddLocalMusicFolderPath: ""
 
     //<全局控件焦点管理器>  item控件必须要有focus属性！！
     property var lastFocusedItem: null
@@ -157,7 +126,9 @@ Item {
                 music_name: name,
                 music_artist: artist,
                 music_album: album,
-                timesize: timesize
+                timesize: timesize,
+                //--- state properties ---
+                isSelected: false
             });
         } else
             console.warn("myFavoriteMusicListModel is not initialized!");
@@ -167,7 +138,7 @@ Item {
     //初始化为空指针，在RightPage.qml的mainStackView中实例化并传入全局单例供LocalMusicStack.qml使用
     //property bool alreadyInit: false
     property ListModel localMusicListModel: null
-    function addLocalMusicItem(icon, name, artist, album, timesize, music_id, filepath) {
+    function addLocalMusicItem(icon, name, artist, album, timesize, filepath) {
         if (localMusicListModel) {
             // console.log("qml:new add");
             localMusicListModel.append({
@@ -176,7 +147,9 @@ Item {
                 music_artist: artist,
                 music_album: album,
                 timesize: timesize,
-                filepath: filepath
+                filepath: filepath,
+                //--- state properties ---
+                isSelected: false
             });
             // console.log(JSON.stringify(localMusicListModel.get(0)));
         } else

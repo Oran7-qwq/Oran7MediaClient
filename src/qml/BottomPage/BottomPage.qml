@@ -5,6 +5,8 @@ import Client 1.0
 import "../Basic"
 import "../Components"
 
+import Oran7UI.Impl
+
 Rectangle{
     id:root
 
@@ -21,7 +23,7 @@ Rectangle{
     }
 
     clip: true
-    
+
     Rectangle{
         id:musicIconRectangle
         anchors.left: parent.left
@@ -37,37 +39,89 @@ Rectangle{
             GradientStop{color: "#303030";position: 0.5}
             GradientStop{color: "#040404";position: 1.0}
         }
+        Oran7RoundedImage{
+            id:iconimage
+            width: parent.width
+            height: parent.height
+            radius: parent.radius
+            source:"qrc:/image/transparent.png"
+        }
+        MouseArea {
+            anchors.fill: parent
+            onPressed: parent.scale = 0.95
+            onReleased: parent.scale = 1.0
+            onCanceled: parent.scale = 1.0
+            onClicked:animatedWindow_LyricsWin.open(musicIconRectangle);
+        }
     }
-    OpacityMask {
-        anchors.fill:musicIconRectangle
-        source: Image {
-            visible: root.visible
-            id: musicIconImage
-            source: "qrc:/image/transparent.png"
-            anchors.centerIn: parent
-            property real targetwidth :musicIconRectangle.width
-            property real targetheight:musicIconRectangle.height
-            onStatusChanged: {
-                if(musicIconImage.status==Image.Ready)
-                {
-                    var scale=calculateScale(implicitWidth,implicitHeight)
-                    musicIconImage.scale=scale*0.99
+    Oran7AnimatedWindow{
+        id: animatedWindow_LyricsWin
+        buttonColor: "#f8c7c7"
+        fullscreenColor: "#f8c7c7"
+        maxTiltAngle: 10
+        animDuration: 400
+        showCloseButton: false  // 使用自定义关闭按钮，不显示内置的
+
+        // 挂到 mainWindow 的 contentItem 上，使全屏展开覆盖整个窗口
+        Component.onCompleted: {
+            var win = Window.window;
+            if (win && win.contentItem)
+                parent = win.contentItem;
+        }
+
+        // 独立的背景图副本，避免模糊源引用 mainWindow 本身导致关闭时闪烁
+        Image {
+            id: lyricsWinBackground
+            width: mainWindow.width
+            height: mainWindow.height
+            sourceSize.width: Screen.width * Screen.devicePixelRatio
+            sourceSize.height: Screen.height * Screen.devicePixelRatio
+            source: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage) ?
+                        "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/defaultBg.jpg"
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: false
+            mipmap: true
+            smooth: false
+            cache: true
+            transformOrigin: Item.Center
+        }
+        Oran7BlurCard {
+            anchors.fill: parent
+            blurSource: lyricsWinBackground
+            themeColor: "#04FFFFFF"
+            Oran7BlurCard{
+                width: 40
+                height: width
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.margins: 20
+                themeColor: "#04FFFFFF"
+                blurSource: lyricsWinBackground
+                borderWidth: 2
+                borderRadius: 10
+                Image{
+                    id:downImage
+                    anchors.fill: parent
+                    scale:0.8
+                    source: "qrc:/image/mingcute_arrows-down-fill.png"
+                    layer.enabled: true
+                    layer.effect: ColorOverlay{
+                        source:downImage
+                        color:Oran7Theme.Oran7MainGUI.themeColor
+                    }
+                }
+                MouseArea{
+                    anchors.fill: parent
+                    onClicked: {
+                        if (animatedWindow_LyricsWin.isAnimating) return;
+                        animatedWindow_LyricsWin.isAnimating = true;
+                        animatedWindow_LyricsWin.state = "iconState";
+                    }
                 }
             }
-            function calculateScale(originalWidth,originalHeight)
-            {
-                var widthRatio=targetwidth/originalWidth
-                var heightRatio=targetheight/originalHeight
-                return Math.min(widthRatio,heightRatio)
-            }
-            fillMode: Image.PreserveAspectFit
-            asynchronous: false  // 拖动时改为同步，避免异步计算导致的卡顿
-            mipmap: true  // 启用mipmap，提高缩放性能
-            smooth: false  // 拖动时关闭平滑，提高性能
-            antialiasing: true
         }
-        maskSource: musicIconRectangle
     }
+
     //musicNameTextLabel
     Label{
         id:musicNameTextLabel
@@ -92,40 +146,6 @@ Rectangle{
         anchors.top: musicNameTextLabel.bottom
         anchors.topMargin: 4
     }
-    //收藏、评论、分享、下载
-    // Row{
-    //     anchors.left: musicNameTextLabel.left
-    //     anchors.top: musicNameTextLabel.bottom
-    //     anchors.topMargin: 10
-    //     spacing: 20
-    //     Repeater{
-    //         anchors.fill: parent
-    //         model:["qrc:/image/colect.png","qrc:/image/coment.png","qrc:/image/share.png","qrc:/image/download.png"]
-    //         delegate: Image {
-    //             id:imageElement
-    //             source: modelData
-    //             anchors.verticalCenter: parent.verticalCenter
-    //             layer.enabled: false
-    //             layer.effect:ColorOverlay{
-    //                 source: imageElement
-    //                 color: "white"
-    //             }
-    //             MouseArea{
-    //                 anchors.fill: parent
-    //                 hoverEnabled: true
-    //                 onEntered: {
-    //                     parent.layer.enabled = true
-    //                 }
-    //                 onExited: {
-    //                     parent.layer.enabled = false
-    //                 }
-    //                 onClicked: {
-    //                     //---
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
 
     //==中间部分==
     //播放与暂停
@@ -134,7 +154,8 @@ Rectangle{
         width: 40
         height: 40
         radius:height/2
-        color: "#fc3c55"
+        color: playMouseArea.isPressed ? Oran7Theme.Oran7MainGUI["colorPrimaryBase-7"] :
+                        Oran7Theme.Oran7MainGUI["colorPrimaryBase-5"]
         visible: root.visible
         anchors.top: parent.top
         anchors.topMargin: 24
@@ -188,7 +209,6 @@ Rectangle{
                     playRectangle.scale=1.0
             }
             onPressed:  {
-                playRectangle.color="#9a333f"
                 playImage.colorOverlay="#9b9b9f"
                 pauseImage.colorOverlay="#9b9b9f"
                 playMouseArea.isPressed = true
@@ -197,7 +217,6 @@ Rectangle{
             onReleased: {
                 if(playMouseArea.isPressed===true)
                     playRectangle.scale=1.04
-                playRectangle.color="#fc3c55"
                 playImage.colorOverlay="white"
                 pauseImage.colorOverlay="white"
             }
@@ -211,34 +230,19 @@ Rectangle{
                 {
                     if(BasicConfig.currentMediaFilePath === "")return;
                     BasicConfig.isPlaying=false
-                    Client.qmlClickedReqPreparePlayMusic(BasicConfig.currentMediaFilePath)
+                    Client.requestPlayMusic(BasicConfig.currentMediaFilePath)
                 }
                 else
                 {
                     if(BasicConfig.currentMediaFilePath === "")return;
                     BasicConfig.isPlaying=true
-                    Client.qmlClickedReqPreparePlayMusic(BasicConfig.currentMediaFilePath)
+                    Client.requestPlayMusic(BasicConfig.currentMediaFilePath)
                 }
             }
         }
         Connections{
             target:Client
-            // function onUpdataQmlTransforStopIcon()
-            // {
-            //     BasicConfig.isPlaying=false
-
-            //     //停止时确保Handler走向尽头
-            //     musicProgressHandle.x=musicProgressRectanle.width-musicProgressHandle.width/2
-            //     backgroundRectangle.visibleProgressX =musicProgressRectanle.width
-            //     leftTimeLabel.text =String(Math.floor(Math.floor(allTime/60)/10))+String(Math.floor(allTime/60)%10)+": "+String(Math.floor((allTime%60/10)))+String((allTime%60%10))
-
-            //     // 模拟视觉反馈
-            //     playRectangle.scale = 1.0
-            //     playRectangle.color = "#fc3c55"
-            //     playImage.colorOverlay = "white"
-            //     pauseImage.colorOverlay = "white"
-            // }
-            function onConfigSignal_loadLastCloseAppFocusedMusic(icon_,music_name_,music_artist_,music_album_,timesize_,music_id_,music_filepath_){
+            function onFocusedMusicRestored(icon_,music_name_,music_artist_,music_album_,timesize_,music_id_,music_filepath_){
                 console.log("Loading foucsed music.")
                 //由于Basic.currentMediaCoverFilePath连接着信号处理，最后再赋值它，顺带触发自动更新ui
                 BasicConfig.currentMediaName=music_name_
@@ -256,7 +260,7 @@ Rectangle{
         Connections{
             target:BasicConfig
             function onCurrentMediaCoverFilePathChanged(){
-                musicIconImage.source = BasicConfig.currentMediaCoverFilePath
+                iconimage.source = BasicConfig.currentMediaCoverFilePath
                 musicNameTextLabel.text=BasicConfig.currentMediaName
                 singerNameTextLabel.text=BasicConfig.currentMediaArtistAuthor
             }
@@ -339,7 +343,7 @@ Rectangle{
                 lastImage.layer.enabled=true
             }
             onClicked: {
-                Client.reqPlayLast(/*(BasicConfig.playingIndex - 1) < 0 ? BasicConfig.localMusicListModel.count-1 : BasicConfig.playingIndex - 1*/)
+                Client.playPrevious(/*(BasicConfig.playingIndex - 1) < 0 ? BasicConfig.localMusicListModel.count-1 : BasicConfig.playingIndex - 1*/)
             }
         }
     }
@@ -371,7 +375,7 @@ Rectangle{
                 nextImage.layer.enabled=true
             }
             onClicked: {
-                Client.reqPlayNext(/*(BasicConfig.playingIndex + 1)%BasicConfig.localMusicListModel.count*/)
+                Client.playNext(/*(BasicConfig.playingIndex + 1)%BasicConfig.localMusicListModel.count*/)
             }
         }
     }
@@ -400,7 +404,7 @@ Rectangle{
 
         Connections{
             target: Client
-            function onUpdataQmlPlayProgressSliderCurPos(CurPos,CurTime_Second){
+            function onPlayProgressUpdated(CurPos,CurTime_Second){
                 if(musicProgressSlier.isPressed===false && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex)
                 {
                     musicProgressSlier.nowSecondTime=CurTime_Second
@@ -409,12 +413,12 @@ Rectangle{
                     musicProgressSlier.visibleProgressX =musicProgressSlier.width * musicProgressSlier.ratio
                 }
             }
-            function onUpdataQmlPlayNowFileAllTime(AllTime){
+            function onTotalDurationUpdated(AllTime){
                 if(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex){
                     musicProgressSlier.allSecondTime = AllTime;
                 }
             }
-            function onUpdataQmlTransforStopIcon() {
+            function onStopIconUpdated() {
                 musicProgressSlier.progressHandleX = musicProgressSlier.width - musicProgressSlier.progressHandleWidth / 2;
                 musicProgressSlier.visibleProgressX = musicProgressSlier.width;
             }

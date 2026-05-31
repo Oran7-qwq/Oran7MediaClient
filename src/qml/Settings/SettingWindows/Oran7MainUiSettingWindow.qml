@@ -239,6 +239,7 @@ Item {
                     colorToken:"colorPrimaryBase"
                     onEnterOfTextFiled: function(text){
                         Oran7Theme.saveComponentToken(componentName,"themeColor",text)
+                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
                     }
                     onColorReady: function(seletedColor){
                         Oran7Theme.saveComponentToken(componentName,"themeColor",String(seletedColor).toLowerCase())

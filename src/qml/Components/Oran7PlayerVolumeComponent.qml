@@ -176,7 +176,7 @@ Item{
                     //console.log(progressRealValue)
                     //volumeSlider.volumeSlider_progressValue = progressRealValue
                     BasicConfig.playerVolume = progressRealValue
-                    Client.reqChangeVolumeValue(Math.floor(progressRealValue))
+                    Client.setVolume(Math.floor(progressRealValue))
 
                     volumeValue.text = Math.floor(progressRealValue) + "%"
                 }
@@ -196,7 +196,7 @@ Item{
 
             Connections{
                 target:Client
-                function onConfigSignal_loadPlayerVolumeConfig(value)
+                function onPlayerVolumeConfigLoaded(value)
                 {
                     BasicConfig.playerVolume = value
                 }

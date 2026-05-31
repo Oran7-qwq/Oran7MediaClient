@@ -108,7 +108,6 @@ Item {
         //初始化属性
         titleModel: ["本地音乐", "下载中歌曲"]
         listModel: BasicConfig.localMusicListModel
-        isPlaying: BasicConfig.isPlaying //bind
 
         // ------------- innder signals -------------
         onItemDoubleClicked: function (index) {
@@ -138,7 +137,7 @@ Item {
 
             if (BasicConfig.isPlaying === false && curSelectingIndex === -1) {
                 //--->first begain to play
-                Client.qmlClickedReqPreparePlayMusic(item.filepath);
+                Client.requestPlayMusic(item.filepath);
                 BasicConfig.isPlaying = true;
                 curPlayingIndex = index;
 
@@ -149,12 +148,12 @@ Item {
                 BasicConfig.currentMediaCoverFilePath = item.icon;//touch bottom page update
             } else if (BasicConfig.isPlaying === false && curSelectingIndex === index) {
                 //-->pause statue,and the same file
-                Client.qmlClickedReqPreparePlayMusic(item.filepath);
+                Client.requestPlayMusic(item.filepath);
                 BasicConfig.isPlaying = true;
                 curPlayingIndex = index;
             } else if (BasicConfig.isPlaying === false && curSelectingIndex !== index) {
                 //-->pause statue,and request to change file
-                Client.qmlClickedReqPreparePlayMusic(item.filepath);
+                Client.requestPlayMusic(item.filepath);
                 BasicConfig.isPlaying = true;
                 curPlayingIndex = index;
 
@@ -165,7 +164,7 @@ Item {
                 BasicConfig.currentMediaCoverFilePath = item.icon;//touch bottom page update
             } else if (BasicConfig.isPlaying === true && curSelectingIndex !== index) {
                 //--->is playing while change file
-                Client.qmlClickedReqPreparePlayMusic(item.filepath);
+                Client.requestPlayMusic(item.filepath);
                 BasicConfig.isPlaying = true; //keep playing
                 curPlayingIndex = index;
 
@@ -176,7 +175,7 @@ Item {
                 BasicConfig.currentMediaCoverFilePath = item.icon;//touch bottom page update
             } else if (BasicConfig.isPlaying === true && curSelectingIndex === index) {
                 //--->is playing ,the same of file for request to pause
-                Client.qmlClickedReqPreparePlayMusic(item.filepath);
+                Client.requestPlayMusic(item.filepath);
                 BasicConfig.isPlaying = false;
                 curPlayingIndex = -1;
             }
@@ -199,10 +198,10 @@ Item {
         }
 
         // -------------  Connections  -------------
-
-        //-->signal from BasicConfig ,the player core playing statue is changed, now async the playlist Ui Of statues
+        //<---signal from BasicConfig
         Connections {
             target: BasicConfig
+            //<--signal from BasicConfig ,the player core playing statue is changed, now async the playlist Ui Of statues
             function onIsPlayingChanged() {
                 if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex) {
                     localMusciStack_playlistView.curPlayingIndex = -1;
@@ -212,29 +211,44 @@ Item {
                 localMusciStack_playlistView.ask_dir_of_item_index(BasicConfig.currentMediaFilePath);
             }
         }
-        //--> signal from this for response to the file_path dir of item index
+        //<--- signal from this Oran7MusicPlaylistView inner
         Connections {
             target: localMusciStack_playlistView
+            //--> signal from this for response to the file_path dir of item index
             function onReponse_dir_of_item_index(index) {
                 localMusciStack_playlistView.deal_outClickplayReponse_asyncUiStatue(index);
             }
 
+            function onReorderCompleted(newOrder){
+                Client.localMusicListReordered(newOrder);
+            }
+
             function onAddNewItemOfFiles(filesArray) {
+                var focusedItem = localMusciStack_playlistView.getfocusItem();
                 Client.addNewLocalMusic(filesArray);
+                localMusciStack_playlistView.refocusItem(focusedItem)
+            }
+
+            function onRemoveItemOfFiles(filesArray){
+                Client.deleteLocalMusicFiles(filesArray);
+            }
+
+            function onUpdateCurGlobalFocusMediaFile(filepath){
+                Client.updateFocusCurMediaFile(filepath);
             }
         }
         //-->signal from Client Of request to play next or last
         Connections {
             target: Client
-            function onTriggerPlayNext() {
+            function onPlayNextTriggered() {
                 if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
                     return;
-                localMusciStack_playlistView.dealClicked((localMusciStack_playlistView.curSelectingIndex + 1) % localMusciStack_playlistView.listModel.count);
+                localMusciStack_playlistView.dealClicked((localMusciStack_playlistView.curPlayingIndex + 1) % localMusciStack_playlistView.listModel.count);
             }
-            function onTriggerPlayLast() {
+            function onPlayPreviousTriggered() {
                 if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
                     return;
-                localMusciStack_playlistView.dealClicked(localMusciStack_playlistView.curSelectingIndex - 1 < 0 ? localMusciStack_playlistView.listModel.count - 1 : localMusciStack_playlistView.curSelectingIndex - 1);
+                localMusciStack_playlistView.dealClicked(localMusciStack_playlistView.curPlayingIndex - 1 < 0 ? localMusciStack_playlistView.listModel.count - 1 : localMusciStack_playlistView.curPlayingIndex - 1);
             }
         }
     }

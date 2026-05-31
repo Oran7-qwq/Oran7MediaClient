@@ -73,5 +73,7 @@
         <file>image/test_background1.jpg</file>
         <file>image/mynaui_panel-left-close-solid.png</file>
         <file>image/defaultBg.jpg</file>
+        <file>image/material-symbols_delete-outline-rounded.png</file>
+        <file>image/mingcute_arrows-down-fill.png</file>
     </qresource>
 </RCC>

@@ -129,7 +129,7 @@ Rectangle{
                 root.visibleColor=root.sliderColor_themeItems[root.sliderColor_themeIndex].default_Color
             }
             if(BasicConfig.globalPlayingFocus === root.focusedPlayer)
-                Client.progressSlider_Seek(root.nowSecondTime)
+                Client.seekTo(root.nowSecondTime)
         }
         onMouseXChanged: (mouse)=>{
             if(root.isPressed===true)

@@ -50,5 +50,7 @@
         <file>src/qml/Components/Oran7ColorPickerWindow.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7NumSettingGroup.qml</file>
         <file>src/qml/Components/Oran7ValueSlider.qml</file>
+        <file>src/qml/Components/Oran7RoundedImage.qml</file>
+        <file>src/qml/Components/Oran7GradientMask.qml</file>
     </qresource>
 </RCC>

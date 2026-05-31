@@ -2,7 +2,7 @@
 #define APPLICATIONCONTEXT_H
 
 #include "AsyncManagers.h"
-#include "Client.h"
+#include "Oran7MediaClient.h"
 
 #include "AppJsonConfigManager.h"
 #include "Oran7ThemeProfileManager.h"

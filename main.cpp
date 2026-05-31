@@ -10,8 +10,9 @@
 #include "GlobalEventFilter.h"
 #include "AppJsonConfigManager.h"
 //#include "Sever.h"
-#include "Client.h"
+#include "Oran7MediaClient.h"
 #include "ApplicationContext.h"
+#include "AsyncManagers.h"
 #include "BilibliLiveRoomAddressCatch.h"
 #include "Oran7Theme.h"
 #include "ConsoleLogger.h"
@@ -158,6 +159,7 @@ int main(int argc, char *argv[])
     // Sever sever;
     // sever.startServer(55711);
 
+
     Client *client = ApplicationContext::instance().client();
     qmlRegisterSingletonType<Client>("Client", 1, 0, "Client",
          [client](QQmlEngine *engine, QJSEngine *scriptEngine) -> QObject *
@@ -179,11 +181,28 @@ int main(int argc, char *argv[])
         CONFIG_LOG << "AppConfigManager:Successfully load user Config,";
 
     QObject::connect(&app, &QGuiApplication::aboutToQuit, &app, [&engine]() mutable{
-        ApplicationContext::instance().client()->StopPlayerRuning();//先确保杀死Oran7MediaPlayer防止Video_refresh还在触发回调qml渲染对象
+        ApplicationContext::instance().client()->stopPlayerRunning();//先确保杀死Oran7MediaPlayer防止Video_refresh还在触发回调qml渲染对象
 
         Config_AppConfigManager_RET = Config_AppConfigManager_Save(engine);
         if(Config_AppConfigManager_RET == ConfigRET::Config_SUCCESSED)
-            CONFIG_LOG<<"AppConfigManager:Successfully save user Config."; });
+            CONFIG_LOG<<"AppConfigManager:Successfully save user Config.";
+
+        // ===== 在事件循环停止前清理所有后台线程和资源 =====
+        // 1. 取消并等待 AsyncWorker 的所有任务
+        AsyncWorker* worker = ApplicationContext::instance().asyncWorker();
+        if (worker) {
+            worker->cancelAll();
+        }
+
+        // 2. 断开 QTcpSocket，防止连接挂起
+        Client* client = ApplicationContext::instance().client();
+        if (client) {
+            QTcpSocket* sock = client->findChild<QTcpSocket*>();
+            if (sock) {
+                sock->abort();
+            }
+        }
+    });
 
     ///Singleton依赖:析构链路AppConfigManager.Oran7ThemeProfileManager.Oran7Theme.Oran7ThemePrivate
     qAddPostRoutine([](){

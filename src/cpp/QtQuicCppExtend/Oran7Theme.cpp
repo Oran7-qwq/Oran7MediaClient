@@ -1073,7 +1073,7 @@ Oran7Theme::Oran7Theme(QObject *parent)
 
     reloadTheme();  // reloadTheme 中会调用 loadCurrentThemeProfile
 
-#if 1
+#if DEVELOPER_MODE
     // 输出 m_indexTokenTable 的所有键值
     qDebug()<<"\n";
 

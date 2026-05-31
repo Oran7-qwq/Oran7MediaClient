@@ -19,7 +19,7 @@ ApplicationWindow {
     visible: false
     flags: Qt.Window | Qt.FramelessWindowHint
     width: Screen.width
-    height: Screen.height - root.taskbarHeight
+    height: Screen.desktopAvailableHeight
     x: 0
     y: 0
     color: "transparent"

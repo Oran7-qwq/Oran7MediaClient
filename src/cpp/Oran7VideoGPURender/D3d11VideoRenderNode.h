@@ -4,6 +4,7 @@
 #include <QSGRenderNode>
 #include <QQuickWindow>
 #include <QFile>
+#include <QHash>
 // #include <QShader>
 
 #include <atomic>
@@ -29,6 +30,7 @@ public:
 
     void setFrame(AVFrame *f);
     void setRect(const QRectF &rect);
+    void setContentRect(const QRectF &rect);
     void setNeedBlack(bool on);
 
     bool takePendingSourceSizeChanged(int &w, int &h);
@@ -44,7 +46,8 @@ public:
 
 private:
     QQuickWindow *m_window = nullptr;
-    QRectF m_rect;
+    QRectF m_rect;          // item 全区域（= videoHost），rect() 返回此值
+    QRectF m_contentRect;   // Fit/Fill 后真实视频绘制区域，顶点用此值
     std::atomic<AVFrame *> m_latestFrame{nullptr};
     std::atomic<bool> m_needBlack{false};
 
@@ -75,7 +78,6 @@ private:
 
     //QRhi
     bool m_rhiInited = false;
-    bool m_pipelineDirty = true;
     bool m_verticesDirty = true;
 
     QRhi *m_rhi = nullptr;
@@ -83,8 +85,12 @@ private:
     std::unique_ptr<QRhiSampler> m_sampler;
     std::unique_ptr<QRhiBuffer> m_vbuf;
     std::unique_ptr<QRhiBuffer> m_ubuf;
+
     std::unique_ptr<QRhiShaderResourceBindings> m_srb;
-    std::unique_ptr<QRhiGraphicsPipeline> m_ps;
+    // 按 render pass descriptor 缓存 pipeline。
+    // 同一帧内 render() 会被调用两次（先 offscreen 后 main），
+    // 每个 render target 需要独立的 pipeline，不能在 offscreen→main 切换时销毁 offscreen pipeline。
+    QHash<QRhiRenderPassDescriptor *, QRhiGraphicsPipeline *> m_pipelineCache;
 
     bool m_importDirty = true;   // 需要重新 createFrom
     bool m_srbDirty = true;
@@ -105,8 +111,8 @@ private:
 
     void createBuffers();
     void uploadStaticVerticesIfNeeded();
-    void createPipeline();
-    void updateUniforms();
+    QRhiGraphicsPipeline *createPipelineFor();
+    void updateUniforms(const RenderState *state);
     void rebuildSrbAndPipelineIfNeeded();
     void doReleaseResources();
 

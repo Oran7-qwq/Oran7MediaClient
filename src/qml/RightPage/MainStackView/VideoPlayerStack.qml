@@ -117,7 +117,7 @@ Item {
     }
     Connections {
         target: Client
-        function onSigStop() {
+        function onStopRequested() {
             Client.renderBlackFrame(videoRenderItem.renderObject);
         }
     }
@@ -271,7 +271,7 @@ Item {
                     }
                     Connections {
                         target: Client
-                        function onSigStop() {
+                        function onStopRequested() {
                             videoNetwork_Loader.visible = false;
                             if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_LivePlayerIndex)
                                 bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl;
@@ -368,12 +368,12 @@ Item {
                             bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_pauseImageSourceUrl;
                             BasicConfig.isPlaying = true;
                             videoRenderItem.tryAttachDelayed(); //sureLoad videoItemCpp
-                            Client.qmlClickedReqPreparePlayVideo(bilibiliRoomAddressCatch.urls[0]);
+                            Client.requestPlayVideo(bilibiliRoomAddressCatch.urls[0]);
                         }
                         function handle_bilibiliRoomNumWay_pause() {
                             bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl;
                             BasicConfig.isPlaying = false;
-                            Client.qmlClickedReqPreparePlayVideo(bilibiliRoomAddressCatch.urls[0]);
+                            Client.requestPlayVideo(bilibiliRoomAddressCatch.urls[0]);
                         }
                         property bool sureReadyPlay: false
                         MouseArea {
@@ -527,12 +527,12 @@ Item {
                             inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_pauseImageSourceUrl;
                             BasicConfig.isPlaying = true;
                             videoRenderItem.tryAttachDelayed();
-                            Client.qmlClickedReqPreparePlayVideo(inputFilePathTextArea.text);
+                            Client.requestPlayVideo(inputFilePathTextArea.text);
                         }
                         function handle_InputFilePathWay_pause() {
                             inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
                             BasicConfig.isPlaying = false;
-                            Client.qmlClickedReqPreparePlayVideo(inputFilePathTextArea.text);
+                            Client.requestPlayVideo(inputFilePathTextArea.text);
                         }
 
                         MouseArea {
@@ -594,7 +594,7 @@ Item {
                                 }
                                 inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
                                 BasicConfig.isPlaying = false;
-                                Client.sigStop();
+                                Client.stopRequested();
                             }
                         }
                         MouseArea {
@@ -626,7 +626,7 @@ Item {
                     }
                 }
                 //============= 选择videoScaleMode ==================//
-                property int scaleMode: Client.Fill
+                property int scaleMode: Client.Fit
                 Label {
                     id: scaleModeTextLabel
                     font.pixelSize: 20
@@ -759,7 +759,7 @@ Item {
                              && videoBottomControlBarRect.enabled
                              && videoBottomControlBarRect.Window
                              && videoBottomControlBarRect.Window.active
-                function onUpdataQmlPlayProgressSliderCurPos(CurPos, CurTime_Second) {
+                function onPlayProgressUpdated(CurPos, CurTime_Second) {
                     if (videoProgressSlider.isPressed === false && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
                         //console.log(CurPos,CurTime_Second)
                         videoProgressSlider.nowSecondTime = CurTime_Second;
@@ -772,12 +772,12 @@ Item {
                         }
                     }
                 }
-                function onUpdataQmlPlayNowFileAllTime(AllTime) {
+                function onTotalDurationUpdated(AllTime) {
                     if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
                         videoProgressSlider.allSecondTime = AllTime;
                     }
                 }
-                function onUpdataQmlTransforStopIcon() {
+                function onStopIconUpdated() {
                     inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
                     videoProgressSlider.progressHandleX = videoProgressSlider.width - videoProgressSlider.progressHandleWidth / 2;
                     videoProgressSlider.visibleProgressX = videoProgressSlider.width;

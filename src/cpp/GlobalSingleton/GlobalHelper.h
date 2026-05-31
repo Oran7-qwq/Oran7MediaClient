@@ -9,7 +9,7 @@
 
 #include <QCoreApplication>
 
-#define DEVELOPER_MODE 1
+#define DEVELOPER_MODE 0
 #define MAX_SLIDER_VALUE 65536
 
 enum ERROR_CODE
@@ -132,30 +132,7 @@ class GlobalHelper
 public:
     GlobalHelper();
 
-    static QString getConfigDir()
-    {
-        QString appDir;
-        if (QCoreApplication::instance() && !QCoreApplication::closingDown()) {
-            appDir = QCoreApplication::applicationDirPath();
-        } else {
-            // 退化路径：使用当前工作目录
-            appDir = QDir::currentPath();
-        }
-
-        QString configDir = QDir::cleanPath(appDir + "/Config");
-
-        // 确保文件夹存在
-        if (!QDir(configDir).exists()) {
-            if (!QDir().mkpath(configDir)) {
-                qWarning() << "Failed to create Config directory:" << configDir;
-            }
-        }
-
-        INFO_LOG << "ConfigDir:"<<configDir;
-
-        static QString cachedConfigDir = configDir;
-        return cachedConfigDir;
-    }
+    static QString getConfigDir();
 };
 
 
@@ -175,7 +152,8 @@ public:
     QString CurMediaFilePath = QString();//当前正在播放的media文件绝对路径
 
     //*cache 媒体文件缓存路径*//
-    QString appDirPath;              //应用主目录 Oran7CloudMusic
+    QString appDirPath;              //应用主目录//暂未启用
+
     QString audioDirPath;           //audio 子目录
     QString audioCoverDirPath; //audioCover存储封面子目录
 

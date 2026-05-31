@@ -47,7 +47,7 @@ Item {
                 height: parent.height
                 trackHeight: Oran7MainUiSetting.itemHeight * 0.35
                 sliderColor_themeIndex:0
-                progressHandleWidth:trackHeight*1.1
+                progressHandleWidth:trackHeight*1.3
                 from: root.sliderValueFrom
                 to: root.sliderValueTo
                 value: root.value

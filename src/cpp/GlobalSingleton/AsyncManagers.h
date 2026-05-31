@@ -15,7 +15,8 @@
 
 enum TaskType {
     NONE_Task_ = 0,
-    SearchLocalMediaFiles_Task_
+    SearchLocalMediaFiles_Task_,
+    DeleteLocalMusicFiles_Task_
 };
 //AsyncTask base Class,by every children class task to inheritance for do work（Will be submit to threadPool for execution）
 class AsyncTask : public QObject,public QRunnable
@@ -41,6 +42,7 @@ signals:
 
 //==========Tasks Classes declare==========//
 class SearchLocalMediaFiles_Task;
+class DeleteLocalMusicFiles_Task;
 
 
 //total AsyncTasks Manager
@@ -56,6 +58,7 @@ public:
 
     //====For Qml Ways====//
     Q_INVOKABLE int startSearchLocalMediaFiles_Task(const QString& folderPath);
+    Q_INVOKABLE int startDeleteLocalMusicFiles_Task(const QVariantList& filePaths);
 
     //universal startTask way
     Q_INVOKABLE int startTask(int taskType,const QVariantMap& parameters);
@@ -63,6 +66,7 @@ public:
 public:
     bool isBusy() const {return m_runningTasks.isEmpty();}
     int activeTaskCount() const {return m_runningTasks.size();}
+    void cancelAll();  // 公开：供 aboutToQuit 调用
 
 private:
     int generateTaskId();
@@ -70,7 +74,6 @@ private:
     void unregisterTask(int taskId);
     void connectTaskSignals(AsyncTask* task, int taskId);
     void cancelTask(int taskId);
-    void cancelAll();
 
 private:
     QThreadPool *m_threadPool;
@@ -127,5 +130,22 @@ private:
     std::atomic<int> m_fileCount{0};
 };
 
+class DeleteLocalMusicFiles_Task : public AsyncTask
+{
+    Q_OBJECT
+public:
+    struct Parameters {
+        QVariantList filePaths;
+    };
+
+    explicit DeleteLocalMusicFiles_Task(int taskId, const Parameters& params = {}, QObject *parent = nullptr);
+
+    TaskType type() const override { return TaskType::DeleteLocalMusicFiles_Task_; }
+    void process() override;
+
+private:
+    int m_taskId;
+    Parameters m_params;
+};
 
 #endif // ASYNCMANAGERS_H

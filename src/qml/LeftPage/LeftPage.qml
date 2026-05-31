@@ -17,7 +17,7 @@ Rectangle {
     readonly property real defaultWidth: 204
     readonly property real simpleModeWidth: 70
 
-    property int itemSeleted_index: 0
+    property int itemSelected_index: 0
     property int itemHovered_index: -1
     property bool mouseIsInCaptionBar: false
     property bool enableCentering: root.simpleMode  // 控制导航栏图标是否居中
@@ -100,7 +100,7 @@ Rectangle {
                 height: 42
                 width: root.simpleMode ? 42 : 160
                 radius: 10
-                color: root.itemSeleted_index === model.index ? Oran7Theme.Oran7CaptionBar.selectedColor :
+                color: root.itemSelected_index === model.index ? Oran7Theme.Oran7CaptionBar.selectedColor :
                                     root.itemHovered_index === model.index ? Oran7Theme.Oran7CaptionBar.hoveredColor : "transparent"
                 Behavior on x { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
                 Behavior on width { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
@@ -115,7 +115,7 @@ Rectangle {
                     target: BasicConfig
                     function onFocusCurrent_SelectedMenuModel(pageName_) {
                         if (model.pageName === pageName_) {
-                            root.itemSeleted_index = model.index
+                            root.itemSelected_index = model.index
                         }
                     }
                 }
@@ -164,7 +164,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        root.itemSeleted_index = model.index
+                        root.itemSelected_index = model.index
                         switch (index) {
                         case 0:
                             BasicConfig.pushVideoPlayerStackInto_RightPageMainStackView();
@@ -247,7 +247,7 @@ Rectangle {
                 height: 42
                 width: root.simpleMode ? 42 : 160
                 radius: 10
-                color: root.itemSeleted_index - topListModel.count === model.index ? Oran7Theme.Oran7CaptionBar.selectedColor :
+                color: root.itemSelected_index - topListModel.count === model.index ? Oran7Theme.Oran7CaptionBar.selectedColor :
                                     root.itemHovered_index - topListModel.count === model.index ? Oran7Theme.Oran7CaptionBar.hoveredColor : "transparent"
                 Behavior on x { NumberAnimation { duration: 150 } }
                 Behavior on width { NumberAnimation { duration: 150 } }
@@ -262,7 +262,7 @@ Rectangle {
                     target: BasicConfig
                     function onFocusCurrent_SelectedMenuModel(pageName_) {
                         if (pageName === pageName_) {
-                            root.itemSeleted_index = model.index + topListModel.count
+                            root.itemSelected_index = model.index + topListModel.count
                         }
                     }
                 }
@@ -310,7 +310,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        root.itemSeleted_index = model.index + topListModel.count
+                        root.itemSelected_index = model.index + topListModel.count
                         switch (index) {
                         case 0:
                             BasicConfig.pushMyFavoriteMusicStackInto_RightPageMainStackView();
