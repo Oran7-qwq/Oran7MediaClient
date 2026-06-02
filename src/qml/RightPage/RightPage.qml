@@ -6,6 +6,7 @@ import "../Basic"
 import "./MainStackView"
 
 import Oran7UI.Impl
+import BilibiliAuth 1.0
 
 Rectangle {
     id: root
@@ -212,6 +213,14 @@ Rectangle {
     //     anchors.centerIn: parent
     // }
     // -----------------------------
+
+    // B站扫码登录弹窗
+    BilibiliLoginPopup {
+        id: bilibiliLoginPopup
+        width: 380
+        height: 480
+        anchors.centerIn: parent
+    }
 
     //=============  MainStackView  ===============
     MainStackView {

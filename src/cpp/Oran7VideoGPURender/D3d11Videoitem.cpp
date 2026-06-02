@@ -303,6 +303,25 @@ bool D3D11VideoItem::blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int srcH,
     m_videoCtx->VideoProcessorSetStreamSourceRect(m_vp.Get(), 0, TRUE, &srcRect);
     m_videoCtx->VideoProcessorSetStreamDestRect(m_vp.Get(), 0, TRUE, &dstRect);
 
+    // ===== 色彩空间设置（修复饱和度偏低的问题）=====
+    // 输入流色彩空间：BT.709 + Limited Range (16-235)，网络直播流标准
+    D3D11_VIDEO_PROCESSOR_COLOR_SPACE inputStreamColor{};
+    inputStreamColor.Usage = 0;
+    inputStreamColor.RGB_Range = 0;
+    inputStreamColor.YCbCr_Matrix = 1;                    // 1 = BT.709（1080p标准）
+    inputStreamColor.YCbCr_xvYCC = 0;
+    inputStreamColor.Nominal_Range = 1;                    // 1 = Limited Range (16-235)
+    m_videoCtx->VideoProcessorSetStreamColorSpace(m_vp.Get(), 0, &inputStreamColor);
+
+    // 输出色彩空间：BT.709 + Full Range (0-255)，匹配显示器 sRGB
+    D3D11_VIDEO_PROCESSOR_COLOR_SPACE outputColorSpace{};
+    outputColorSpace.Usage = 0;
+    outputColorSpace.RGB_Range = 0;                       // 0 = Full Range (0-255)
+    outputColorSpace.YCbCr_Matrix = 1;                    // BT.709
+    outputColorSpace.YCbCr_xvYCC = 0;
+    outputColorSpace.Nominal_Range = 0;                    // 0 = Full Range (0-255)
+    m_videoCtx->VideoProcessorSetOutputColorSpace(m_vp.Get(), &outputColorSpace);
+
     D3D11_VIDEO_PROCESSOR_STREAM stream{};
     stream.Enable = TRUE;
     stream.pInputSurface = inView.Get();

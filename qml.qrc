@@ -31,6 +31,7 @@
         <file>src/qml/RightPage/MainStackView/VideoPlayerStack.qml</file>
         <file>src/qml/RightPage/TopMenuBar/LoginPopup.qml</file>
         <file>src/qml/RightPage/TopMenuBar/MainLoginPopup.qml</file>
+        <file>src/qml/RightPage/TopMenuBar/BilibiliLoginPopup.qml</file>
         <file>src/qml/RightPage/TopMenuBar/SearchPopup.qml</file>
         <file>src/qml/RightPage/TopMenuBar/TopLeftBar.qml</file>
         <file>src/qml/RightPage/TopMenuBar/TopMiddleMenuBar.qml</file>
@@ -42,7 +43,7 @@
         <file>src/qml/Settings/SettingWindows/Oran7MediaPlayerSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7SettingsContainerWindow.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SetingTitleItem.qml</file>
-        <file>src/qml/Settings/SettingWindows/Oran7MusicPlayListSettingWindow.qml</file>
+        <file>src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7ScreenCaptureSettingWindow.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorSelectItem.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorCheckBox.qml</file>
@@ -52,5 +53,6 @@
         <file>src/qml/Components/Oran7ValueSlider.qml</file>
         <file>src/qml/Components/Oran7RoundedImage.qml</file>
         <file>src/qml/Components/Oran7GradientMask.qml</file>
+        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ExpandItem.qml</file>
     </qresource>
 </RCC>

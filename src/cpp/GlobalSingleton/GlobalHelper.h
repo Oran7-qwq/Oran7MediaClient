@@ -9,7 +9,7 @@
 
 #include <QCoreApplication>
 
-#define DEVELOPER_MODE 0
+#define DEVELOPER_MODE 1
 #define MAX_SLIDER_VALUE 65536
 
 enum ERROR_CODE

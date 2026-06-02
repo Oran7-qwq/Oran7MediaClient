@@ -20,7 +20,8 @@ Item {
     property color checkedColor: "#000000" //bind
     property string componentName: "Oran7MainGUI"
     property string colorTokenName: "colorPrimaryBase"//bind Out,must be initilized
-    property real toggleOpenAniDuration: Oran7MainUiSetting.toggleOpenAniDuration - 50
+    property real toggleOpenAniDuration: Oran7Theme.Primary.durationMid
+    property int displayAmount: 10
 
     signal colorReady(color seletedColor)
 
@@ -45,20 +46,6 @@ Item {
     *@notice-Link : contene_column.height -> line.height ~> root.height
     **/
 
-    // ListModel{
-    //     id:colorModel
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-1}
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-2}
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-3}
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-4}
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-5}
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-6}
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-7}
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-8}
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-9}
-    //     ListElement{color:Oran7Theme.Oran7MainGUI.colorPrimaryBase-10}
-    // }
-
     function pharseColor(tokenName, index) {
         var key = tokenName + "-" + index
         var val = Oran7Theme[root.componentName][key]
@@ -71,7 +58,7 @@ Item {
     //--- LeftColumeLine ---
     Rectangle{
         id:line
-        width: 3
+        width: 2
         height: contene_column.implicitHeight
         color:Oran7MainUiSetting.textColor
         opacity: root.open__ ? 1 : 0
@@ -83,121 +70,127 @@ Item {
         }
     }
 
-    Column{
-        id:contene_column
+    Loader {
+        id: contentLoader
+        active: root.open__
+        asynchronous: true
         anchors.left: parent.left
         anchors.right: parent.right
-        opacity: root.open__ ? 1 : 0
-        Behavior on opacity {
-            NumberAnimation{
-                duration: root.toggleOpenAniDuration
-                easing.type:Easing.OutCubic
-            }
-        }
-        spacing: 0
-        Repeater {
-            model: 10
-            delegate: Oran7SettingItem {
-                id: element_root
-
-                required property int index
-
-                property color currentColor: pharseColor(root.colorTokenName, index + 1)
-
-                property real elementLeftMargin__: Oran7MainUiSetting.itemHeight * 0.75
-
-                anchors.rightMargin: elementLeftMargin__
-                showTag: false
-                radius: 4
-                fontBold: true
-                backColor: currentColor
-                text: formatColorText(currentColor)
-                textColor: {
-                    var c = Qt.color(currentColor)
-                    var brightness = c.r * 0.299 + c.g * 0.587 + c.b * 0.114
-                    return brightness > 0.5 ? "black" : "white"
-                }
-                textHAlign: Text.AlignHCenter
-
-                Behavior on elementLeftMargin__ {
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onEntered: element_root.elementLeftMargin__ = 0
-                    onExited: element_root.elementLeftMargin__ = Oran7MainUiSetting.itemHeight * 0.75
-                    onClicked: root.colorReady(element_root.currentColor)
-                }
-            }
-        }
-
-        // 当前颜色显示项
-        Oran7SettingItem {
-            id: currentColorDisplay
+        Column{
+            id:contene_column
             anchors.left: parent.left
             anchors.right: parent.right
-            height: Oran7MainUiSetting.itemHeight
-            radius: 4
-            text: "AutoDefine:"
-            showTag: false
+            opacity: root.open__ ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation{
+                    duration: root.toggleOpenAniDuration
+                    easing.type:Easing.OutCubic
+                }
+            }
+            spacing: 0
+            Repeater{
+                model: root.displayAmount
+                delegate: Oran7SettingItem {
+                    id: element_root
 
-            // 颜色选择器按钮
-            Rectangle {
-                id: colorPickerButton
-                width: parent.width * 0.45
-                height: Oran7MainUiSetting.itemHeight * 0.8
-                radius: 4
-                anchors.right: parent.right
-                anchors.rightMargin: Oran7MainUiSetting.itemHeight * 0.75
-                anchors.verticalCenter: parent.verticalCenter
-                color: Oran7MainUiSetting.itemBackColor
-                border.width: 1
-                border.color: getBorderColor()
+                    required property int index
 
-                // 按钮内容
-                Row {
-                    anchors.fill: parent
-                    anchors.leftMargin: Oran7MainUiSetting.itemHeight * 0.133
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 4
+                    property color currentColor: pharseColor(root.colorTokenName, index + 1)
 
-                    // 颜色预览方块
-                    Rectangle {
-                        width: Oran7MainUiSetting.itemHeight * 0.5
-                        height: width
-                        anchors.verticalCenter: parent.verticalCenter
-                        radius: 2
-                        color: root.checkedColor
+                    property real elementLeftMargin__: Oran7MainUiSetting.itemHeight * 0.75
+
+                    anchors.rightMargin: elementLeftMargin__
+                    showTag: false
+                    radius: 4
+                    fontBold: true
+                    backColor: currentColor
+                    text: formatColorText(currentColor)
+                    textColor: {
+                        var c = Qt.color(currentColor)
+                        var brightness = c.r * 0.299 + c.g * 0.587 + c.b * 0.114
+                        return brightness > 0.5 ? "black" : "white"
+                    }
+                    textHAlign: Text.AlignHCenter
+
+                    Behavior on elementLeftMargin__ {
+                        NumberAnimation {
+                            duration: 150
+                            easing.type: Easing.OutCubic
+                        }
                     }
 
-                    // 颜色文本
-                    Text {
-                        id: colorText
-                        text: formatColorText(root.checkedColor)
-                        anchors.verticalCenter: parent.verticalCenter
-                        font.pixelSize: Oran7MainUiSetting.textPixelSize
-                        font.family: Oran7MainUiSetting.fontFamily
-                        color: Oran7MainUiSetting.isDarkMode ? "white" : "black"
-                        font.bold: false
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onEntered: element_root.elementLeftMargin__ = 0
+                        onExited: element_root.elementLeftMargin__ = Oran7MainUiSetting.itemHeight * 0.75
+                        onClicked: root.colorReady(element_root.currentColor)
                     }
                 }
+            }
+            // 当前颜色显示项
+            Oran7SettingItem {
+                id: currentColorDisplay
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: Oran7MainUiSetting.itemHeight
+                radius: 4
+                text: "AutoDefine:"
+                showTag: false
 
-                // 鼠标交互区域
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onEntered:
-                        root.buttonHovered = true
-                    onExited:
-                        root.buttonHovered = false
+                // 颜色选择器按钮
+                Rectangle {
+                    id: colorPickerButton
+                    width: parent.width * 0.45
+                    height: Oran7MainUiSetting.itemHeight * 0.8
+                    radius: 4
+                    anchors.right: parent.right
+                    anchors.rightMargin: Oran7MainUiSetting.itemHeight * 0.75
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Oran7MainUiSetting.itemBackColor
+                    border.width: 1
+                    border.color: getBorderColor()
 
-                    onPressed: root.openColorPicker()
+                    // 按钮内容
+                    Row {
+                        anchors.fill: parent
+                        anchors.leftMargin: Oran7MainUiSetting.itemHeight * 0.133
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 4
+
+                        // 颜色预览方块
+                        Rectangle {
+                            width: Oran7MainUiSetting.itemHeight * 0.5
+                            height: width
+                            anchors.verticalCenter: parent.verticalCenter
+                            radius: 2
+                            color: root.checkedColor
+                        }
+
+                        // 颜色文本
+                        Text {
+                            id: colorText
+                            text: formatColorText(root.checkedColor)
+                            anchors.verticalCenter: parent.verticalCenter
+                            font.pixelSize: Oran7MainUiSetting.textPixelSize
+                            font.family: Oran7MainUiSetting.fontFamily
+                            color: Oran7MainUiSetting.isDarkMode ? "white" : "black"
+                            font.bold: false
+                        }
+                    }
+
+                    // 鼠标交互区域
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onEntered:
+                            root.buttonHovered = true
+                        onExited:
+                            root.buttonHovered = false
+
+                        onPressed: root.openColorPicker()
+                    }
                 }
             }
         }

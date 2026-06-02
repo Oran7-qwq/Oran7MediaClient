@@ -26,7 +26,7 @@ QString GlobalHelper::getConfigDir()
         }
     }
 
-    INFO_LOG << "ConfigDir:" << configDir;
+    //INFO_LOG << "ConfigDir:" << configDir;
 
     static QString cachedConfigDir = configDir;
     return cachedConfigDir;

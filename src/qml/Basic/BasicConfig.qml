@@ -17,6 +17,9 @@ Item {
     //use in LoginPopup.qml for MainLoginPopup open
     signal openMainLoginPopup
 
+    //use for BilibiliLoginPopup open
+    signal openBilibiliLoginPopup
+
     //use in LeftPage clear element Rectangle backgroundColor
     signal clearElementBackgroundColorInLeftPage
     //use in LeftPage focusCurrent_SelectedMenuModel

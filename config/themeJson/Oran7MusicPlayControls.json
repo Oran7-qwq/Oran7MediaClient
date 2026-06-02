@@ -7,11 +7,7 @@
         }
     },
     "__style__":{
-        "textColor":"#ffffff",
-        "selectedColor":"@colorPrimaryBase-6",
-        "hoveredColor":"@colorPrimaryBase-4",
-
-        "isSimpleMode": true,
+        "playButtonColor":"#Preset_Grey",
 
         "blurEffectEnabled": true,
         "saturation":0.3,

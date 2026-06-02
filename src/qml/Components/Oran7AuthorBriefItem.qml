@@ -105,7 +105,8 @@ Item {
         gradientColorIndex: 0
         dynamicGradient: root.start_gradientLayerColorAnimation
         gradientMaskEnabled: true
-        transitionDuration: 2000
+        transitionDuration: 1000
+        dynamicInterval: 1000
 
         Column {
             id: column

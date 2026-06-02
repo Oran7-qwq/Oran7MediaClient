@@ -319,20 +319,13 @@ Item {
                         easing.type: Easing.OutCubic
                     }
                 }
-                // MouseArea {
-                //     hoverEnabled: true
-                //     anchors.fill: parent
-                //     onEntered: {
-                //         searchRectParallelAnimation_maxsize.start();
-                //     }
-                //     onExited: {
-                //         searchRectParallelAnimation_minisize.start();
-                //         // searchRectangle.forceActiveFocus()
-                //     }
-                //     onClicked: {
-                //         searchField.forceActiveFocus();
-                //     }
-                // }
+                HoverHandler{
+                    enabled: true
+                    acceptedDevices: PointerDevice.Mouse
+                    onHoveredChanged: {
+                        dragController.cursorShape=  hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    }
+                }
             }
 
             // ===== 多选按钮 =====
@@ -358,26 +351,25 @@ Item {
                     cache: false
                     mipmap: true
 
-                    property color colorOverlay: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     layer.enabled: true
                     layer.effect: ColorOverlay {
                         source: multiSelectIcon
-                        color: multiSelectIcon.colorOverlay
+                        color: multiSelectRect_HoverHandler.hovered ? Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"] :
+                                                                   Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                     }
 
                     MouseArea {
                         anchors.fill: parent
-                        hoverEnabled: true
-                        onEntered: {
-                            multiSelectIcon.colorOverlay = Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"];
-                            cursorShape = Qt.PointingHandCursor;
-                        }
-                        onExited: {
-                            multiSelectIcon.colorOverlay = Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"];
-                            cursorShape = Qt.ArrowCursor;
-                        }
                         onClicked: {
                             root.isMultiSelected = !root.isMultiSelected;
+                        }
+                    }
+                    HoverHandler{
+                        id:multiSelectRect_HoverHandler
+                        enabled: true
+                        acceptedDevices: PointerDevice.Mouse
+                        onHoveredChanged: {
+                            dragController.cursorShape=  hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
                         }
                     }
                 }
@@ -439,15 +431,15 @@ Item {
 
                     MouseArea {
                         anchors.fill: parent
-                        hoverEnabled: true
-                        onEntered: {
-                            cursorShape = Qt.PointingHandCursor;
-                        }
-                        onExited: {
-                            cursorShape = Qt.ArrowCursor;
-                        }
                         onClicked: {
                             multiSelectMenu.checked = !multiSelectMenu.checked;
+                        }
+                    }
+                    HoverHandler{
+                        enabled: root.isMultiSelected
+                        acceptedDevices: PointerDevice.Mouse
+                        onHoveredChanged: {
+                            dragController.cursorShape=  hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
                         }
                     }
                 }
@@ -485,6 +477,7 @@ Item {
                         acceptedDevices: PointerDevice.Mouse
                         onHoveredChanged: {
                             parent.hovered = hovered
+                            dragController.cursorShape = dragController.cursorShape=  hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
                         }
                     }
                     MouseArea{
@@ -1303,8 +1296,11 @@ Item {
             Rectangle {
                 id: addNewFileRectangle
                 property int initWidth: 50
-                width: addNewFileRectangle.initWidth
-                height: addNewFileRectangle.width
+                property bool hovered: false
+                width: addNewFileRectangle.hovered ? initWidth*1.05 : initWidth
+                Behavior on width{NumberAnimation{duration: Oran7Theme.Primary.durationMid;easing.type: Easing.OutCubic}}
+                height: addNewFileRectangle.hovered ? initWidth*1.05 : initWidth
+                Behavior on height{NumberAnimation{duration: Oran7Theme.Primary.durationMid;easing.type: Easing.OutCubic}}
                 z: 1
                 anchors.right: parent.right
                 anchors.rightMargin: addNewFileRectangle.initWidth
@@ -1327,43 +1323,38 @@ Item {
                     horizontalOffset: 5
                     verticalOffset: 5
                 }
+                Item{
+                    anchors.fill: parent
+                    rotation: addNewFileRectangle.hovered ? 90 : 0
+                    Behavior on rotation{NumberAnimation{duration: Oran7Theme.Primary.durationMid;easing.type: Easing.OutCubic}}
+                    Oran7GradientMask {
+                        id: addIconMask
+                        anchors.centerIn: parent
 
-                Rectangle {
-                    width: addNewFileRectangle.initWidth * 0.5
-                    height: 4
-                    radius: addNewFileRectangle.initWidth / 2
-                    color: "gray"
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-                Rectangle {
-                    width: 4
-                    height: addNewFileRectangle.initWidth * 0.5
-                    radius: addNewFileRectangle.initWidth / 2
-                    color: "gray"
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-                ParallelAnimation {
-                    id: addLocalMusicRectangleParallelAnimation_minisize
-                    PropertyAnimation {
-                        target: addNewFileRectangle
-                        property: "width"
-                        from: addNewFileRectangle.initWidth
-                        to: addNewFileRectangle.initWidth * 0.9
-                        duration: 80
-                        easing.type: Easing.InQuad
-                    }
-                }
-                ParallelAnimation {
-                    id: addLocalMusicRectangleParallelAnimation_maxsize
-                    PropertyAnimation {
-                        target: addNewFileRectangle
-                        property: "width"
-                        from: addNewFileRectangle.width
-                        to: addNewFileRectangle.initWidth
-                        duration: 80
-                        easing.type: Easing.InQuad
+                        width: addNewFileRectangle.initWidth * 0.55
+                        height: addNewFileRectangle.initWidth * 0.55
+
+                        gradientMaskEnabled: true
+                        dynamicGradient: true
+                        transitionDuration:  400
+                        //radientColorIndex: 1
+                        dynamicInterval: 400
+
+                        Rectangle {
+                            width: addIconMask.width
+                            height: 5.5
+                            radius: 2
+                            color: "white"
+                            anchors.centerIn: parent
+                        }
+
+                        Rectangle {
+                            width: 5.5
+                            height: addIconMask.height
+                            radius: 2
+                            color: "white"
+                            anchors.centerIn: parent
+                        }
                     }
                 }
 
@@ -1379,16 +1370,27 @@ Item {
 
                 MouseArea {
                     id: addMusicMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
+                    anchors.centerIn: addNewFileRectangle
+                    width: addNewFileRectangle.initWidth
+                    height: width
                     onPressed: {
-                        addLocalMusicRectangleParallelAnimation_minisize.start();
+                        addNewFileRectangle.width = addNewFileRectangle.initWidth*0.95
+                        addNewFileRectangle.height = addNewFileRectangle.initWidth*0.95
                     }
                     onReleased: {
-                        addLocalMusicRectangleParallelAnimation_maxsize.start();
+                        addNewFileRectangle.width = addNewFileRectangle.initWidth
+                        addNewFileRectangle.height = addNewFileRectangle.initWidth
                     }
                     onClicked: {
                         addNewFileRectangle_FileDialog.open();
+                    }
+                }
+                HoverHandler{
+                    enabled: true
+                    acceptedDevices: PointerDevice.Mouse
+                    onHoveredChanged: {
+                        dragController.cursorShape=  hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        parent.hovered = hovered
                     }
                 }
             }
@@ -1567,6 +1569,13 @@ Item {
                                 onClicked: {
                                     root.listModel.setProperty(model.index, "isSelected", !(model.isSelected === true));
                                 }
+                                HoverHandler{
+                                    enabled: root.isMultiSelected
+                                    acceptedDevices: PointerDevice.Mouse
+                                    onHoveredChanged: {
+                                        dragController.cursorShape=  hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    }
+                                }
                             }
 
                             // 序号/播放图标
@@ -1606,7 +1615,8 @@ Item {
                                     layer.enabled: true
                                     layer.effect: ColorOverlay {
                                         source: playIcon
-                                        color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                                        color: playIconHoverHandler.hovered ? Oran7Theme.Oran7MusicPlaylistView["textColorBase-5"] :
+                                                                              Oran7Theme.Oran7MusicPlaylistView["textColorBase-7"]
                                     }
                                 }
                                 Oran7WaveBarChart {
@@ -1622,10 +1632,20 @@ Item {
                                 }
 
                                 MouseArea {
+                                    id:playIconBtnMouseArea
                                     anchors.fill: parent
+                                    enabled: !root.isMultiSelected
                                     onClicked: {
                                         root.itemClicked(model.index);
                                         //console.log("clicked")
+                                    }
+                                }
+                                HoverHandler{
+                                    id:playIconHoverHandler
+                                    enabled: !root.isMultiSelected
+                                    acceptedDevices: PointerDevice.Mouse
+                                    onHoveredChanged: {
+                                        dragController.cursorShape=  hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
                                     }
                                 }
                             }
@@ -1753,10 +1773,19 @@ Item {
                                 }
                             }
                             // 鼠标交互
+                            HoverHandler{
+                                acceptedDevices: PointerDevice.Mouse
+                                onHoveredChanged: {
+                                    if (!root.isMultiSelected) {
+                                        playlistFlickable.itemHovered_index = playlistItem.itemIndex;
+                                    }
+                                }
+                            }
+
                             MouseArea {
                                 id: mouseArea
                                 anchors.fill: parent
-                                hoverEnabled: true
+                                hoverEnabled: false
                                 enabled: !root.isMultiSelected
                                 propagateComposedEvents: true
 
@@ -1783,11 +1812,11 @@ Item {
                                     }
                                 }
 
-                                onEntered: {
-                                    if (!root.isMultiSelected) {
-                                        playlistFlickable.itemHovered_index = playlistItem.itemIndex;
-                                    }
-                                }
+                                // onEntered: {
+                                //     if (!root.isMultiSelected) {
+                                //         playlistFlickable.itemHovered_index = playlistItem.itemIndex;
+                                //     }
+                                // }
                             }
 
                             function formatDuration(seconds) {

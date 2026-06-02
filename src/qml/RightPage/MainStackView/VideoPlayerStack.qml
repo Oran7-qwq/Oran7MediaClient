@@ -6,6 +6,7 @@ import "../../Components"
 import Client 1.0
 import Oran7UI.Impl 1.0
 import BilibiliRoomAddressCatch 1.0
+import BilibiliAuth 1.0
 
 
 Item {
@@ -244,6 +245,63 @@ Item {
                     font.bold: true
                     color: Oran7Theme.Oran7MainGUI.themeColor
                 }
+                // B站登录状态按钮
+                Rectangle {
+                    width: bilibiliLoginBtnRow.width + 20
+                    height: 30
+                    radius: 15
+                    color: bilibiliLoginBtnArea.containsMouse ? "#e05a7a" : (BilibiliAuthManager.isLoggedIn ? "#fb7299" : "#888888")
+                    opacity: bilibiliLoginBtnArea.containsMouse ? 1.0 : 0.9
+
+                    Row {
+                        id: bilibiliLoginBtnRow
+                        anchors.centerIn: parent
+                        spacing: 5
+                        Label {
+                            text: BilibiliAuthManager.isLoggedIn ? "✓ B站已登录" : "B站扫码登录"
+                            font.pixelSize: 12
+                            font.family: "微软雅黑"
+                            color: "white"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Label {
+                            text: BilibiliAuthManager.isLoggedIn ? BilibiliAuthManager.userName : ""
+                            font.pixelSize: 11
+                            font.family: "微软雅黑"
+                            color: "#FFE4E1"
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: BilibiliAuthManager.isLoggedIn
+                        }
+                    }
+
+                    MouseArea {
+                        id: bilibiliLoginBtnArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (BilibiliAuthManager.isLoggedIn) {
+                                // 已登录时点击可登出（长按或双击可以扩展，这里简单处理）
+                                BilibiliAuthManager.logout()
+                            } else {
+                                BasicConfig.openBilibiliLoginPopup()
+                            }
+                        }
+                    }
+                }
+                // 流信息标签
+                Label {
+                    text: {
+                        if (bilibiliRoomAddressCatch.urls.length > 0) {
+                            return "流: " + bilibiliRoomAddressCatch.selectedCodecName.toUpperCase() + " / " + bilibiliRoomAddressCatch.selectedFormatName.toUpperCase()
+                        }
+                        return ""
+                    }
+                    font.pixelSize: 11
+                    font.family: "微软雅黑"
+                    color: "#578b2c"
+                    visible: bilibiliRoomAddressCatch.urls.length > 0
+                }
                 Rectangle {
                     id: inputBilibiliRoomNumRect
                     property int collapsedWidth: 140
@@ -282,6 +340,7 @@ Item {
                     BilibiliRoomAddressCatch {
                         id: bilibiliRoomAddressCatch
                         property var urls: []
+                        property bool isRefreshing: false  // 标记是否为刷新流操作
                         onUrlsReady: {
                             urls = []; //Clear
                             bilibiliRoomAddressCatch.avliStrAdr.forEach(function (url) {
@@ -289,6 +348,14 @@ Item {
                             });
                             bilibiliRoomNumWayPlayBtnImage.sureReadyPlay = true;
                             videoNetwork_Loader.visible = false; //reset
+
+                            // 如果是刷新操作且正在播放中，自动用新URL重新播放
+                            if (bilibiliRoomAddressCatch.isRefreshing && BasicConfig.isPlaying && urls.length > 0) {
+                                bilibiliRoomAddressCatch.isRefreshing = false;
+                                Client.requestPlayVideo(urls[0]);
+                            } else {
+                                bilibiliRoomAddressCatch.isRefreshing = false;
+                            }
                         }
                         onUrlsError: {
                             bilibiliRoomNumWayPlayBtnImage.sureReadyPlay = false;
@@ -396,6 +463,40 @@ Item {
                             onEntered: cursorShape = Qt.PointingHandCursor
                             onPressed: bilibiliRoomNumWayPlayBtnImage.scale = 0.5
                             onReleased: bilibiliRoomNumWayPlayBtnImage.scale = 0.77
+                        }
+                    }
+                    // 刷新直播流按钮（播放中才显示）
+                    Image {
+                        id: refreshStreamBtn
+                        height: inputBilibiliRoomNumRect.height
+                        width: height
+                        anchors.left: bilibiliRoomNumWayPlayBtnImage.right
+                        anchors.leftMargin: 2
+                        anchors.verticalCenter: bilibiliRoomNumWayPlayBtnImage.verticalCenter
+                        scale: refreshStreamBtnArea.containsPress ? 0.5 : 0.7
+                        source: "qrc:/image/ClearPause.png"
+                        visible: BasicConfig.isPlaying && bilibiliRoomAddressCatch.urls.length > 0
+                        layer.enabled: true
+                        layer.effect: ColorOverlay {
+                            source: refreshStreamBtn
+                            color: refreshStreamBtnArea.containsMouse ? "#2196F3" : "#888888"
+                        }
+                        MouseArea {
+                            id: refreshStreamBtnArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                // 重新获取流URL并重新播放
+                                bilibiliRoomAddressCatch.isRefreshing = true
+                                videoNetwork_Loader.visible = true
+                                bilibiliRoomAddressCatch.getRoomInfo(bilibiliRoomTextFiled.text)
+                            }
+                        }
+                        ToolTip {
+                            visible: refreshStreamBtnArea.containsMouse
+                            text: "刷新直播流"
+                            delay: 500
                         }
                     }
 

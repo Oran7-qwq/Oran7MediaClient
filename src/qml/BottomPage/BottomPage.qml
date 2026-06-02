@@ -126,7 +126,7 @@ Rectangle{
     Label{
         id:musicNameTextLabel
         text: musicName
-        color:"white"
+        color:Oran7Theme.Oran7MusicPlayControls["textColorBase-6"]
         font.pixelSize: 16
         font.family: "微软雅黑"
         anchors.left: musicIconRectangle.right
@@ -138,7 +138,7 @@ Rectangle{
     Label{
         id:singerNameTextLabel
         text: singerName
-        color:"#ababaf"
+        color:Oran7Theme.Oran7MusicPlayControls["textColorBase-5"]
         font.pixelSize: 14
         font.family: "微软雅黑"
         anchors.left: musicIconRectangle.right
@@ -151,49 +151,55 @@ Rectangle{
     //播放与暂停
     Rectangle{
         id:playRectangle
-        width: 40
-        height: 40
+        width: 50
+        height: 50
         radius:height/2
-        color: playMouseArea.isPressed ? Oran7Theme.Oran7MainGUI["colorPrimaryBase-7"] :
-                        Oran7Theme.Oran7MainGUI["colorPrimaryBase-5"]
+        color: "transparent"//Oran7Theme.Oran7MusicPlayControls["iconColorBase-2"]
         visible: root.visible
-        anchors.top: parent.top
-        anchors.topMargin: 24
+        anchors.verticalCenter: parent.verticalCenter
         anchors.horizontalCenter: parent.horizontalCenter
-        Image {
-            id: playImage
-            source: "qrc:/image/playBtn.png"
-            width: parent.width
-            height: parent.height
-            scale: 0.8
-            visible: !BasicConfig.isPlaying || BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex
-            anchors.centerIn: parent
-            mipmap: true
-            asynchronous: false
-            cache: true
-            antialiasing: true
-            layer.enabled: true
-            property string colorOverlay: "white"
-            layer.effect: ColorOverlay{
-                source: playImage
-                color: playImage.colorOverlay
+        property string colorOverlay: "transparent"/*playMouseArea.isPressed ? Oran7Theme.Oran7MusicPlayControls["playButtonColor"] :
+                                                                Oran7Theme.Oran7MusicPlayControls["playButtonColor"]*/
+
+        Oran7GradientMask{
+            anchors.fill: parent
+            dynamicGradient:true
+            gradientMaskEnabled:true
+            transitionDuration:Oran7Theme.Primary.durationMid * 4
+            dynamicInterval:Oran7Theme.Primary.durationMid * 4
+            Image{
+                id: playImage
+                source: "qrc:/image/playBtn.png"
+                width: parent.width
+                height: parent.height
+                scale: 0.8
+                visible: !BasicConfig.isPlaying || BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex
+                anchors.centerIn: parent
+                mipmap: true
+                asynchronous: false
+                cache: true
+                antialiasing: true
+                layer.enabled: true
+                layer.effect: ColorOverlay{
+                    source: playImage
+                    color: playRectangle.colorOverlay
+                }
             }
-        }
-        Image{
-            id:pauseImage
-            source:"qrc:/image/pause.png"
-            visible: BasicConfig.isPlaying && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex
-            width: parent.width
-            height: parent.height
-            mipmap: true
-            asynchronous: false
-            cache: true
-            antialiasing: true
-            property string colorOverlay: "white"
-            layer.enabled: true
-            layer.effect: ColorOverlay{
-                source: pauseImage
-                color: pauseImage.colorOverlay
+            Image{
+                id:pauseImage
+                source:"qrc:/image/pause.png"
+                visible: BasicConfig.isPlaying && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_MusicPlayerIndex
+                width: parent.width
+                height: parent.height
+                mipmap: true
+                asynchronous: false
+                cache: true
+                antialiasing: true
+                layer.enabled: true
+                layer.effect: ColorOverlay{
+                    source: pauseImage
+                    color: playRectangle.colorOverlay
+                }
             }
         }
         MouseArea{
@@ -205,20 +211,16 @@ Rectangle{
                 playRectangle.scale=1.04
             }
             onExited: {
-                    playMouseArea.isPressed=false
-                    playRectangle.scale=1.0
+                playMouseArea.isPressed=false
+                playRectangle.scale=1.0
             }
             onPressed:  {
-                playImage.colorOverlay="#9b9b9f"
-                pauseImage.colorOverlay="#9b9b9f"
                 playMouseArea.isPressed = true
                 playRectangle.scale=0.96
             }
             onReleased: {
                 if(playMouseArea.isPressed===true)
                     playRectangle.scale=1.04
-                playImage.colorOverlay="white"
-                pauseImage.colorOverlay="white"
             }
             onClicked: {
                 if(BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
@@ -275,44 +277,33 @@ Rectangle{
         anchors.right: playRectangle.left
         anchors.rightMargin: 60
         property bool isLoved: false
-        property string colorOverlay: "white"
-        layer.enabled: false
+        readonly property string colorOverlay: Oran7Theme.Oran7MusicPlayControls["iconColorBase-6"]
+        layer.enabled: true
         layer.effect: ColorOverlay{
             id:colorOverlay
             source: loveImage
             color: loveImage.colorOverlay
         }
+        scale: isPressed ? 0.95 : 1.00
+        property bool isPressed: false
         MouseArea{
+            id:loveMouseArea
             anchors.fill: parent
             hoverEnabled: true
-            onEntered: {
-                if(loveImage.isLoved===false)
-                    loveImage.layer.enabled=true
-            }
-            onExited: {
-                if(loveImage.isLoved===false)
-                    loveImage.layer.enabled=false
-            }
             onClicked: {
                 if(loveImage.isLoved===false)
                 {
                     loveImage.source="qrc:/image/love_NoMiddleTransparent.png"
-                    loveImage.colorOverlay="#fc3c55"
                     loveImage.isLoved=true
                 }
                 else
                 {
                     loveImage.source="qrc:/image/love.png"
-                    loveImage.colorOverlay="white"
                     loveImage.isLoved=false
                 }
             }
-            onPressed: {
-                loveImage.scale=0.9
-            }
-            onReleased: {
-                loveImage.scale=1.1
-            }
+            onPressed: parent.isPressed = true
+            onReleased: parent.isPressed = false
         }
     }
     Image {
@@ -325,26 +316,19 @@ Rectangle{
         layer.enabled: true
         layer.effect: ColorOverlay{
             source: lastImage
-            color: "#d5d5d7"
+            color: lastImage.isPressed ? Oran7Theme.Oran7MusicPlayControls["iconColorBase-8"] :
+                       Oran7Theme.Oran7MusicPlayControls["iconColorBase-5"]
         }
+        scale: isPressed ? 0.95 : 1.00
+        property bool isPressed: false
         MouseArea{
             anchors.fill: parent
             hoverEnabled: true
-            onEntered: {
-                cursorShape = Qt.PointingHandCursor
-            }
-            onExited: {
-                cursorShape = Qt.ArrowCursor
-            }
-            onPressed: {
-                lastImage.layer.enabled=false
-            }
-            onReleased: {
-                lastImage.layer.enabled=true
-            }
-            onClicked: {
-                Client.playPrevious(/*(BasicConfig.playingIndex - 1) < 0 ? BasicConfig.localMusicListModel.count-1 : BasicConfig.playingIndex - 1*/)
-            }
+            onEntered: cursorShape = Qt.PointingHandCursor
+            onExited:cursorShape = Qt.ArrowCursor
+            onPressed: parent.isPressed = true
+            onReleased: parent.isPressed = false
+            onClicked:Client.playPrevious()
         }
     }
     Image {
@@ -357,26 +341,19 @@ Rectangle{
         layer.enabled: true
         layer.effect: ColorOverlay{
             source: nextImage
-            color: "#d5d5d7"
+            color: nextImage.isPressed ? Oran7Theme.Oran7MusicPlayControls["iconColorBase-8"] :
+                       Oran7Theme.Oran7MusicPlayControls["iconColorBase-5"]
         }
+        scale: isPressed ? 0.95 : 1.00
+        property bool isPressed: false
         MouseArea{
             anchors.fill: parent
             hoverEnabled: true
-            onEntered: {
-                cursorShape = Qt.PointingHandCursor
-            }
-            onExited: {
-                cursorShape = Qt.ArrowCursor
-            }
-            onPressed: {
-                nextImage.layer.enabled=false
-            }
-            onReleased: {
-                nextImage.layer.enabled=true
-            }
-            onClicked: {
-                Client.playNext(/*(BasicConfig.playingIndex + 1)%BasicConfig.localMusicListModel.count*/)
-            }
+            onEntered: cursorShape = Qt.PointingHandCursor
+            onExited:cursorShape = Qt.ArrowCursor
+            onPressed: parent.isPressed = true
+            onReleased: parent.isPressed = false
+            onClicked: Client.playNext()
         }
     }
     Image {
@@ -386,6 +363,23 @@ Rectangle{
         anchors.left: playRectangle.right
         anchors.leftMargin: 60
         anchors.verticalCenter: playRectangle.verticalCenter
+        layer.enabled: true
+        layer.effect: ColorOverlay{
+            source: playstateImage
+            color:playstateImage.isPressed ? Oran7Theme.Oran7MusicPlayControls["iconColorBase-7"] :
+                                     Oran7Theme.Oran7MusicPlayControls["iconColorBase-6"]
+        }
+        scale: isPressed ? 0.95 : 1.00
+        property bool isPressed: false
+        MouseArea{
+            anchors.fill: parent
+            hoverEnabled: true
+            onEntered: cursorShape = Qt.PointingHandCursor
+            onExited:cursorShape = Qt.ArrowCursor
+            onPressed: parent.isPressed = true
+            onReleased: parent.isPressed = false
+            onClicked: {}
+        }
     }
     //音乐播放进度条Slider
     Oran7ProgressSlider{
@@ -432,7 +426,7 @@ Rectangle{
         anchors.rightMargin: 0
         anchors.verticalCenter: root.verticalCenter
         text: musicProgressSlier.nowTimeText
-        color: "#fef2e8"
+        color: Oran7Theme.Oran7MusicPlayControls["textColorBase-6"]
         visible: root.visible
         font.family: "微软雅黑"
         font.pixelSize: 16
@@ -443,7 +437,7 @@ Rectangle{
         anchors.rightMargin: 30
         anchors.verticalCenter: root.verticalCenter
         text: "  //  "+musicProgressSlier.allTimeText
-        color: "#fef2e8"
+        color: Oran7Theme.Oran7MusicPlayControls["textColorBase-6"]
         visible: root.visible
         font.family: "微软雅黑"
         font.pixelSize: 16
@@ -466,45 +460,37 @@ Rectangle{
             anchors.verticalCenter:parent.verticalCenter
             color: "transparent"
             border.width: 1
-            border.color: "#a5a5a9"
+            border.color:Oran7Theme.Oran7MusicPlayControls["iconColorBase-5"]
             Label{
                 id:soudEffectRectangleLabel
                 text:"标准"
-                color: "#a5a5a9"
+                color:Oran7Theme.Oran7MusicPlayControls["iconColorBase-5"]
                 anchors.centerIn: parent
             }
             MouseArea{
                 anchors.fill: parent
                 hoverEnabled:true
-                onEntered: {
-                    soudEffectRectangleLabel.color ="white"
-                }
-                onExited: {
-                    soudEffectRectangleLabel.color="#a5a5a9"
-                }
-                onClicked: {
-                    //----
-                }
+                onEntered: cursorShape = Qt.PointingHandCursor
+                onExited:cursorShape = Qt.ArrowCursor
+                onClicked: {}
             }
         }
-        //桌面歌词
+        //桌面歌词-->未来开发为灵动岛歌词(2026/6/2)
         Image {
             id: deskLyricImage
             source: "qrc:/image/lyric.png"
-            layer.enabled: false
+            layer.enabled: true
             layer.effect: ColorOverlay{
                 source: deskLyricImage
-                color: "white"
+                color: deskLyricImage.hovered ? Oran7Theme.Oran7MusicPlayControls["iconColorBase-5"] :
+                                                Oran7Theme.Oran7MusicPlayControls["iconColorBase-7"]
             }
+            property bool hovered: false
             MouseArea{
                 anchors.fill: parent
                 hoverEnabled:true
-                onEntered: {
-                    deskLyricImage.layer.enabled=true
-                }
-                onExited: {
-                    deskLyricImage.layer.enabled=false
-                }
+                onEntered:parent.hovered = true
+                onExited:parent.hovered = false
             }
         }
 
@@ -512,72 +498,22 @@ Rectangle{
             id:bottomPage_playerVolumeControl
         }
 
-        //vip音效
-        Image {
-            id: vipSoundEffectImage
-            source: /*"qrc:/image/vipsoundeffect.png"*/"qrc:/image/transparent.png"
-            sourceSize.width:playListImage.width
-            sourceSize.height: playListImage.height
-            layer.enabled: false
-            layer.effect: ColorOverlay{
-                source: vipSoundEffectImage
-                color: "white"
-            }
-            MouseArea{
-                anchors.fill: parent
-                enabled: false
-                hoverEnabled:true
-                onEntered: {
-                    vipSoundEffectImage.layer.enabled=true
-                }
-                onExited: {
-                    vipSoundEffectImage.layer.enabled=false
-                }
-            }
-        }
-
-        //一起听
-        Image {
-            id: listentogetherImage
-            source: /*"qrc:/image/listentogether.png"*/"qrc:/image/transparent.png"
-            sourceSize.width:playListImage.width
-            sourceSize.height: playListImage.height
-            layer.enabled: false
-            layer.effect: ColorOverlay{
-                source: listentogetherImage
-                color: "white"
-            }
-            MouseArea{
-                anchors.fill: parent
-                enabled: false
-                hoverEnabled:true
-                onEntered: {
-                    listentogetherImage.layer.enabled=true
-                }
-                onExited: {
-                    listentogetherImage.layer.enabled=false
-                }
-            }
-        }
-
         //播放列表
         Image {
             id: playListImage
             source: "qrc:/image/playlist.png"
-            layer.enabled: false
+            layer.enabled: true
             layer.effect: ColorOverlay{
                 source: playListImage
-                color: "white"
+                color: playListImage.hovered ? Oran7Theme.Oran7MusicPlayControls["iconColorBase-5"] :
+                                                Oran7Theme.Oran7MusicPlayControls["iconColorBase-7"]
             }
+            property bool hovered: false
             MouseArea{
                 anchors.fill: parent
                 hoverEnabled:true
-                onEntered: {
-                    playListImage.layer.enabled=true
-                }
-                onExited: {
-                    playListImage.layer.enabled=false
-                }
+                onEntered:parent.hovered = true
+                onExited:parent.hovered = false
             }
         }
     }

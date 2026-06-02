@@ -18,8 +18,10 @@ Item {
     onValueChanged: {valueLabel.text = String(value)}
     property string title: "title"
 
-    property real sliderValueFrom: 0 //bind outSize, can't inner to change
-    property real sliderValueTo: 100 //bind outSize, can't inner to change
+    property real sliderValueFrom: 0
+    property real sliderValueTo: 100
+    property real stepSize: 0
+    property real valueDecimals: 0
 
     // Slider拖动过程中触发
     signal moved(real value, int thresholdPosition, real ratio)
@@ -35,6 +37,7 @@ Item {
         Oran7SettingItem{
             id:item1
             text:root.title
+            showTag:false
         }
         Oran7SettingItem{
             id:slider
@@ -52,7 +55,8 @@ Item {
                 to: root.sliderValueTo
                 value: root.value
                 thresholdMaximum: 65535
-                stepSize: 1
+                stepSize: root.stepSize
+                valueDecimals:root.valueDecimals
 
                 onCommitted: (value, thresholdPosition, ratio) => {
                     root.committed(value, thresholdPosition, ratio)

@@ -3,22 +3,44 @@ import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
 
 import "../../Settings/GlobalSettings"
+import "../"
 
-Item {
+import Oran7UI.Impl
+
+Rectangle {
     id: root
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: Oran7MainUiSetting.itemHeight
+
+    color: "transparent"
+
+    // 悬停背景层 —— 独立子项，opacity 只影响自己，不影响其他子组件
+    Rectangle {
+        anchors.fill: parent
+        color: Oran7MainUiSetting.itemHoverdColor
+        opacity: enableHoverHandler && hoverHandler.hovered ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Oran7Theme.Primary.durationVerySlow; easing.type: Easing.OutQuint } }
+    }
 
     property bool showTag: true
-    property color backColor: Oran7MainUiSetting.backColor
+    property color backColor:"transparent"
     property real radius: 0
 
     property color textColor: Oran7MainUiSetting.textColor
     property string text: ""
-    property bool fontBold: false
+    property bool fontBold:false
+    property bool fontItalic:false
+    property bool gradientMaskEnabled: false
     property int textHAlign: Text.AlignLeft
 
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: Oran7MainUiSetting.itemHeight
+    property int index: 0
+    property bool enableMouseArea: false
+    property bool enableHoverHandler: false
+    readonly property bool hovered:hoverHandler.hovered
+
+    signal rightClicked()
+    signal leftClicked()
 
     Image{
         id:tagImage
@@ -47,23 +69,42 @@ Item {
         anchors.rightMargin: root.showTag ? 4 + tagImage.width : 4
         anchors.bottom: parent.bottom
         radius: root.radius
-        Label {
+        Oran7GradientMask{
             anchors.fill: parent
-            color: root.textColor
-            text: root.text
-            font.bold:root.fontBold
-            font.pixelSize: Oran7MainUiSetting.textPixelSize
-            font.family: Oran7MainUiSetting.fontFamily
-            verticalAlignment: Text.AlignVCenter
-            horizontalAlignment: root.textHAlign
+            _dynamicIndex:root.index
+            gradientMaskEnabled:root.gradientMaskEnabled
+            dynamicGradient:true
+            transitionDuration:Oran7Theme.Primary.durationVerySlow
+            dynamicInterval:Oran7Theme.Primary.durationVerySlow
+            Label {
+                id:textLabel
+                anchors.fill: parent
+                color: root.textColor
+                text: root.text
+                font.bold:root.fontBold
+                font.italic: root.fontItalic
+                font.pixelSize: Oran7MainUiSetting.textPixelSize
+                font.family: Oran7MainUiSetting.fontFamily
+                verticalAlignment: Text.AlignVCenter
+                horizontalAlignment: root.textHAlign
+            }
         }
     }
 
-    //header_ line
-    // Rectangle{
-    //     color: Oran7MainUiSetting.tagColor
-    //     width:2
-    //     height: Oran7MainUiSetting.itemHeight
-    //     anchors.left: parent.left
-    // }
+    MouseArea{
+        anchors.fill: parent
+        enabled:root.enableMouseArea
+        acceptedButtons: Qt.RightButton | Qt.LeftButton
+        onClicked:mouse => {
+            if(mouse.button === Qt.RightButton)
+                root.rightClicked()
+            if(mouse.button === Qt.LeftButton)
+                root.leftClicked()
+        }
+    }
+    HoverHandler{
+        id:hoverHandler
+        enabled: root.enableHoverHandler
+        acceptedDevices: PointerDevice.Mouse
+    }
 }

@@ -46,6 +46,52 @@ Rectangle {
             visible: root.videoTextureItem !== null
         }
     }
+    // ========= 诊断：裸 ShaderEffectSource（不经过 MultiEffect）=========
+    // 验证 QSGRenderNode offscreen 捕获是否正确。
+    // 如果这个小窗里的视频被压缩，说明问题在 C++ render node 的 offscreen 路径。
+    // 如果正常，说明问题在 Oran7BlurCard 的 sourceRect / padding / MultiEffect。
+    //
+    // 测试完毕后删除此块。
+    ShaderEffectSource {
+        id: debugCapture
+
+        sourceItem: root.videoTextureItem
+        sourceRect: root.videoTextureItem
+            ? Qt.rect(0, 0, root.videoTextureItem.width, root.videoTextureItem.height)
+            : Qt.rect(0, 0, 0, 0)
+
+        width: 320
+        height: 180
+
+        live: true
+        recursive: false
+        z: 100
+        visible: false/*root.videoTextureItem !== null*/
+        opacity: 0.8
+
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: 10
+
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            border.color: "red"
+            border.width: 2
+        }
+
+        Text {
+            text: "DEBUG: raw ShaderEffectSource\nsourceRect=(0,0," +
+                  (root.videoTextureItem ? root.videoTextureItem.width : 0) + "," +
+                  (root.videoTextureItem ? root.videoTextureItem.height : 0) + ")"
+            color: "red"
+            font.pixelSize: 11
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.margins: 4
+        }
+    }
+    // ========= END 诊断块 =========
 
     Connections{
         target:Client

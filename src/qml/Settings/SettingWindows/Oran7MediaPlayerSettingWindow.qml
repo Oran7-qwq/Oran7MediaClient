@@ -146,6 +146,7 @@ Item {
             anchors.fill: parent
             anchors.margins: 16  // 避开阴影边缘
             color: Oran7MainUiSetting.backColor
+            Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
             radius: 10
             clip: true
             opacity: 1
@@ -163,44 +164,35 @@ Item {
         }
     }
 
-    // 拖动区域 - 整个窗口可拖动
+    // 拖动区域
     MouseArea {
-        anchors.fill: parent
+        id: dragArea
+
+        anchors.left: parent.left
+        anchors.right: parent.right
+        y: 16
+        height: topDragRect.height
+
+        property point pressPos: Qt.point(0, 0)
+
         onPressed: function(mouse) {
-            root.mouseIsPressed = true;
-            root.clickPos = Qt.point(mouse.x, mouse.y);
-
-            // 检查是否在标题栏区域（用于拖动）
-            let inTitleBar = mouse.y <= topDragRect.height + 16 && mouse.y >= 16;
-
-            if (inTitleBar) {
-                mouse.accepted = true; // 标题栏拖动事件被接受
-            } else {
-                mouse.accepted = false; // 其他区域事件传递给子组件
-                let inMargin = mouse.x < 16 || mouse.x > root.width - 16
-                            || mouse.y < 16 || mouse.y > root.height - 16;
-                if (inMargin) {
-                    Oran7MainUiSetting.clickedOutSide();
-                }
-            }
+            root.mouseIsPressed = true
+            pressPos = Qt.point(mouse.x, mouse.y)
         }
+
         onReleased: function(mouse) {
-            root.mouseIsPressed = false;
+            root.mouseIsPressed = false
             root.savedNormalX = root.x
             root.savedNormalY = root.y
-            mouse.accepted = false;
         }
+
         onPositionChanged: function(mouse) {
-            if (root.mouseIsPressed === false)
-                return;
-            if (root.clickPos.y > topDragRect.height + 16 || root.clickPos.y < 16)
-                return;
-            let delta = Qt.point(mouse.x - root.clickPos.x, mouse.y - root.clickPos.y);
-            root.x += delta.x;
-            root.y += delta.y;
-        }
-        onClicked: function(mouse) {
-            mouse.accepted = false; // 允许事件继续传递给子组件
+            if (!root.mouseIsPressed)
+                return
+
+            let delta = Qt.point(mouse.x - pressPos.x, mouse.y - pressPos.y)
+            root.x += delta.x
+            root.y += delta.y
         }
     }
 }

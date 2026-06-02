@@ -24,5 +24,11 @@
         "auto_login": false,
         "remember_password": true,
         "username": "default"
+    },
+    "bilibili_auth": {
+        "sessdata": "",
+        "dede_user_id": "",
+        "bili_jct": "",
+        "user_name": ""
     }
 }

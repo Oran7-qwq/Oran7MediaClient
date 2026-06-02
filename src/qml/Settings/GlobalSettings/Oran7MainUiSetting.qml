@@ -24,17 +24,19 @@ Item {
     // ================= SettingUi_Window_Property ================
     property real toggleOpenAniDuration: 300
     property bool settingWindow_isOpening_Or_isClosing: false
+    property bool firstOpenSettingWin: true
 
     property real itemHeight: 30
     property real textPixelSize: 16
     property string fontFamily : "微软雅黑"
-    property bool isDarkMode: true
+    readonly property bool isDarkMode: Oran7Theme.Oran7MainGUI.isDarkMode
 
     readonly property color backColor: isDarkMode ? "#030303" : "#ffffff"
     readonly property color itemBackColor: isDarkMode ? "#242020" : "#d1d1d1"
     readonly property color tagColor: textColor
     readonly property color textColor: isDarkMode ? "#dadada" : "#5c5c5c"
     readonly property color winShadowColor: isDarkMode ? "#80000000" : "#20000000"
+    readonly property color itemHoverdColor: isDarkMode ? "#404040" : "#b0b0b0"
     property color themeColor: /*"#8cffff"*//*"#fc3c55"*/"#beb7ff"
 
     //--- statue manager ---

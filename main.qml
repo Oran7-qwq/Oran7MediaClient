@@ -375,10 +375,14 @@ ApplicationWindow {
             anchors.bottom: bottomRectangle.top
 
             blurSource: mainWindowBackground
-            blurEnabled: true
+            blurEnabled: Oran7Theme.Oran7CaptionBar.blurEffectEnabled
             borderRadius:17
             borderWidth: 1
             themeColor: "#04FFFFFF"
+
+            saturation: Oran7Theme.Oran7CaptionBar.saturation
+            brightness: Oran7Theme.Oran7CaptionBar.brightness
+            contrast: Oran7Theme.Oran7CaptionBar.contrast
             LeftPage {
                 id: leftPage
                 simpleMode: Oran7Theme.Oran7CaptionBar.isSimpleMode

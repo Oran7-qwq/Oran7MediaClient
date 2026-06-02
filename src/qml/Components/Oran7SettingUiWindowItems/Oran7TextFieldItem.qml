@@ -73,12 +73,12 @@ Item {
         height: Oran7MainUiSetting.itemHeight * 0.067
     }
     //header_ line
-    Rectangle{
-        color: Oran7MainUiSetting.tagColor
-        width:2
-        height: Oran7MainUiSetting.itemHeight
-        anchors.left: parent.left
-    }
+    // Rectangle{
+    //     color: Oran7MainUiSetting.tagColor
+    //     width:2
+    //     height: Oran7MainUiSetting.itemHeight
+    //     anchors.left: parent.left
+    // }
 
     Connections {
         target: globalEventFilter

@@ -1179,14 +1179,13 @@ int Client::OutputVideo(const Frame* frame, AVFrame* copy_frame)
 
     if(shutting_down_.load(std::memory_order_relaxed) == true)
     {
-        WARNING_LOG<<"shutting_down_ is true.";
-        //av_frame_free(&copy_frame);
+        av_frame_free(&copy_frame);  // 释放帧，避免内存泄漏
         return 0;
     }
 
     //std::unique_ptr<AVFrame, void(*)(AVFrame*)> g(copy_frame, [](AVFrame* f){ av_frame_free(&f); });//--->Discard 2026/1/27
     QPointer<Client> self(this);
-    if (!self) return 0;
+    if (!self) { av_frame_free(&copy_frame); return 0; }
     auto &s = m_d3d11Slots[RenderObject::VideoPlayerRender];
 
     // if (!self->m_textureProvider) return 0;//--->Discard 2026/1/27
@@ -1195,6 +1194,11 @@ int Client::OutputVideo(const Frame* frame, AVFrame* copy_frame)
     //New --->2026/1/27   Used by D3D11VideoItem : public QQuickItem
     //copy_frame的释放权交给渲染侧D3D11VideoItem
     if (!s.item) { av_frame_free(&copy_frame); return 0; }
+
+    // 安全检查：使用QPointer保护QML对象访问，避免关机时访问已销毁的QQuickItem
+    QPointer<QQuickItem> itemGuard(s.item);
+    if (!itemGuard) { av_frame_free(&copy_frame); return 0; }
+
     AVFrame* safe = av_frame_clone(copy_frame); // clone 会 ref 内部 buffer
     av_frame_free(&copy_frame);
     s.item->submitFrame(safe); // submitFrame 接管所有权-->由 item 释放

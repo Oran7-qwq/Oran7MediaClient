@@ -14,6 +14,7 @@
 #include "ApplicationContext.h"
 #include "AsyncManagers.h"
 #include "BilibliLiveRoomAddressCatch.h"
+#include "BilibiliAuthManager.h"
 #include "Oran7Theme.h"
 #include "ConsoleLogger.h"
 
@@ -138,6 +139,14 @@ int main(int argc, char *argv[])
     qmlRegisterType<D3D11VideoItem>("D3D11VideoItem", 1, 0, "D3D11VideoItem");
     //qmlRegisterType<FramelessWindow>("FramelessWindow", 1, 0, "FramelessWindow");
 
+    // B站认证管理器单例
+    qmlRegisterSingletonType<BilibiliAuthManager>("BilibiliAuth", 1, 0, "BilibiliAuthManager",
+        [](QQmlEngine* engine, QJSEngine* scriptEngine) -> QObject* {
+            Q_UNUSED(engine);
+            Q_UNUSED(scriptEngine);
+            return &BilibiliAuthManager::instance();
+        });
+
     // 注册全局事件过滤器到 QML
     // 使用 std::unique_ptr 确保自动清理，但保留原始指针用于 installEventFilter
     std::unique_ptr<GlobalEventFilter> globalFilterPtr = std::make_unique<GlobalEventFilter>(&app);
@@ -183,6 +192,9 @@ int main(int argc, char *argv[])
     QObject::connect(&app, &QGuiApplication::aboutToQuit, &app, [&engine]() mutable{
         ApplicationContext::instance().client()->stopPlayerRunning();//先确保杀死Oran7MediaPlayer防止Video_refresh还在触发回调qml渲染对象
 
+        // 在事件循环还活着时安全销毁BilibiliAuthManager（含QTimer/QNetworkAccessManager）
+        BilibiliAuthManager::cleanup();
+
         Config_AppConfigManager_RET = Config_AppConfigManager_Save(engine);
         if(Config_AppConfigManager_RET == ConfigRET::Config_SUCCESSED)
             CONFIG_LOG<<"AppConfigManager:Successfully save user Config.";
@@ -206,6 +218,7 @@ int main(int argc, char *argv[])
 
     ///Singleton依赖:析构链路AppConfigManager.Oran7ThemeProfileManager.Oran7Theme.Oran7ThemePrivate
     qAddPostRoutine([](){
+        // BilibiliAuthManager 已在 aboutToQuit 中提前销毁，此处不再处理
         Oran7Theme::cleanup();
     });
 
@@ -228,6 +241,7 @@ ConfigRET Config_AppConfigManager_Load(QQmlApplicationEngine &engine)
         ApplicationContext::instance().asyncWorker()->startSearchLocalMediaFiles_Task(SearchLocalMediaFiles_folderPath); //*Load localMusic列表（Async）
         ApplicationContext::instance().client()->loadConfig_lastCloseAppFocusedMusic();                                  //*加载last focus music info
         ApplicationContext::instance().client()->loadConfig_AppSetPlayerVolume();                                        //*Load PlayerVolume Config
+        BilibiliAuthManager::instance().loadCookies();                                                                   //*加载B站认证Cookie
     }
     catch (std::exception &e)
     {
@@ -247,6 +261,8 @@ ConfigRET Config_AppConfigManager_Save(QQmlApplicationEngine &engine)
 
         ApplicationContext::instance().client()->saveConfig_AppWindowSize(engine);
         ApplicationContext::instance().client()->saveConfig_AppWindowPosition(engine);
+
+        BilibiliAuthManager::instance().saveCookies();  //*保存B站认证Cookie
 
         AppConfigManager::ins().saveConfig(); // 确保程序退出前保存配置
     }

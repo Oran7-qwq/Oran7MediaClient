@@ -7,6 +7,7 @@
 #include "FFPlay_Def.h"
 #include "ffmsg.h"
 #include "GlobalHelper.h"
+#include "BilibiliAuthManager.h"
 #include "SDL2/SDL_audio.h"
 /* Minimum SDL audio buffer size, in samples. */
 #define SDL_AUDIO_MIN_BUFFER_SIZE 512
@@ -208,6 +209,19 @@ int FFPlayer::read_thread()
         av_dict_set(&opts, "stimeout", "5000000", 0);
         av_dict_set(&opts, "rw_timeout", "5000000", 0);
 
+        // --------- B站认证Cookie注入 ---------
+        // 检测到B站直播流URL时，将Cookie注入FFmpeg HTTP请求头
+        // 注意：使用headers选项时会覆盖user_agent/referer单独设置，所以需要包含完整头
+        QString bilibiliCookies = BilibiliAuthManager::instance().ffmpegCookieString();
+        if (!bilibiliCookies.isEmpty() && QString(input_filename_).contains("bilivideo.com")) {
+            QString headers = QString(
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36\r\n"
+                "Referer: https://live.bilibili.com/\r\n"
+                "Cookie: %1\r\n"
+            ).arg(bilibiliCookies);
+            av_dict_set(&opts, "headers", headers.toUtf8().constData(), 0);
+            NETWORK_LOG << "FFPlayer: Injected Bilibili auth cookies for stream playback";
+        }
         // ---------------------------------------
 
         /*打开文件，主要是探测协议类型，如果是网络文件则创建网络链接等 */
@@ -243,6 +257,9 @@ int FFPlayer::read_thread()
 
         av_dump_format(ic, 0, input_filename_, 0);
 
+        // 降低FFmpeg内部日志级别，避免HLS直播拉流时大量INFO日志刷屏
+        // av_dump_format之后设置，确保流信息dump正常输出
+        av_log_set_level(AV_LOG_WARNING);
 
         /*利用av_find_best_stream选择流*/
         st_index[AVMEDIA_TYPE_VIDEO] =

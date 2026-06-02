@@ -55,12 +55,12 @@ Rectangle {
         id: topListModel
         ListElement {
             iconImage: "qrc:/image/hugeicons_ai-video.png"
-            iconText: "VideoPlayer??"
+            iconText: "VideoPlayer"
             pageName: "VideoPlayerPage"
         }
         ListElement {
             iconImage: "qrc:/image/hugeicons_video-camera-ai.png"
-            iconText: "ScreenCpature??"
+            iconText: "ScreenCpature"
             pageName: "ScreenCapturePage"
         }
         ListElement {
@@ -213,7 +213,7 @@ Rectangle {
         id: middleListModel
         ListElement {
             iconImage: "qrc:/image/icon-park-outline_like.png"
-            iconText: "我喜欢的音乐"
+            iconText: "LocalMusic"
             pageName: "MyFavoriteMusicPage"
         }
         ListElement {

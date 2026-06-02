@@ -11,6 +11,7 @@
         "settingWinItemDefalutWidth":252,
 
         "settingContent_visiable":false,
-        "OpenSettingWin":false
+        "OpenSettingWin":false,
+        "isDarkMode":true
     }
 }

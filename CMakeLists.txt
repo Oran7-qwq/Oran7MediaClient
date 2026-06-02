@@ -135,6 +135,7 @@ qt_add_resources(Oran7UI_Impl "resource"
           config/themeJson/Oran7CaptionBar.json
           config/themeJson/Oran7ProgressSlider.json
           config/themeJson/Oran7MusicPlaylistView.json
+          config/themeJson/Oran7MusicPlayControls.json
 
           config/default.json
 )

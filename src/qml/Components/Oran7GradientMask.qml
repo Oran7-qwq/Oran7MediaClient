@@ -14,19 +14,10 @@ Item {
     property Item maskSourceItem: null
 
     // 如果外部不设置尺寸，则尝试根据 childrenRect 自动计算
+    // 注意：当子项使用 anchors.fill parent 时会产生绑定循环，
+    // 此时不应依赖自动推算，由调用方显式设定尺寸
     property real contentWidth: -1
     property real contentHeight: -1
-
-    implicitWidth: contentWidth > 0
-                   ? contentWidth
-                   : Math.max(0, maskContent.childrenRect.x + maskContent.childrenRect.width)
-
-    implicitHeight: contentHeight > 0
-                    ? contentHeight
-                    : Math.max(0, maskContent.childrenRect.y + maskContent.childrenRect.height)
-
-    width: implicitWidth
-    height: implicitHeight
 
     property int gradientColorIndex: 0
 
@@ -43,14 +34,145 @@ Item {
     property point gradientEnd: Qt.point(width, height)
 
     property var colorItems: [
-        { beginColorValue: "#96fbc4", middleColorValue: "#7ed321", endColorValue: "#f9f586" },
-        { beginColorValue: "#fa709a", middleColorValue: "#fee140", endColorValue: "#ff9a8b" },
-        { beginColorValue: "#fd63a3", middleColorValue: "#fe9800", endColorValue: "#ffb74d" },
-        { beginColorValue: "#ff6b6b", middleColorValue: "#ff4757", endColorValue: "#ee5a52" },
-        { beginColorValue: "#f093fb", middleColorValue: "#f5576c", endColorValue: "#4facfe" },
-        { beginColorValue: "#0093e9", middleColorValue: "#00f2fe", endColorValue: "#4facfe" },
-        { beginColorValue: "#ffcc02", middleColorValue: "#f7971e", endColorValue: "#ffd200" },
-        { beginColorValue: "#2d5016", middleColorValue: "#a4de6c", endColorValue: "#40e0d0" }
+        // 0 活力青绿
+        {
+            beginColorValue: "#00F5A0",
+            middleColorValue: "#00D9F5",
+            endColorValue: "#00B8FF"
+        },
+
+        // 1 电光青蓝
+        {
+            beginColorValue: "#00C6FF",
+            middleColorValue: "#0072FF",
+            endColorValue: "#3A7BFF"
+        },
+
+        // 2 蓝紫霓虹
+        {
+            beginColorValue: "#3A7BFF",
+            middleColorValue: "#7A5CFF",
+            endColorValue: "#B84DFF"
+        },
+
+        // 3 紫粉高亮
+        {
+            beginColorValue: "#8E2DE2",
+            middleColorValue: "#C471F5",
+            endColorValue: "#F64FCE"
+        },
+
+        // 4 玫红紫
+        {
+            beginColorValue: "#F64FCE",
+            middleColorValue: "#FF3CAC",
+            endColorValue: "#FF5E8A"
+        },
+
+        // 5 樱桃粉红
+        {
+            beginColorValue: "#FF416C",
+            middleColorValue: "#FF4B8B",
+            endColorValue: "#FF6A88"
+        },
+
+        // 6 珊瑚橙红
+        {
+            beginColorValue: "#FF512F",
+            middleColorValue: "#FF6A00",
+            endColorValue: "#FF9500"
+        },
+
+        // 7 橙黄火焰
+        {
+            beginColorValue: "#FF9500",
+            middleColorValue: "#FFC400",
+            endColorValue: "#FFE600"
+        },
+
+        // 8 柠檬黄绿
+        {
+            beginColorValue: "#FFE600",
+            middleColorValue: "#C6FF00",
+            endColorValue: "#7FFF00"
+        },
+
+        // 9 荧光绿
+        {
+            beginColorValue: "#7FFF00",
+            middleColorValue: "#39FF14",
+            endColorValue: "#00F5A0"
+        },
+
+        // 10 青绿回环
+        {
+            beginColorValue: "#00F5A0",
+            middleColorValue: "#00FFA3",
+            endColorValue: "#00FFC6"
+        },
+
+        // 11 热带蓝绿
+        {
+            beginColorValue: "#00FFC6",
+            middleColorValue: "#00E5FF",
+            endColorValue: "#00A8FF"
+        },
+
+        // 12 深海亮蓝
+        {
+            beginColorValue: "#00A8FF",
+            middleColorValue: "#006DFF",
+            endColorValue: "#004DFF"
+        },
+
+        // 13 靛蓝紫
+        {
+            beginColorValue: "#004DFF",
+            middleColorValue: "#5B2DFF",
+            endColorValue: "#9B00FF"
+        },
+
+        // 14 赛博紫
+        {
+            beginColorValue: "#9B00FF",
+            middleColorValue: "#D100FF",
+            endColorValue: "#FF00C8"
+        },
+
+        // 15 霓虹粉
+        {
+            beginColorValue: "#FF00C8",
+            middleColorValue: "#FF2D95",
+            endColorValue: "#FF4D6D"
+        },
+
+        // 16 糖果红橙
+        {
+            beginColorValue: "#FF4D6D",
+            middleColorValue: "#FF3D00",
+            endColorValue: "#FF7A00"
+        },
+
+        // 17 金橙
+        {
+            beginColorValue: "#FF7A00",
+            middleColorValue: "#FFB000",
+            endColorValue: "#FFD500"
+        },
+
+        // 18 酸橙黄绿
+        {
+            beginColorValue: "#FFD500",
+            middleColorValue: "#BFFF00",
+            endColorValue: "#64FF00"
+        },
+
+        // 19 绿青闭环
+        {
+            beginColorValue: "#64FF00",
+            middleColorValue: "#00FF85",
+            endColorValue: "#00F5A0"
+        }
     ]
 
     property color beginColor: "#96fbc4"
@@ -97,8 +219,12 @@ Item {
     }
 
     onGradientColorIndexChanged: {
-        if (!dynamicGradient)
+        if (dynamicGradient) {
+            _dynamicIndex = normalizedIndex(gradientColorIndex)
+            animateToGradient(_dynamicIndex)
+        } else {
             animateToGradient(gradientColorIndex)
+        }
     }
 
     onDynamicGradientChanged: {
@@ -133,15 +259,10 @@ Item {
     Item {
         id: maskContent
 
-        anchors.left: parent.left
-        anchors.top: parent.top
+        anchors.fill: parent
 
-        width: root.width
-        height: root.height
-
-        // 启用遮罩时，它只是 maskSource，不直接显示
-        // 关闭遮罩时，显示原始内容
-        visible: !root.gradientMaskEnabled && root.maskSourceItem === null
+        // 必须始终保持在渲染树中可见，否则 OpacityMask 无法捕获其像素作为遮罩（grab 到空图）
+        // 启用遮罩时 OpacityMask 在上层覆盖，因此不会出现双重渲染的视觉问题
     }
 
     OpacityMask {

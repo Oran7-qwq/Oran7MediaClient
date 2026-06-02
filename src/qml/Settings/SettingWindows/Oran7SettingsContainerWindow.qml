@@ -85,10 +85,7 @@ ApplicationWindow {
         MouseArea {
             anchors.fill: parent
             propagateComposedEvents: true
-            onClicked: mouse => {
-                Oran7MainUiSetting.clickedOutSide();
-                //Oran7MainUiSetting.callOpenSettingWindow()
-            }
+            onClicked: Oran7MainUiSetting.clickedOutSide();
         }
 
         //CloseBtn
@@ -175,7 +172,7 @@ ApplicationWindow {
         }
         Component {
             id: musicPlayListSettingComponent
-            Oran7MusicPlayListSettingWindow {
+            Oran7MusicPlayerSettingWindow {
                 winIndex: 3
             }
         }
@@ -190,6 +187,9 @@ ApplicationWindow {
             }
             UseExplainLabel {
                 text: "ESC: Open or close the setting windows."
+            }
+            UseExplainLabel{
+                text:"Left or right clicke colorful gradient setting item：will extend or shrink setting content."
             }
             UseExplainLabel{
                 text:"LeftClick: Click at blank area of setting window will close all setting windows."

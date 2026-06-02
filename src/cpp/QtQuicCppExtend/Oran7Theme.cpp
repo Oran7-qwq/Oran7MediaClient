@@ -54,6 +54,7 @@ void Oran7ThemePrivate::initializeComponentPropertyHash()
         ADD_COMPONENT_PROPERTY(Oran7MainGUI);
         ADD_COMPONENT_PROPERTY(Oran7CaptionBar);
         ADD_COMPONENT_PROPERTY(Oran7MusicPlaylistView);
+        ADD_COMPONENT_PROPERTY(Oran7MusicPlayControls);
     }
 }
 

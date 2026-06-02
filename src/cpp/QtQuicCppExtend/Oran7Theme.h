@@ -37,11 +37,13 @@ class Oran7Theme : public QObject
      * 1.Add in Oran7Theme.h：ORAN7_PROPERTY_READONLY(QVariantMap,ComponentName)
      * 2.Add in Oran7Theme.cpp Oran7ThemePrivate::initializeComponentPropertyHash()：ADD_COMPONENT_PROPERTY(ComponentName)
      * 3.Add in Index.json '__component__'："ComponentName":"<Component.jons of Path>"
+     * 4.Add link in cmake for <Component.jons of Path>
      */
     ORAN7_PROPERTY_READONLY(QVariantMap,Oran7ProgressSlider);
     ORAN7_PROPERTY_READONLY(QVariantMap,Oran7MainGUI);
     ORAN7_PROPERTY_READONLY(QVariantMap,Oran7CaptionBar);
     ORAN7_PROPERTY_READONLY(QVariantMap,Oran7MusicPlaylistView)
+    ORAN7_PROPERTY_READONLY(QVariantMap,Oran7MusicPlayControls)
 
 public:
     ~Oran7Theme();

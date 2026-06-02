@@ -17,6 +17,9 @@ Item {
     property color themeColor: "#24FFFFFF"
 
     property bool blurEnabled: true
+    property real saturation: 0.3
+    property real brightness: 0.1
+    property real contrast: 0.3
 
     // 当 blurSource 是 C++ 自定义渲染节点（QSGRenderNode）时设为 true。
     // 此模式下 sourceRect 直接使用 local 坐标（-padding, -padding），
@@ -130,9 +133,9 @@ Item {
         maskEnabled: true
         maskSource: maskItem
 
-        saturation: 0.3
-        brightness: 0.1
-        contrast: 0.3
+        saturation:root.saturation
+        brightness: root.brightness
+        contrast: root.contrast
         colorization: 0.0
 
         visible: root.blurEnabled && root.blurSource !== null

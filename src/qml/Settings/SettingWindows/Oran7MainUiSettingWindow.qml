@@ -33,7 +33,6 @@ Item {
         root.opacity = 0;
         root.y = 0;
         root.visible = true;
-        // 直接计算内容高度，与 savedNormalHeight Binding 公式一致，避免读到旧默认值
         root.savedNormalHeight = Math.max(contene_column.implicitHeight + topDragRect.height + 50, 200);
         root.height = root.savedNormalHeight;
     }
@@ -78,6 +77,15 @@ Item {
             property: "y"
             from: 0
             to: root.savedNormalY
+            duration: window_openAnimation.aniDuration
+            easing.type: Easing.OutCubic
+        }
+
+        PropertyAnimation {
+            target: root
+            property: "height"
+            from: 0
+            to: root.savedNormalHeight
             duration: window_openAnimation.aniDuration
             easing.type: Easing.OutCubic
         }
@@ -168,6 +176,7 @@ Item {
             anchors.fill: parent
             anchors.margins: 16  // 避开阴影边缘
             color: Oran7MainUiSetting.backColor
+            Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
             radius: 10
             clip: true
             opacity: 1
@@ -179,7 +188,7 @@ Item {
                 anchors.margins: 2
             }
 
-            //<--- ui content goes here --->
+            //<=== ui content goes here ===>
             Column {
                 id:contene_column
                 anchors.top: topDragRect.bottom
@@ -189,142 +198,244 @@ Item {
                 anchors.right: parent.right
                 spacing: 2
 
-                // --- item: isDarkMode ---
-                Oran7SettingItem {
-                    text: "Is Dark Mode:"
-                    // 开关按钮
-                    Oran7SwitchToggleItem {
-                        checked: Oran7MainUiSetting.isDarkMode
-                        onSwitchToggleChanged: function (checked) {
-                            Oran7MainUiSetting.isDarkMode = checked;
+                // ~~~~~ Oran7SettingWindow ~~~~~
+                Oran7SettingItem{
+                    id:settingWindowSettings
+                    index: 0
+                    text:"SettingWindows"
+                    fontBold:true
+                    gradientMaskEnabled: true
+
+                    enableMouseArea: true
+                    property bool expand:false
+                    onRightClicked: expand = !expand
+                    onLeftClicked: expand = !expand
+
+                    enableHoverHandler: true
+                }
+                Oran7ExpandItem{
+                    expand: settingWindowSettings.expand
+                    Column{
+                        // --- item: isDarkMode ---
+                        Oran7SettingItem {
+                            text: "Is Dark Mode:"
+                            // 开关按钮
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MainGUI.isDarkMode
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MainGUI","isDarkMode",checked)
+                                }
+                            }
+                        }
+                        // --- theme color set ---
+                        Oran7ColorSettingGroup{
+                            title:"SettingWin Theme Color:"
+                            checkedColor:Oran7Theme.Oran7MainGUI.themeColor
+                            componentName: "Oran7MainGUI"
+                            colorToken:"colorPrimaryBase"
+                            onEnterOfTextFiled: function(text){
+                                Oran7Theme.saveComponentToken(componentName,"themeColor",text)
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
+                            }
+                            onColorReady: function(seletedColor){
+                                Oran7Theme.saveComponentToken(componentName,"themeColor",String(seletedColor).toLowerCase())
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
                         }
                     }
                 }
 
-                // --- item: backgroundImagePath ---
-                Oran7SettingItem {
-                    text: "Background Image:"
-                }
-                Oran7TextFieldItem {
-                    id: background_image_textField
-                    tempText: Oran7Theme.Oran7MainGUI.backgroundImage
-                    placeholderText: "please input image path."
-                    detectEnable: true
-                    detectType: Oran7MainUiSetting.DetectionType.FileDetection
-                    onEnterPressed: {
-                        Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundImage",tempText)
-                    }
-                    anchors.rightMargin: background_imageOpen.height + 2
-                    Oran7OpenFolderItem {
-                        id: background_imageOpen
-                        fileDialog_selectReset: true
-                        isMultiSelect: false
-                        anchors.left: parent.right
-                        anchors.leftMargin: 2
-                        onReady: {
-                            //console.log(background_imageOpen.singleton_filePath)
+                // ~~~~~ MainWindowBackGround ~~~~~
+                Oran7SettingItem{
+                    id:mainWindowBackGroundSettings
+                    text:"MainBackGround"
+                    index: 1
+                    fontBold: true
+                    gradientMaskEnabled: true
 
-                            Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundImage",background_imageOpen.filesArray[0]);
-                            background_image_textField.textField.text = Oran7Theme.Oran7MainGUI.backgroundImage
-                            background_image_textField.tempText = Oran7Theme.Oran7MainGUI.backgroundImage
+                    enableMouseArea: true
+                    property bool expand:false
+                    onRightClicked: expand = !expand
+                    onLeftClicked: expand = !expand
+
+                    enableHoverHandler: true
+                }
+                Oran7ExpandItem{
+                    expand: mainWindowBackGroundSettings.expand
+                    Column{
+                        // --- item: backgroundImagePath ---
+                        Oran7SettingItem {
+                            text: "Background Image:"
+                            showTag: false
                         }
-                    }
-                }
+                        Oran7TextFieldItem {
+                            id: background_image_textField
+                            tempText: Oran7Theme.Oran7MainGUI.backgroundImage
+                            placeholderText: "please input image path."
+                            detectEnable: true
+                            detectType: Oran7MainUiSetting.DetectionType.FileDetection
+                            onEnterPressed: {
+                                Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundImage",tempText)
+                            }
+                            anchors.rightMargin: background_imageOpen.height + 2
+                            Oran7OpenFolderItem {
+                                id: background_imageOpen
+                                fileDialog_selectReset: true
+                                isMultiSelect: false
+                                anchors.left: parent.right
+                                anchors.leftMargin: 2
+                                onReady: {
+                                    //console.log(background_imageOpen.singleton_filePath)
 
-                // --- theme color set ---
-                Oran7ColorSettingGroup{
-                    title:"SettingWin Theme Color"
-                    checkedColor:Oran7Theme.Oran7MainGUI.themeColor
-                    componentName: "Oran7MainGUI"
-                    colorToken:"colorPrimaryBase"
-                    onEnterOfTextFiled: function(text){
-                        Oran7Theme.saveComponentToken(componentName,"themeColor",text)
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
-                    }
-                    onColorReady: function(seletedColor){
-                        Oran7Theme.saveComponentToken(componentName,"themeColor",String(seletedColor).toLowerCase())
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                                    Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundImage",background_imageOpen.filesArray[0]);
+                                    background_image_textField.textField.text = Oran7Theme.Oran7MainGUI.backgroundImage
+                                    background_image_textField.tempText = Oran7Theme.Oran7MainGUI.backgroundImage
+                                }
+                            }
+                        }
                     }
                 }
 
                 // ~~~~~ Oran7CaptionBar Settings ~~~~~
-                // Oran7GroupDiveLine{ //Discard
-                //     id:dive1
-                // }
-                Oran7SetingTitleItem{
-                    id:oran7CaptionBarSettings
-                    title:"CaptionBarSettings"
-                }
-
-                // --- SimpleCaptionBar ---
                 Oran7SettingItem{
-                    text:"SimpleCaptionBar"
-                    Oran7SwitchToggleItem{
-                        checked: Oran7Theme.Oran7CaptionBar.isSimpleMode
-                        onSwitchToggleChanged: function (checked) {
-                            Oran7Theme.saveComponentToken("Oran7CaptionBar","isSimpleMode",checked);
+                    id:captionBarSettings
+                    index: 2
+                    text:"CaptionBarSettings"
+                    fontBold:true
+                    gradientMaskEnabled: true
+
+                    enableMouseArea: true
+                    property bool expand:false
+                    onRightClicked: expand = !expand
+                    onLeftClicked: expand = !expand
+
+                    enableHoverHandler: true
+                }
+                Oran7ExpandItem{
+                    expand: captionBarSettings.expand
+                    Column{
+                        // --- SimpleCaptionBar ---
+                        Oran7SettingItem{
+                            text:"SimpleCaptionBar"
+                            Oran7SwitchToggleItem{
+                                checked: Oran7Theme.Oran7CaptionBar.isSimpleMode
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7CaptionBar","isSimpleMode",checked);
+                                }
+                            }
+                        }
+
+                        // --- CaptionSelectedColor ---
+                        Oran7ColorSettingGroup{
+                            title:"CaptionSelectedColor"
+                            checkedColor: Oran7Theme.Oran7CaptionBar.selectedColor
+                            componentName: "Oran7CaptionBar"
+                            colorToken:"colorPrimaryBase"
+                            onEnterOfTextFiled: function(text){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                            onColorReady: function(seletedColor){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                        }
+
+                        // --- CaptionHoveredColor ---
+                        Oran7ColorSettingGroup{
+                            title:"CaptionHoveredColor:"
+                            checkedColor: Oran7Theme.Oran7CaptionBar.hoveredColor
+                            componentName: "Oran7CaptionBar"
+                            colorToken:"colorPrimaryBase"
+                            onEnterOfTextFiled: function(text){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                            onColorReady: function(seletedColor){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                        }
+
+                        // --- CaptionIconColor ---
+                        Oran7ColorSettingGroup{
+                            title:"CaptionIconColor:"
+                            checkedColor: Oran7Theme.Oran7CaptionBar[colorToken+"-6"]
+                            componentName: "Oran7CaptionBar"
+                            colorToken:"iconColorBase"
+                            onEnterOfTextFiled: function(text){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                            onColorReady: function(seletedColor){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                        }
+                        // --- CaptionTextColor ---
+                        Oran7ColorSettingGroup{
+                            title:"CaptionTextColor:"
+                            checkedColor: Oran7Theme.Oran7CaptionBar[colorToken+"-6"]
+                            componentName: "Oran7CaptionBar"
+                            colorToken:"textColorBase"
+                            onEnterOfTextFiled: function(text){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                            onColorReady: function(seletedColor){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                        }
+                        // --- CaptionBlurEnabled ---
+                        Oran7SettingItem {
+                            text: "BlurEnabled:"
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7CaptionBar.blurEffectEnabled
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7CaptionBar","blurEffectEnabled",checked)
+                                }
+                            }
+                        }
+                        // --- CaptionBlurEffect-saturation ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7CaptionBar.saturation
+                            title: "BlurEffect-Saturation:"
+                            property string componentName: "Oran7CaptionBar"
+                            property string tokenName: "saturation"
+                            sliderValueFrom: -1.0
+                            sliderValueTo: 2.0
+                            stepSize: 0.1
+                            valueDecimals: 1
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                        // --- CaptionBlurEffect-brightness ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7CaptionBar.brightness
+                            title: "BlurEffect-Saturation:"
+                            property string componentName: "Oran7CaptionBar"
+                            property string tokenName: "brightness"
+                            sliderValueFrom: -1.0
+                            sliderValueTo: 1.0
+                            stepSize: 0.1
+                            valueDecimals: 1
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                        // --- CaptionBlurEffect-contrast ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7CaptionBar.contrast
+                            title: "BlurEffect-Saturation:"
+                            property string componentName: "Oran7CaptionBar"
+                            property string tokenName: "contrast"
+                            sliderValueFrom: -1.0
+                            sliderValueTo: 1.0
+                            stepSize: 0.1
+                            valueDecimals: 1
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
                         }
                     }
                 }
 
-                // --- CaptionSelectedColor ---
-                Oran7ColorSettingGroup{
-                    title:"CaptionSelectedColor"
-                    checkedColor: Oran7Theme.Oran7CaptionBar.selectedColor
-                    componentName: "Oran7CaptionBar"
-                    colorToken:"colorPrimaryBase"
-                    onEnterOfTextFiled: function(text){
-                        //Oran7Theme.saveComponentToken(componentName,"selectedColor",text)
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
-                    }
-                    onColorReady: function(seletedColor){
-                        //Oran7Theme.saveComponentToken(componentName,"selectedColor",seletedColor)
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
-                    }
-                }
-
-                // --- CaptionHoveredColor ---
-                Oran7ColorSettingGroup{
-                    title:"CaptionHoveredColor:"
-                    checkedColor: Oran7Theme.Oran7CaptionBar.hoveredColor
-                    componentName: "Oran7CaptionBar"
-                    colorToken:"colorPrimaryBase"
-                    onEnterOfTextFiled: function(text){
-                        //Oran7Theme.saveComponentToken(componentName,"hoveredColor",text)
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
-                    }
-                    onColorReady: function(seletedColor){
-                        //Oran7Theme.saveComponentToken(componentName,"hoveredColor",seletedColor)
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
-                    }
-                }
-
-                // --- CaptionIconColor ---
-                Oran7ColorSettingGroup{
-                    title:"CaptionIconColor:"
-                    checkedColor: Oran7Theme.Oran7CaptionBar[colorToken+"-6"]
-                    componentName: "Oran7CaptionBar"
-                    colorToken:"iconColorBase"
-                    onEnterOfTextFiled: function(text){
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
-                    }
-                    onColorReady: function(seletedColor){
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
-                    }
-                }
-                // --- CaptionTextColor ---
-                Oran7ColorSettingGroup{
-                    title:"CaptionTextColor:"
-                    checkedColor: Oran7Theme.Oran7CaptionBar[colorToken+"-6"]
-                    componentName: "Oran7CaptionBar"
-                    colorToken:"textColorBase"
-                    onEnterOfTextFiled: function(text){
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
-                    }
-                    onColorReady: function(seletedColor){
-                        Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
-                    }
-                }
+                // ~~~~~ Component END ~~~~~
+                Oran7SettingItem{text:"";showTag: false}
 
                 // ~~~ Binding ~~~
                 // 动态绑定窗口高度到内容高度
@@ -335,7 +446,7 @@ Item {
                     when: root.visible // 只在窗口可见时更新
                 }
             }
-            //<--- ui content ends here --->
+            //<===ui content ends here ===>
         }
     }
 
