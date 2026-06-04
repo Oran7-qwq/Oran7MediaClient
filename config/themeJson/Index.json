@@ -157,6 +157,7 @@
         "Oran7CaptionBar":":/config/themeJson/Oran7CaptionBar.json",
         "Oran7ProgressSlider": ":/config/themeJson/Oran7ProgressSlider.json",
         "Oran7MusicPlaylistView": ":/config/themeJson/Oran7MusicPlaylistView.json",
-        "Oran7MusicPlayControls":":/config/themeJson/Oran7MusicPlayControls.json"
+        "Oran7MusicPlayControls":":/config/themeJson/Oran7MusicPlayControls.json",
+        "Oran7MusicLyricsWindow":":/config/themeJson/Oran7MusicLyricsWindow.json"
     }
 }

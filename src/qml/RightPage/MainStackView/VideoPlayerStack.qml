@@ -13,6 +13,7 @@ Item {
     id: root
 
     property string pageName: ""
+    property var stackView_rootItemContainer: root //包含此组件的外部作为stackViewItem的根项
 
     property var mainWindow: null
     function findMainWindow() {
@@ -102,7 +103,7 @@ Item {
         id: videoRenderItem
         anchors.fill: parent
         renderObject: Client.VideoPlayerRender
-        openVideoInfo: false
+        openVideoInfo: Oran7MainUiSetting.openVideoInfo
 
         radius: 10
 
@@ -138,14 +139,12 @@ Item {
         Connections {
             target: BasicConfig
             function onClearAllUi_inVIdeoRenderArea(ok) {
+                //console.log("[DEBUG] onClearAllUi_inVIdeoRenderArea RECEIVED, ok:", ok)
                 if (ok === false) {
                     openImage.visible = true;
                 } else {
                     openImage.visible = false;
-                    // 只在 root 有正确尺寸且不在页面切换期间时才隐藏菜单，避免布局错误
-                    if (root.width > 0) {
-                        openSemiCircleRect.openIngState = false;
-                    }
+                    openSemiCircleRect.openIngState = false;
                 }
             }
         }
@@ -711,21 +710,21 @@ Item {
                     //in inputFilePathRect
                 }
 
-                //======== 启用开发者信息调试模式 openVideoInfo======//
-                Oran7ESelectRect {
-                    id: openVIdeoInfo_eSelRect
-                    labelText: "OpenVideoInfo"
-                    labelTextColor:Oran7Theme.Oran7MainGUI.themeColor
-                    onClicked: {
-                        if (checked === false) {
-                            checked = true;
-                            videoRenderItem.openVideoInfo = checked;
-                        } else {
-                            checked = false;
-                            videoRenderItem.openVideoInfo = checked;
-                        }
-                    }
-                }
+                // //======== 启用开发者信息调试模式 openVideoInfo======//
+                // Oran7ESelectRect {
+                //     id: openVIdeoInfo_eSelRect
+                //     labelText: "OpenVideoInfo"
+                //     labelTextColor:Oran7Theme.Oran7MainGUI.themeColor
+                //     onClicked: {
+                //         if (checked === false) {
+                //             checked = true;
+                //             videoRenderItem.openVideoInfo = checked;
+                //         } else {
+                //             checked = false;
+                //             videoRenderItem.openVideoInfo = checked;
+                //         }
+                //     }
+                // }
                 //============= 选择videoScaleMode ==================//
                 property int scaleMode: Client.Fit
                 Label {
@@ -734,7 +733,7 @@ Item {
                     font.family: "微软雅黑"
                     font.bold: true
                     text: "ScaleMode:"
-                    color: "#24161d"
+                    color: Oran7Theme.Oran7MainGUI.themeColor
                 }
                 Oran7ESelectRect {
                     labelText: "Fit"
@@ -763,6 +762,8 @@ Item {
             //in videoPlayerMenueRectangle
         }
     }
+    // -------------------------------- VideoPlayer Menue Rectangle END -----------------------------
+
     //videoBottomControlBarRect
     Rectangle {
         id: videoBottomControlBarRect
@@ -971,6 +972,8 @@ Item {
             BasicConfig.clearAllUi_inVIdeoRenderArea(true);
         else
             BasicConfig.clearAllUi_inVIdeoRenderArea(false);
+
+        //console.log("[DEBUG] clearAllUi signal emitted, mouseHidden:", root.mouseHidden, "isActive:", root.isActive)
     }
 
     Timer {

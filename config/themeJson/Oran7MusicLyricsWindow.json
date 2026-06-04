@@ -1,0 +1,14 @@
+{
+    "__init__":{
+        "__vars__":{
+            "textColorBase":"$genColor(#ffffff)",
+            "textSizeBase": "$genFontSize(22)"
+        }
+    },
+    "__style__":{
+        "blurEffectEnabled": true,
+        "saturation":0.3,
+        "brightness":0.1,
+        "contrast": 0.3
+    }
+}

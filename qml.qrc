@@ -40,7 +40,7 @@
         <file>src/qml/Settings/GlobalSettings/Oran7MainUiSetting.qml</file>
         <file>src/qml/Settings/PagesSettings/Oran7MediaPlayerSetting.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml</file>
-        <file>src/qml/Settings/SettingWindows/Oran7MediaPlayerSettingWindow.qml</file>
+        <file>src/qml/Settings/SettingWindows/Oran7VideoPlayerSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7SettingsContainerWindow.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SetingTitleItem.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml</file>
@@ -54,5 +54,7 @@
         <file>src/qml/Components/Oran7RoundedImage.qml</file>
         <file>src/qml/Components/Oran7GradientMask.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ExpandItem.qml</file>
+        <file>src/qml/Components/LyricsView.qml</file>
+        <file>src/qml/Components/Oran7MusicPlayControls.qml</file>
     </qresource>
 </RCC>

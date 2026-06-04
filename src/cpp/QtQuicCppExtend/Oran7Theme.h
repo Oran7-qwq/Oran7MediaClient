@@ -44,6 +44,7 @@ class Oran7Theme : public QObject
     ORAN7_PROPERTY_READONLY(QVariantMap,Oran7CaptionBar);
     ORAN7_PROPERTY_READONLY(QVariantMap,Oran7MusicPlaylistView)
     ORAN7_PROPERTY_READONLY(QVariantMap,Oran7MusicPlayControls)
+    ORAN7_PROPERTY_READONLY(QVariantMap,Oran7MusicLyricsWindow)
 
 public:
     ~Oran7Theme();

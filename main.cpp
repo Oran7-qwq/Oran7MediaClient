@@ -16,6 +16,8 @@
 #include "BilibliLiveRoomAddressCatch.h"
 #include "BilibiliAuthManager.h"
 #include "Oran7Theme.h"
+#include "LyricsModel.h"
+#include "Oran7SoundEffect.h"
 #include "ConsoleLogger.h"
 
 
@@ -75,6 +77,10 @@ int main(int argc, char *argv[])
     // threaded 渲染循环
     qputenv("QSG_RENDER_LOOP", "basic");
     qputenv("QSG_NO_VSYNC", "1");
+
+    // 强制 Qt Multimedia 使用 Windows Media Foundation 后端
+    // 避免加载 ffmpegmediaplugin 时与项目自带的 FFmpeg DLL 冲突
+    qputenv("QT_MEDIA_BACKEND", "windows");
     // qputenv("QSG_RHI_BACKEND", "opengl");
     // qputenv("QSG_RHI_PROFILE", "false");
     // qputenv("QSG_INFO", "1");
@@ -137,6 +143,8 @@ int main(int argc, char *argv[])
     //qmlRegisterType<Oran7FileHelper>("Oran7FileHelper", 1, 0, "Oran7FileHelper");
     qmlRegisterType<BilibiliRoomAddressCatch>("BilibiliRoomAddressCatch", 1, 0, "BilibiliRoomAddressCatch");
     qmlRegisterType<D3D11VideoItem>("D3D11VideoItem", 1, 0, "D3D11VideoItem");
+    qmlRegisterType<LyricsModel>("LyricsModel", 1, 0, "LyricsModel");
+    qmlRegisterType<Oran7SoundEffect>("Oran7Sound", 1, 0, "Oran7SoundEffect");
     //qmlRegisterType<FramelessWindow>("FramelessWindow", 1, 0, "FramelessWindow");
 
     // B站认证管理器单例

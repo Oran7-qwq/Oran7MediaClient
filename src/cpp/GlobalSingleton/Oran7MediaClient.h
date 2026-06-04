@@ -5,6 +5,7 @@
 #include "D3d11Videoitem.h"
 #include "GlobalHelper.h"
 #include "Oran7ScreenCapture.h"
+#include "OnlineLyricsFetcher.h"
 
 #include <QTimer>
 #include <QObject>
@@ -224,10 +225,18 @@ signals:
     Q_INVOKABLE void stopRequested();
     /*! @brief 媒体文件播放暂停时自动触发，更新QML端暂停/停止图标状态*/
     void stopIconUpdated();
-    /*! @brief 更新QML端播放进度条的当前位置和当前时间*/
-    void playProgressUpdated(int CurPos,int CurTime);
+    /*! @brief 更新QML端播放进度条的当前位置和当前时间（浮点秒）*/
+    void playProgressUpdated(int CurPos,double CurTime);
     /*! @brief 更新QML端ProgressSlider旁边的当前播放文件总时长*/
     void totalDurationUpdated(int AllTime);
+    /*! @brief 匹配到LRC歌词文件时发射，通知QML加载歌词*/
+    void lyricsAvailable(const QString &lrcFilePath);
+    /*! @brief 未匹配到LRC歌词文件时发射，通知QML清空歌词*/
+    void lyricsUnavailable();
+    /*! @brief 在线歌词搜索开始时发射，通知QML显示"正在拉取歌词"*/
+    void onlineLyricsSearching();
+    /*! @brief 在线歌词搜索失败时发射，通知QML显示"未找到歌词"*/
+    void onlineLyricsNotFound();
     /*! @brief 触发播放下一首，由QML端或播放结束自动触发*/
     void playNextTriggered();
     /*! @brief 触发播放上一首，由QML端触发*/
@@ -285,8 +294,8 @@ private:
     long total_duration_ = 0;
     /*! @brief 进度条Seek请求标志位，防止seek期间更新进度*/
     bool req_seeking_ = false;
-    /*! @brief 记录当前播放位置，单位秒*/
-    long Current_SecPosition_ = 0;
+    /*! @brief 记录当前播放位置，单位秒（浮点精度）*/
+    double Current_SecPosition_ = 0.0;
     /*! @brief 退出时防止帧堆积的原子标志，直接释放渲染资源*/
     std::atomic_bool shutting_down_{false};
 
@@ -295,6 +304,13 @@ private:
     void getTotalDuration();
     /*! @brief 调用Native层请求内部FFPlayer返回媒体当前播放位置*/
     void reqUpdateCurrentPosition();
+
+    /*! @brief 尝试为当前播放的媒体文件匹配同名LRC歌词文件*/
+    void tryLoadLrcForFile(const QString &mediaFilePath);
+    /*! @brief 本地无歌词时，通过在线API搜索并下载LRC歌词*/
+    void tryOnlineLyricsSearch(const QString &mediaFilePath);
+    /*! @brief 在线歌词获取器（LRCLIB优先 + 网易云fallback）*/
+    OnlineLyricsFetcher *m_lyricsFetcher = nullptr;
 
     //=============================<Client QThread shared_data >======================//
     /*! @brief Client共享数据线程同步互斥锁*/

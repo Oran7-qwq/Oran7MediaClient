@@ -156,6 +156,7 @@ public:
 
     QString audioDirPath;           //audio 子目录
     QString audioCoverDirPath; //audioCover存储封面子目录
+    QString audioLRCDirPath;   //audioLRC存储歌词子目录
 
     //============== Oran7MediaPlayer Parameters ===============
     int playerVolume = 25;

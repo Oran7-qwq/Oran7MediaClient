@@ -4,7 +4,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import Qt5Compat.GraphicalEffects
 import QtQuick.Effects
-import QtMultimedia
+import Oran7Sound 1.0
 
 import "../GlobalSettings"
 import "../PagesSettings"
@@ -144,8 +144,8 @@ ApplicationWindow {
         }
         Component {
             id: mediaPlayerSettingComponent
-            Oran7MediaPlayerSettingWindow {
-                winIndex: 1
+            Oran7VideoPlayerSettingWindow {
+                winIndex: 2
             }
         }
 
@@ -159,7 +159,7 @@ ApplicationWindow {
         Component {
             id: screenCaptureSettingComponent
             Oran7ScreenCaptureSettingWindow {
-                winIndex: 2
+                winIndex: 3
             }
         }
 
@@ -173,7 +173,7 @@ ApplicationWindow {
         Component {
             id: musicPlayListSettingComponent
             Oran7MusicPlayerSettingWindow {
-                winIndex: 3
+                winIndex:1
             }
         }
 
@@ -490,14 +490,9 @@ ApplicationWindow {
     }
 
     // --- open and close sound effect ---
-    SoundEffect {
-        id: openSoundEffect
-        source: "qrc:/sound/OpenSound.wav"
-        volume: 0.6
-    }
-    SoundEffect {
-        id: closeSoundEffect
-        source: "qrc:/sound/CloseSound.wav"
-        volume: 0.6
+    // C++ 包装类：在 C++ 层调用 QSoundEffect::setAudioDevice()，跟随系统默认设备
+    Oran7SoundEffect {
+        id: settingSound
+        volume: Oran7Theme.Oran7MainGUI.soundEffectVolume
     }
 }

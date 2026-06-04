@@ -104,6 +104,24 @@ Client::~Client()
 int Client::InitSignalsAndSlots()
 {
     QPointer<Client> self(this);
+
+    //============[OnlineLyricsFetcher]============
+    m_lyricsFetcher = new OnlineLyricsFetcher(this);
+    connections << connect(m_lyricsFetcher, &OnlineLyricsFetcher::lyricsFound,
+        this, [this](const QString &lrcFilePath) {
+            // 防止过期结果：检查下载的歌词是否属于当前正在播放的歌曲
+            QFileInfo lrcInfo(lrcFilePath);
+            QFileInfo curInfo(appData.CurMediaFilePath);
+            if (lrcInfo.completeBaseName() == curInfo.completeBaseName()) {
+                INFO_LOG << "Client: online lyrics found ->" << lrcFilePath;
+                emit lyricsAvailable(lrcFilePath);
+            }
+        }, Qt::QueuedConnection);
+    connections << connect(m_lyricsFetcher, &OnlineLyricsFetcher::lyricsNotFound,
+        this, [this]() {
+            emit onlineLyricsNotFound();
+        }, Qt::QueuedConnection);
+
     //============[Oran7MediaPlayer]============
     connections << connect(this,&Client::playOrPauseRequested,this,[=](){
         CLIENT_LOG<<"playOrPauseRequested Reveived";
@@ -180,6 +198,17 @@ QString Client::createAppDirectories()
         if(!audioCoverDir.mkdir("."))
         {
             WARNING_LOG << "Client::createAppDirectories:Could not Create request Path:"  << appData.audioCoverDirPath;
+            return QString();
+        }
+    }
+    //audioLRC存储歌词子目录
+    this->appData.audioLRCDirPath = appData.audioDirPath + "/audioLRC";
+    QDir audioLRCDir(appData.audioLRCDirPath);
+    if(!audioLRCDir.exists())
+    {
+        if(!audioLRCDir.mkpath("."))
+        {
+            WARNING_LOG << "Client::createAppDirectories:Could not Create request Path:" << appData.audioLRCDirPath;
             return QString();
         }
     }
@@ -506,6 +535,7 @@ void Client::preparePlayingMedia(QString file_path)
                 }
                 m_callTimer.restart();
                 appData.CurMediaFilePath=file_path;
+                tryLoadLrcForFile(file_path);
                 emit this->stopRequested();
                 //休眠等待100ms，待内存播放器进程销毁后再触发重启
                 QTimer::singleShot(100, this,[this](){emit this->playOrPauseRequested();});
@@ -515,6 +545,7 @@ void Client::preparePlayingMedia(QString file_path)
             {
                 //到这里指：上次播放的媒体已经结束，并请求播放下一首和上次不同的文件
                 appData.CurMediaFilePath=file_path;
+                tryLoadLrcForFile(file_path);
                 emit this->playOrPauseRequested();
                 return;
             }
@@ -530,6 +561,7 @@ void Client::preparePlayingMedia(QString file_path)
     {
         //上一次播放为空，直接复制路径然后触发播放
         appData.CurMediaFilePath=file_path;
+        tryLoadLrcForFile(file_path);
         emit this->playOrPauseRequested();
         return;
     }
@@ -1157,7 +1189,7 @@ void Client::reqUpdateCurrentPosition()
 {
     if(mp_&&!req_seeking_)
     {
-        Current_SecPosition_=mp_->oran7mp_get_current_position(); //单位秒
+        Current_SecPosition_=mp_->oran7mp_get_current_position_double(); //浮点秒
 
         if(Current_SecPosition_ * 1000 > total_duration_ || Current_SecPosition_ < 0)return;
 
@@ -1520,6 +1552,58 @@ void Client::saveConfig_AppWindowPosition(QQmlApplicationEngine &engine)
 void Client::saveConfig_AppSetPlayerVolume()
 {
     AppConfigManager::ins().setValueQVariant("playerVolume",appData.playerVolume);
+}
+
+void Client::tryLoadLrcForFile(const QString &mediaFilePath)
+{
+    if(mediaFilePath.isEmpty() || appData.audioLRCDirPath.isEmpty())
+    {
+        emit lyricsUnavailable();
+        return;
+    }
+
+    QFileInfo fileInfo(mediaFilePath);
+    QString baseName = fileInfo.completeBaseName();
+    QString lrcPath = appData.audioLRCDirPath + "/" + baseName + ".lrc";
+
+    if(QFile::exists(lrcPath))
+    {
+        if (m_lyricsFetcher) m_lyricsFetcher->cancel(); // 取消正在进行的在线搜索
+        INFO_LOG << "Client::tryLoadLrcForFile: LRC found:" << lrcPath;
+        emit lyricsAvailable(lrcPath);
+    }
+    else
+    {
+        INFO_LOG << "Client::tryLoadLrcForFile: No LRC for:" << mediaFilePath;
+        emit lyricsUnavailable();
+        tryOnlineLyricsSearch(mediaFilePath); // 触发在线搜索
+    }
+}
+
+void Client::tryOnlineLyricsSearch(const QString &mediaFilePath)
+{
+    if (!m_lyricsFetcher) return;
+
+    // 通过 ffprobe 提取元数据（同步，通常 < 100ms）
+    QMap<QString, QVariant> info = analyzeMediaFileInfo(mediaFilePath);
+    if (info["success"].toInt() != 0) {
+        INFO_LOG << "Client::tryOnlineLyricsSearch: cannot extract metadata";
+        return;
+    }
+
+    QString artist = info["artist"].toString();
+    QString title  = info["title"].toString();
+
+    // 过滤占位值
+    if (artist == "未知歌手" || artist.isEmpty() ||
+        title  == "未知歌曲" || title.isEmpty()) {
+        INFO_LOG << "Client::tryOnlineLyricsSearch: no meaningful metadata";
+        return;
+    }
+
+    INFO_LOG << "Client::tryOnlineLyricsSearch:" << artist << "-" << title;
+    emit onlineLyricsSearching();
+    m_lyricsFetcher->search(artist, title, mediaFilePath, appData.audioLRCDirPath);
 }
 
 

@@ -2363,26 +2363,35 @@ int FFPlayer::stream_has_enough_packets(AVStream *st, int stream_id, PacketQueue
  */
 long FFPlayer::ffp_get_current_position_l()
 {
-    if(!ic)return 0;
+    return static_cast<long>(ffp_get_current_position_d());
+}
+
+/**
+ * @brief FFPlayer::ffp_get_current_position_d   返回浮点秒精度
+ * @return
+ */
+double FFPlayer::ffp_get_current_position_d()
+{
+    if(!ic)return 0.0;
     int64_t start_time = ic->start_time;
-    int64_t start_diff=0;
+    double start_diff_sec = 0.0;
     if(start_time >0 && start_time!=AV_NOPTS_VALUE)
     {
-        start_diff=fftime_to_milliseconds(start_time);
+        start_diff_sec = fftime_to_milliseconds(start_time) / 1000.0;
     }
-    int64_t ms_pos = 0;
+    double sec_pos = 0.0;
     double fftime_pos_clock = get_master_clock();  // 获取当前时钟
     if(std::isnan(fftime_pos_clock))
     {
-        ms_pos=fftime_to_milliseconds(seek_pos);
+        sec_pos = fftime_to_milliseconds(seek_pos) / 1000.0;
     }
     else
     {
-        ms_pos=fftime_pos_clock;//单位秒
+        sec_pos = fftime_pos_clock;//单位秒
     }
-    if(ms_pos<0 || ms_pos <start_diff)return 0;
-    int64_t adjust_ms_pos=ms_pos-start_diff;
-    return static_cast<long>(adjust_ms_pos) * pf_playback_rate;
+    if(sec_pos < 0.0 || sec_pos < start_diff_sec) return 0.0;
+    double adjust_sec_pos = sec_pos - start_diff_sec;
+    return adjust_sec_pos * pf_playback_rate;
 }
 
 /**

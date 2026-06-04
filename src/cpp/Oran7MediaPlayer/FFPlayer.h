@@ -112,8 +112,10 @@ public:
     std::function<int(const Frame * , AVFrame *)> video_refresh_callback_ = NULL;
     void AddVideoRefreshCallback(std::function<int(const Frame *,AVFrame *)> callback);
 
-    //*获取当前播放位置*//
+    //*获取当前播放位置（整数秒，向下取整）*//
     long ffp_get_current_position_l();
+    //*获取当前播放位置（浮点秒，保留小数精度）*//
+    double ffp_get_current_position_d();
 
     //**seek相关**//
     int64_t seek_req = 0;

@@ -339,14 +339,16 @@ ApplicationWindow {
             visible: true
             themeColor: "#04FFFFFF"
             blurSource: mainWindowBackground
-            blurEnabled: true
-            borderWidth: 1
+            blurEnabled: Oran7Theme.Oran7MusicPlayControls.blurEffectEnabled
+            saturation:Oran7Theme.Oran7MusicPlayControls.saturation
+            brightness:Oran7Theme.Oran7MusicPlayControls.brightness
+            contrast:Oran7Theme.Oran7MusicPlayControls.contrast
+
             property real visibleOpacity: 0.0
 
             BottomPage {
                 id: bottomPage
                 anchors.fill: parent
-                //color: "#2a1a22"
                 color: "transparent"
                 //initilization
                 visible: bottomRectangle.visible

@@ -22,6 +22,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     OpenGLWidgets
     ShaderTools
     Multimedia
+    Network
 )
 
 # 设置 Qt 策略以避免 QTP0001 警告
@@ -136,6 +137,7 @@ qt_add_resources(Oran7UI_Impl "resource"
           config/themeJson/Oran7ProgressSlider.json
           config/themeJson/Oran7MusicPlaylistView.json
           config/themeJson/Oran7MusicPlayControls.json
+          config/themeJson/Oran7MusicLyricsWindow.json
 
           config/default.json
 )
@@ -253,6 +255,7 @@ target_link_libraries(Oran7MediaClient
     Qt6::OpenGLWidgets
     Qt6::ShaderTools
     Qt6::Multimedia
+    Qt6::Network
     Qt6::GuiPrivate
     # QWindowKit 库（参考 HuskarUI 方法）
     QWKCore

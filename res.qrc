@@ -75,5 +75,6 @@
         <file>image/defaultBg.jpg</file>
         <file>image/material-symbols_delete-outline-rounded.png</file>
         <file>image/mingcute_arrows-down-fill.png</file>
+        <file>sound/ExpandSound.wav</file>
     </qresource>
 </RCC>

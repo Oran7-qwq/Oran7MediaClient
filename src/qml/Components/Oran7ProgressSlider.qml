@@ -23,6 +23,11 @@ Rectangle{
     ]
     property int sliderColor_themeIndex: 1
 
+    property bool visibleProgresTrack_GradientMaskEnabeld: false
+    property int visibleProgresTrack_GradientMaskColorIndex: 0
+    property bool visibleProgressTrack_DynamicGradientMaskEnabled:false
+    property int visibleProgressTrack_DrnamicGradientMask_transitionDuration:Oran7Theme.Primary.durationVerySlow
+
     // --- signal ---
 
      signal positionChanged()
@@ -81,22 +86,33 @@ Rectangle{
             x:root.progressHandleX
             z:visiableRectangle.z + 1
         }
-        background: Rectangle{
+        background:Rectangle{
             id:progressBackgroundRectangle
             anchors.fill: parent
-            radius: progressSlier.height/2
+            radius:parent.height/2
             color: Oran7Theme.Oran7ProgressSlider.trackColor ?? "gray"
             opacity: Oran7Theme.Oran7ProgressSlider.trackOpacity ?? 0.3
             clip: true
         }
-        Rectangle{
-            id:visiableRectangle
+        Oran7GradientMask{
+            id:trakGradientMaskArea
+            gradientMaskEnabled: root.visibleProgresTrack_GradientMaskEnabeld
+            gradientColorIndex:root.visibleProgresTrack_GradientMaskColorIndex
+            dynamicGradient: root.visibleProgressTrack_DynamicGradientMaskEnabled
+            transitionDuration:root.visibleProgressTrack_DrnamicGradientMask_transitionDuration
             height:progressBackgroundRectangle.height
             width: root.visibleProgressX
-            color: root.visibleColor
-            radius: width/2
             anchors.left: progressBackgroundRectangle.left
             anchors.top: progressBackgroundRectangle.top
+            Rectangle{
+                id:visiableRectangle
+                height:parent.height
+                width: root.visibleProgressX
+                anchors.left: parent.left
+                anchors.top: parent.top
+                color: root.visibleColor
+                radius: width/2
+            }
         }
     }
     MouseArea{

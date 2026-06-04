@@ -33,8 +33,9 @@ Item {
         root.opacity = 0;
         root.y = 0;
         root.visible = true;
-        root.savedNormalHeight = Math.max(contene_column.implicitHeight + topDragRect.height + 50, 100);
-        root.height = root.savedNormalHeight;
+        root.savedNormalHeight = Math.max(contene_column.implicitHeight + topDragRect.height + 50, 200);
+        //root.height = root.savedNormalHeight;
+        root.height = 0;
     }
 
     function startOpenAnimation() {
@@ -175,13 +176,13 @@ Item {
                 // ~~~~~ MusicListView Settings ~~~~~
                 Oran7SettingItem{
                     id:musicListViewSettings
-                    index: 2
+                    index: 0
                     text:"MusicListViewSettings"
                     fontBold:true
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:false
+                    property bool expand:true
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -221,13 +222,13 @@ Item {
                 // ~~~~~ MusicPlayControlsBar ~~~~~
                 Oran7SettingItem{
                     id:musicPlayControlsBar
-                    index: 2
+                    index: 1
                     text:"MusicPlayControlsBar"
                     fontBold:true
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:false
+                    property bool expand:true
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -264,20 +265,210 @@ Item {
                             }
                         }
 
-                        // ---playButtonColor ---
-                        // Oran7ColorSettingGroup{
-                        //     title:"playButtonColor:"
-                        //     checkedColor: Oran7Theme.Oran7MusicPlayControls.playButtonColor
-                        //     componentName: "Oran7MusicPlayControls"
-                        //     colorToken:"playButtonColor"
-                        //     displayAmount: 0
-                        //     onEnterOfTextFiled: function(text){
-                        //         Oran7Theme.saveComponentToken(componentName,colorToken,text)
-                        //     }
-                        //     onColorReady: function(seletedColor){
-                        //         Oran7Theme.saveComponentToken(componentName,colorToken,seletedColor)
-                        //     }
-                        // }
+                        //---progressVisibleBar_ColorIndex ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicPlayControls.progressVisibleBar_ColorIndex
+                            title: "ProgressColor-index:"
+                            property string componentName: "Oran7MusicPlayControls"
+                            property string tokenName: "progressVisibleBar_ColorIndex"
+                            sliderValueFrom: 0
+                            sliderValueTo: 19
+                            stepSize: 1
+                            valueDecimals: 0
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                            //<-preview
+                            Oran7GradientMask{
+                                width: Oran7MainUiSetting.itemHeight * 0.7
+                                height: width
+                                anchors.right: parent.right
+                                anchors.rightMargin: 2
+                                anchors.top: parent.top
+                                anchors.topMargin: Oran7MainUiSetting.itemHeight * 0.4
+                                gradientMaskEnabled: true
+                                gradientColorIndex: Oran7Theme.Oran7MusicPlayControls.progressVisibleBar_ColorIndex
+                                dynamicGradient: Oran7Theme.Oran7MusicPlayControls.progressVisibleBar_dynamicGradientEnabled
+                                transitionDuration: Oran7Theme.Primary.durationMid  * 4
+                                Rectangle{
+                                    anchors.fill: parent
+                                    color:"white"
+                                    radius: 4
+                                }
+                            }
+                        }
+                        // --- progressVisibleBar_dynamicGradientEnabled ---
+                        Oran7SettingItem {
+                            text: "DynamicGradient:"
+                            // 开关按钮
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MusicPlayControls.progressVisibleBar_dynamicGradientEnabled
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MusicPlayControls","progressVisibleBar_dynamicGradientEnabled",checked)
+                                    if(checked === true)
+                                    Oran7Theme.saveComponentToken("Oran7MusicPlayControls","progressVisibleBar_ColorIndex",0)//retset to 0
+                                }
+                            }
+                        }
+                        //<<---Oran7MusicPlayControls-Background
+                        Oran7SettingItem{text:"Background：";fontBold:true;showTag:false}
+                        // --- Oran7MusicPlayControls-BlurEnabled ---
+                        Oran7SettingItem {
+                            text: "BlurEnabled:"
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MusicPlayControls.blurEffectEnabled
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MusicPlayControls","blurEffectEnabled",checked)
+                                }
+                            }
+                        }
+                        // --- Oran7MusicPlayControls-BlurEffect-saturation ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicPlayControls.saturation
+                            title: "BlurEffect-Saturation:"
+                            property string componentName: "Oran7MusicPlayControls"
+                            property string tokenName: "saturation"
+                            sliderValueFrom: -1.0
+                            sliderValueTo: 2.0
+                            stepSize: 0.1
+                            valueDecimals: 1
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                        // --- Oran7MusicPlayControls-BlurEffect-brightness ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicPlayControls.brightness
+                            title: "BlurEffect-Brightness:"
+                            property string componentName: "Oran7MusicPlayControls"
+                            property string tokenName: "brightness"
+                            sliderValueFrom: -1.0
+                            sliderValueTo: 1.0
+                            stepSize: 0.1
+                            valueDecimals: 1
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                        // --- Oran7MusicPlayControls-Effect-contrast ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicPlayControls.contrast
+                            title: "BlurEffect-Contrast:"
+                            property string componentName: "Oran7MusicPlayControls"
+                            property string tokenName: "contrast"
+                            sliderValueFrom: -1.0
+                            sliderValueTo: 1.0
+                            stepSize: 0.1
+                            valueDecimals: 1
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                    }
+                }
+                // ~~~~~ MusicLyricsWindow ~~~~~
+                Oran7SettingItem{
+                    id:musicLyricsWindow
+                    index: 2
+                    text:"MusicLyricsWindow"
+                    fontBold:true
+                    gradientMaskEnabled: true
+
+                    enableMouseArea: true
+                    property bool expand:true
+                    onRightClicked: expand = !expand
+                    onLeftClicked: expand = !expand
+
+                    enableHoverHandler: true
+                }
+                Oran7ExpandItem{
+                    expand: musicLyricsWindow.expand
+                    Column{
+                        //<<---Lyrics
+                        Oran7SettingItem{text:"Lyrics：";fontBold:true;showTag:false}
+                        // --- LyricsWin_Lyrics-TextColor ---
+                        Oran7ColorSettingGroup{
+                            title:"Lyrics-TextColor:"
+                            checkedColor: Oran7Theme.Oran7MusicLyricsWindow[colorToken+"-6"]
+                            componentName: "Oran7MusicLyricsWindow"
+                            colorToken: "textColorBase"
+                            onEnterOfTextFiled: function(text){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
+                            }
+                            onColorReady: function(seletedColor){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                        }
+                        // --- LyricsWin_Lyrics-TextFontSize ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicLyricsWindow[tokenName+"-2"]
+                            title: "Lyrics-TextSize:"
+                            property string componentName: "Oran7MusicLyricsWindow"
+                            property string tokenName: "textSizeBase"
+                            sliderValueFrom: 12
+                            sliderValueTo: 40
+                            stepSize: 1
+                            valueDecimals: 0
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,`$genFontSize(${value})`)
+                            }
+                        }
+
+                        //<<---Background
+                        Oran7SettingItem{text:"Background：";fontBold: true;showTag: false}
+                        // --- LyricsWin_Background-BlurEnabled ---
+                        Oran7SettingItem {
+                            text: "BlurEnabled:"
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MusicLyricsWindow.blurEffectEnabled
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MusicLyricsWindow","blurEffectEnabled",checked)
+                                }
+                            }
+                        }
+                        // --- LyricsWin_Background-BlurEffect-saturation ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicLyricsWindow.saturation
+                            title: "BlurEffect-Saturation:"
+                            property string componentName: "Oran7MusicLyricsWindow"
+                            property string tokenName: "saturation"
+                            sliderValueFrom: -1.0
+                            sliderValueTo: 2.0
+                            stepSize: 0.1
+                            valueDecimals: 1
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                        // --- LyricsWin_Background-BlurEffect-brightness ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicLyricsWindow.brightness
+                            title: "BlurEffect-Brightness:"
+                            property string componentName: "Oran7MusicLyricsWindow"
+                            property string tokenName: "brightness"
+                            sliderValueFrom: -1.0
+                            sliderValueTo: 1.0
+                            stepSize: 0.1
+                            valueDecimals: 1
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                        // --- LyricsWin_Background-BlurEffect-contrast ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicLyricsWindow.contrast
+                            title: "BlurEffect-Contrast:"
+                            property string componentName: "Oran7MusicLyricsWindow"
+                            property string tokenName: "contrast"
+                            sliderValueFrom: -1.0
+                            sliderValueTo: 1.0
+                            stepSize: 0.1
+                            valueDecimals: 1
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
                     }
                 }
             }

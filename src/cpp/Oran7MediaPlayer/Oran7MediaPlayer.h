@@ -124,8 +124,10 @@ public:
     int oran7mp_change_state_l(int new_state);
     // 是不是播放中
     bool oran7mp_is_playing();
-    // 当前播放位置
+    // 当前播放位置（整数秒）
     long oran7mp_get_current_position();
+    // 当前播放位置（浮点秒）
+    double oran7mp_get_current_position_double();
     // 总长度
     long oran7mp_get_duration();
     // 已经播放的长度

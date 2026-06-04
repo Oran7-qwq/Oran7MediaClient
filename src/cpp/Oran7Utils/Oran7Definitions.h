@@ -34,4 +34,12 @@ private:\
     private: \
     type m_##get;
 
+/*! 音效添加*/
+#define SOUND_EFFECT(type,Url)\
+public:\
+    Q_INVOKABLE void type()  { playPcm(type##Pcm, type##Format); }\
+    private:\
+    QAudioFormat type##Format;\
+    QByteArray type##Pcm = loadWav(Url,type##Format);
+
 #endif // ORAN7DEFINITIONS_H

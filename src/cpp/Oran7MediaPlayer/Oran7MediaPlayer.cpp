@@ -208,6 +208,11 @@ long Oran7MediaPlayer::oran7mp_get_current_position()
     return ffplayer_->ffp_get_current_position_l();
 }
 
+double Oran7MediaPlayer::oran7mp_get_current_position_double()
+{
+    return ffplayer_->ffp_get_current_position_d();
+}
+
 long Oran7MediaPlayer::oran7mp_get_duration()
 {
     return ffplayer_->ffp_get_duration_l();

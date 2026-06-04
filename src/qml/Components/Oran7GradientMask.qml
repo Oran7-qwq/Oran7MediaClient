@@ -28,7 +28,7 @@ Item {
     property bool gradientMaskEnabled: true
 
     property int transitionDuration: 1000
-    property int dynamicInterval: transitionDuration + 100
+    property int dynamicInterval: transitionDuration
 
     property point gradientStart: Qt.point(0, 0)
     property point gradientEnd: Qt.point(width, height)
@@ -146,7 +146,7 @@ Item {
             endColorValue: "#FF4D6D"
         },
 
-        // 16 糖果红橙
+        //  糖果红橙
         {
             beginColorValue: "#FF4D6D",
             middleColorValue: "#FF3D00",

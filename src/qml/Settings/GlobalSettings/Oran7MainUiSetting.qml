@@ -7,7 +7,7 @@ import Oran7UI.Impl
 Item {
     id: root
 
-    // =========== MainUi_Window_Property ==========
+    // d
 
     // === 全局动画窗口状态聚合 ===
     // 当前打开的动画窗口数量（由各 Oran7AnimatedWindow 自动维护）
@@ -59,4 +59,8 @@ Item {
     signal callOpenSettingWindow()//out-api
     signal triggleOpen_Oran7MainUiSetting_window //inner-api
     signal clickedOutSide()
+
+
+    //=========== VideoPlayerStack_Property ==========
+    property bool openVideoInfo: false
 }

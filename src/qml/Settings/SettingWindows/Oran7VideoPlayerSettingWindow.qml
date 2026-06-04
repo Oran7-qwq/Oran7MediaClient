@@ -17,11 +17,11 @@ Item {
     x: root.savedNormalX
     y: 0
 
-    property int  winIndex : 2
+    property int  winIndex : 1
 
     property real savedNormalX: 80 + Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth * root.winIndex
     property real savedNormalY: 40
-    property real savedNormalHeight: 500
+    property real savedNormalHeight: 700
 
     property point clickPos: Qt.point(0, 0)
     property bool mouseIsPressed: false
@@ -154,13 +154,12 @@ Item {
 
             Oran7SetingTitleItem{
                 id:topDragRect
-                title:"ScreenCaptureSettings"
+                title:"VideoPlayerSettings"
                 anchors.top: parent.top
                 anchors.margins: 2
             }
 
             //<--- ui content goes here --->
-
             Column{
                 id:contene_column
                 anchors.top: topDragRect.bottom
@@ -170,11 +169,11 @@ Item {
                 anchors.right: parent.right
                 spacing: 2
 
-                // ~~~ ScreenCpatureNormal ~~~
+                // ~~~ VideoPlayerNormal ~~~
                 Oran7SettingItem{
-                    id: screenCpatureSetting
+                    id: videoPlayerSetting
                     index: 0
-                    text:"ScreenCpatureNormal"
+                    text:"VideoPlayerNormal"
                     fontBold:true
                     gradientMaskEnabled: true
 
@@ -186,18 +185,18 @@ Item {
                     enableHoverHandler: true
                 }
                 Oran7ExpandItem{
-                    expand: screenCpatureSetting.expand
+                    expand: videoPlayerSetting.expand
                     Column{
-                        // // --- OpenVideoInfo ---
-                        // Oran7SettingItem {
-                        //     text: "OpenVideoInfo:"
-                        //     Oran7SwitchToggleItem {
-                        //         checked: Oran7MainUiSetting.openVideoInfo
-                        //         onSwitchToggleChanged: function (checked) {
-                        //             Oran7MainUiSetting.openVideoInfo = checked
-                        //         }
-                        //     }
-                        // }
+                        // --- OpenVideoInfo ---
+                        Oran7SettingItem {
+                            text: "OpenVideoInfo:"
+                            Oran7SwitchToggleItem {
+                                checked: Oran7MainUiSetting.openVideoInfo
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7MainUiSetting.openVideoInfo = checked
+                                }
+                            }
+                        }
                         // --- ScaleMode ---
                         Oran7SettingItem {
                             text: String("ScaleMode：" + String(checked  ? "Fill" : "Fit"))

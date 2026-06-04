@@ -34,7 +34,8 @@ Item {
         root.y = 0;
         root.visible = true;
         root.savedNormalHeight = Math.max(contene_column.implicitHeight + topDragRect.height + 50, 200);
-        root.height = root.savedNormalHeight;
+        //root.height = root.savedNormalHeight;
+        root.height = 0;
     }
 
     function startOpenAnimation() {
@@ -55,7 +56,7 @@ Item {
             Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = true
             Oran7Theme.installComponentToken("Oran7MainGUI","OpenSettingWin",true)
             Oran7Theme.installComponentToken("Oran7MainGUI","settingContent_visiable",true)
-            openSoundEffect.play();
+            settingSound.playOpen();
         }
     }
 
@@ -149,7 +150,7 @@ Item {
              //first index of settingWindow
             Oran7MainUiSetting.clickedOutSide()
             Oran7Theme.installComponentToken("Oran7MainGUI","OpenSettingWin",false)
-            closeSoundEffect.play();
+            settingSound.playClose();
         }
     }
 
@@ -207,7 +208,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:false
+                    property bool expand:true
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -242,6 +243,20 @@ Item {
                                 Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
                             }
                         }
+                        // --- soundEffectVolume ---
+                        Oran7NumSettingGroup{
+                            value: Oran7Theme.Oran7MainGUI.soundEffectVolume
+                            title:"SoundEffectVolume："
+                            property string componentName: "Oran7MainGUI"
+                            property string tokenName: "soundEffectVolume"
+                            sliderValueFrom: 0.0
+                            sliderValueTo: 1.0
+                            stepSize:0.1
+                            valueDecimals:2
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
                     }
                 }
 
@@ -254,7 +269,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:false
+                    property bool expand:true
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -305,7 +320,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:false
+                    property bool expand:true
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -332,7 +347,7 @@ Item {
                             componentName: "Oran7CaptionBar"
                             colorToken:"colorPrimaryBase"
                             onEnterOfTextFiled: function(text){
-                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
                             }
                             onColorReady: function(seletedColor){
                                 Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
@@ -346,7 +361,7 @@ Item {
                             componentName: "Oran7CaptionBar"
                             colorToken:"colorPrimaryBase"
                             onEnterOfTextFiled: function(text){
-                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
                             }
                             onColorReady: function(seletedColor){
                                 Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
@@ -360,7 +375,7 @@ Item {
                             componentName: "Oran7CaptionBar"
                             colorToken:"iconColorBase"
                             onEnterOfTextFiled: function(text){
-                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
                             }
                             onColorReady: function(seletedColor){
                                 Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
@@ -373,12 +388,14 @@ Item {
                             componentName: "Oran7CaptionBar"
                             colorToken:"textColorBase"
                             onEnterOfTextFiled: function(text){
-                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
                             }
                             onColorReady: function(seletedColor){
                                 Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
                             }
                         }
+                        //<<---Caption-Background
+                        Oran7SettingItem{text:"Background：";fontBold:true;showTag:false}
                         // --- CaptionBlurEnabled ---
                         Oran7SettingItem {
                             text: "BlurEnabled:"
@@ -406,7 +423,7 @@ Item {
                         // --- CaptionBlurEffect-brightness ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7CaptionBar.brightness
-                            title: "BlurEffect-Saturation:"
+                            title: "BlurEffect-Brightness:"
                             property string componentName: "Oran7CaptionBar"
                             property string tokenName: "brightness"
                             sliderValueFrom: -1.0
@@ -420,7 +437,7 @@ Item {
                         // --- CaptionBlurEffect-contrast ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7CaptionBar.contrast
-                            title: "BlurEffect-Saturation:"
+                            title: "BlurEffect-Contrast:"
                             property string componentName: "Oran7CaptionBar"
                             property string tokenName: "contrast"
                             sliderValueFrom: -1.0

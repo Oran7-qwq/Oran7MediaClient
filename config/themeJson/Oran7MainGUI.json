@@ -9,6 +9,7 @@
         "backgroundImage":"qrc:/image/test_background1.jpg",
         "topBarDefaultHeight":50,
         "settingWinItemDefalutWidth":252,
+        "soundEffectVolume":1.0,
 
         "settingContent_visiable":false,
         "OpenSettingWin":false,

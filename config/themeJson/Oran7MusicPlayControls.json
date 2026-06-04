@@ -7,7 +7,8 @@
         }
     },
     "__style__":{
-        "playButtonColor":"#Preset_Grey",
+        "progressVisibleBar_dynamicGradientEnabled":false,
+        "progressVisibleBar_ColorIndex":0,
 
         "blurEffectEnabled": true,
         "saturation":0.3,
