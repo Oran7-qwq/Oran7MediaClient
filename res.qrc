@@ -76,5 +76,6 @@
         <file>image/material-symbols_delete-outline-rounded.png</file>
         <file>image/mingcute_arrows-down-fill.png</file>
         <file>sound/ExpandSound.wav</file>
+        <file>image/mage_refresh-reverse.png</file>
     </qresource>
 </RCC>

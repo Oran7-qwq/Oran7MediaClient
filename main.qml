@@ -67,9 +67,8 @@ ApplicationWindow {
         anchors.fill: parent
         sourceSize.width: Screen.width * Screen.devicePixelRatio
         sourceSize.height: Screen.height * Screen.devicePixelRatio
-        source: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage) ?
+        source: Oran7Theme.Oran7MainGUI.DWMBlurEffectEnabled ? "" : filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage) ?
                    "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/defaultBg.jpg"
-        //source: ""
         opacity: 0.999
 
         fillMode: Image.PreserveAspectCrop

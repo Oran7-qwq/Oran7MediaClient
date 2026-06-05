@@ -1,0 +1,36 @@
+{
+    "appearance": {
+        "themeProfile": "profile-default"
+    },
+    "bilibili_auth": {
+        "bili_jct": "",
+        "dede_user_id": "",
+        "sessdata": "",
+        "user_name": ""
+    },
+    "last_used_file": "",
+    "local_music_sort": {
+        "last_modified": "",
+        "play_order": [
+        ],
+        "sort_type": "birth_time"
+    },
+    "playerVolume": 80,
+    "recent_files": [
+    ],
+    "recent_files_max_count": 10,
+    "user": {
+        "auto_login": false,
+        "remember_password": true,
+        "username": "default"
+    },
+    "window": {
+        "height": 623,
+        "maximized": false,
+        "position": {
+            "x": 738,
+            "y": 613
+        },
+        "width": 1073
+    }
+}

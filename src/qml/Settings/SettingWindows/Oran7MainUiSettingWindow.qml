@@ -278,6 +278,17 @@ Item {
                 Oran7ExpandItem{
                     expand: mainWindowBackGroundSettings.expand
                     Column{
+                        // --- DWMBlurEffect ---
+                        Oran7SettingItem {
+                            text: "DWMBlurEffect :"
+                            // 开关按钮
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MainGUI.DWMBlurEffectEnabled
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MainGUI","DWMBlurEffectEnabled",checked)
+                                }
+                            }
+                        }
                         // --- item: backgroundImagePath ---
                         Oran7SettingItem {
                             text: "Background Image:"

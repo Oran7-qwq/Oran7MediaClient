@@ -47,7 +47,7 @@ Item {
     readonly property real _contentHeight: contentLoader.item
             ? contentLoader.item.implicitHeight : 0
 
-    readonly property real _maxViewHeight: Oran7MainUiSetting.itemHeight * 15
+    readonly property real _maxViewHeight: Oran7MainUiSetting.itemHeight * 12
 
     readonly property real _viewHeight: Math.min(_contentHeight,_maxViewHeight)
 
@@ -79,7 +79,7 @@ Item {
         Loader {
             id: contentLoader
             //不随 expand 反复销毁，展开过一次后常驻
-            active: root.forceLoaded || root.expand || (root.cache && root.loadedOnce)
+            active: root.expand || root.forceLoaded || (root.cache && root.loadedOnce)
             asynchronous: true
             anchors.top: parent.top
             anchors.left: parent.left

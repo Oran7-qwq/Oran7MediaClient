@@ -13,6 +13,7 @@
 
         "settingContent_visiable":false,
         "OpenSettingWin":false,
-        "isDarkMode":true
+        "isDarkMode":true,
+        "DWMBlurEffectEnabled":false
     }
 }

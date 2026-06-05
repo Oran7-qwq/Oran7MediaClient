@@ -464,7 +464,7 @@ Item {
                             onReleased: bilibiliRoomNumWayPlayBtnImage.scale = 0.77
                         }
                     }
-                    // 刷新直播流按钮（播放中才显示）
+                    // 刷新直播流按钮
                     Image {
                         id: refreshStreamBtn
                         height: inputBilibiliRoomNumRect.height
@@ -473,8 +473,10 @@ Item {
                         anchors.leftMargin: 2
                         anchors.verticalCenter: bilibiliRoomNumWayPlayBtnImage.verticalCenter
                         scale: refreshStreamBtnArea.containsPress ? 0.5 : 0.7
-                        source: "qrc:/image/ClearPause.png"
-                        visible: BasicConfig.isPlaying && bilibiliRoomAddressCatch.urls.length > 0
+                        source: "qrc:/image/mage_refresh-reverse.png"
+                        sourceSize.height: 512
+                        sourceSize.width: 512
+                        visible: /*BasicConfig.isPlaying && *//*bilibiliRoomAddressCatch.urls.length > 0*/true
                         layer.enabled: true
                         layer.effect: ColorOverlay {
                             source: refreshStreamBtn

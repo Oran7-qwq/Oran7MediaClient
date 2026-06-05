@@ -1,0 +1,210 @@
+{
+    "__component__": {
+        "Oran7CaptionBar": {
+            "__init__": {
+                "__vars__": {
+                    "colorPrimaryBase": "$genColor(#476cff)",
+                    "iconColorBase": "$genColor(#77f7f3)",
+                    "textColorBase": "$genColor(#00bbbb)"
+                }
+            },
+            "__style__": {
+                "blurEffectEnabled": true,
+                "brightness": 0.1,
+                "contrast": 0.4,
+                "hoveredColor": "@colorPrimaryBase-4",
+                "isSimpleMode": true,
+                "saturation": 0.3,
+                "selectedColor": "@colorPrimaryBase-6",
+                "textColor": "#ffffff"
+            }
+        },
+        "Oran7MainGUI": {
+            "__init__": {
+                "__vars__": {
+                    "colorPrimaryBase": "$genColor(#fa8c16)"
+                }
+            },
+            "__style__": {
+                "DWMBlurEffectEnabled": false,
+                "OpenSettingWin": false,
+                "backgroundImage": "C:/Users/funny/Desktop/Oran7MediaClient-Release/Config/wallpaperResource/9f7bce2f6287e8ef426dfdc62b2fcbc1.jpg",
+                "isDarkMode": true,
+                "settingContent_visiable": false,
+                "settingWinItemDefalutWidth": 252,
+                "soundEffectVolume": 0.7,
+                "themeColor": "#fa8c16",
+                "topBarDefaultHeight": 50
+            }
+        },
+        "Oran7MusicLyricsWindow": {
+            "__init__": {
+                "__vars__": {
+                    "textColorBase": "$genColor(#ff6f77)",
+                    "textSizeBase": "$genFontSize(30)"
+                }
+            },
+            "__style__": {
+                "blurEffectEnabled": true,
+                "brightness": 0,
+                "contrast": 0.2,
+                "progressVisibleBar_dynamicGradientEnabled": false,
+                "saturation": 0
+            }
+        },
+        "Oran7MusicPlayControls": {
+            "__init__": {
+                "__vars__": {
+                    "colorPrimaryBase": "$genColor(#Preset_Volcano)",
+                    "iconColorBase": "$genColor(#f0f0f0)",
+                    "textColorBase": "$genColor(#9d57ff)"
+                }
+            },
+            "__style__": {
+                "blurEffectEnabled": true,
+                "brightness": 0.1,
+                "contrast": 0.3,
+                "playButtonColor": "#ff0000",
+                "playButton_GradientColorIndex": 0,
+                "progressVisibleBar_ColorIndex": 13,
+                "progressVisibleBar_dynamicGradientEnabled": false,
+                "saturation": 0.3
+            }
+        },
+        "Oran7MusicPlaylistView": {
+            "__init__": {
+                "__vars__": {
+                    "colorPrimaryBase": "$genColor(#Preset_Volcano)",
+                    "textColorBase": "$genColor(#26ffff)"
+                }
+            },
+            "__style__": {
+                "listViewFontPixelSize": 18
+            }
+        },
+        "Oran7ProgressSlider": {
+            "__style__": {
+                "moveThreshold": "2"
+            }
+        }
+    },
+    "__style__": {
+        "colorBgBlur": "transparent",
+        "colorBgContainer": "$darker(@colorBgBase, 0)",
+        "colorBgElevated": "$darker(@colorBgBase, 0)",
+        "colorBgLayout": "$darker(@colorBgBase, 107)",
+        "colorBgMask": "$alpha(#000, 0.45)",
+        "colorBgSolid": "$alpha(@colorTextBase, 1)",
+        "colorBgSolidActive": "$alpha(@colorTextBase, 0.95)",
+        "colorBgSolidHover": "$alpha(@colorTextBase, 0.75)",
+        "colorBgSpotlight": "$alpha(@colorTextBase, 0.85)",
+        "colorBorder": "$darker(@colorBgBase, 118)",
+        "colorBorderSecondary": "$darker(@colorBgBase, 109)",
+        "colorError": "@colorErrorBase-6",
+        "colorErrorActive": "@colorErrorBase-7",
+        "colorErrorBg": "@colorErrorBase-1",
+        "colorErrorBgActive": "@colorErrorBase-3",
+        "colorErrorBgHover": "@colorErrorBase-2",
+        "colorErrorBorder": "@colorErrorBase-3",
+        "colorErrorBorderHover": "@colorErrorBase-4",
+        "colorErrorHover": "@colorErrorBase-5",
+        "colorErrorText": "@colorErrorBase-9",
+        "colorErrorTextActive": "@colorErrorBase-10",
+        "colorErrorTextHover": "@colorErrorBase-8",
+        "colorFill": "$alpha(@colorTextBase, 0.15)",
+        "colorFillPrimary": "$alpha(@colorTextBase, 0.1)",
+        "colorFillQuaternary": "$alpha(@colorTextBase, 0.02)",
+        "colorFillSecondary": "$alpha(@colorTextBase, 0.06)",
+        "colorFillTertiary": "$alpha(@colorTextBase, 0.04)",
+        "colorInfo": "@colorInfoBase-6",
+        "colorInfoActive": "@colorInfoBase-7",
+        "colorInfoBg": "@colorInfoBase-1",
+        "colorInfoBgHover": "@colorInfoBase-2",
+        "colorInfoBorder": "@colorInfoBase-3",
+        "colorInfoBorderHover": "@colorInfoBase-4",
+        "colorInfoHover": "@colorInfoBase-4",
+        "colorInfoText": "@colorInfoBase-9",
+        "colorInfoTextActive": "@colorInfoBase-10",
+        "colorInfoTextHover": "@colorInfoBase-8",
+        "colorLink": "@colorLinkBase-6",
+        "colorLinkActive": "@colorLinkBase-7",
+        "colorLinkHover": "@colorLinkBase-4",
+        "colorMain-1": "#ffffff",
+        "colorMain-10": "#262626",
+        "colorMain-11": "#1f1f1f",
+        "colorMain-12": "#141414",
+        "colorMain-13": "#000000",
+        "colorMain-2": "#fafafa",
+        "colorMain-3": "#f5f5f5",
+        "colorMain-4": "#f0f0f0",
+        "colorMain-5": "#d9d9d9",
+        "colorMain-6": "#bfbfbf",
+        "colorMain-7": "#8c8c8c",
+        "colorMain-8": "#595959",
+        "colorMain-9": "#434343",
+        "colorPrimary": "@colorPrimaryBase-6",
+        "colorPrimaryActive": "@colorPrimaryBase-7",
+        "colorPrimaryBg": "@colorPrimaryBase-1",
+        "colorPrimaryBgActive": "@colorPrimaryBase-3",
+        "colorPrimaryBgHover": "@colorPrimaryBase-2",
+        "colorPrimaryBorder": "@colorPrimaryBase-5",
+        "colorPrimaryBorderActive": "@colorPrimaryBase-6",
+        "colorPrimaryBorderHover": "@colorPrimaryBase-4",
+        "colorPrimaryContainerBg": "@colorPrimaryBase-6",
+        "colorPrimaryContainerBgActive": "@colorPrimaryBase-7",
+        "colorPrimaryContainerBgDisabled": "$alpha(@colorTextBase, 0.1)",
+        "colorPrimaryContainerBgHover": "@colorPrimaryBase-5",
+        "colorPrimaryHover": "@colorPrimaryBase-5",
+        "colorPrimaryText": "@colorPrimaryBase-6",
+        "colorPrimaryTextActive": "@colorPrimaryBase-7",
+        "colorPrimaryTextDisabled": "$alpha(@colorTextBase, 0.45)",
+        "colorPrimaryTextHover": "@colorPrimaryBase-5",
+        "colorSuccess": "@colorSuccessBase-6",
+        "colorSuccessActive": "@colorSuccessBase-7",
+        "colorSuccessBg": "@colorSuccessBase-1",
+        "colorSuccessBgHover": "@colorSuccessBase-2",
+        "colorSuccessBorder": "@colorSuccessBase-3",
+        "colorSuccessBorderHover": "@colorSuccessBase-4",
+        "colorSuccessHover": "@colorSuccessBase-4",
+        "colorSuccessText": "@colorSuccessBase-9",
+        "colorSuccessTextActive": "@colorSuccessBase-10",
+        "colorSuccessTextHover": "@colorSuccessBase-8",
+        "colorTextPrimary": "$alpha(@colorTextBase, 0.88)",
+        "colorTextQuaternary": "$alpha(@colorTextBase, 0.25)",
+        "colorTextSecondary": "$alpha(@colorTextBase, 0.65)",
+        "colorTextTertiary": "$alpha(@colorTextBase, 0.45)",
+        "colorWarning": "@colorWarningBase-6",
+        "colorWarningActive": "@colorWarningBase-7",
+        "colorWarningBg": "@colorWarningBase-1",
+        "colorWarningBgHover": "@colorWarningBase-2",
+        "colorWarningBorder": "@colorWarningBase-3",
+        "colorWarningBorderHover": "@colorWarningBase-4",
+        "colorWarningHover": "@colorWarningBase-4",
+        "colorWarningText": "@colorWarningBase-9",
+        "colorWarningTextActive": "@colorWarningBase-10",
+        "colorWarningTextHover": "@colorWarningBase-8",
+        "durationFast": "100",
+        "durationMid": "200",
+        "durationSlow": "300",
+        "durationVeryFast": "50",
+        "durationVerySlow": "500",
+        "fontPrimaryFamily": "@fontFamilyBase",
+        "fontPrimaryHeight": "$multiply(@fontSizeBase-1, @fontLineHeightBase-1)",
+        "fontPrimaryLineHeightHeading1": "@fontLineHeightBase-6",
+        "fontPrimaryLineHeightHeading2": "@fontLineHeightBase-5",
+        "fontPrimaryLineHeightHeading3": "@fontLineHeightBase-4",
+        "fontPrimaryLineHeightHeading4": "@fontLineHeightBase-3",
+        "fontPrimaryLineHeightHeading5": "@fontLineHeightBase-2",
+        "fontPrimarySize": "@fontSizeBase-1",
+        "fontPrimarySizeHeading1": "@fontSizeBase-6",
+        "fontPrimarySizeHeading2": "@fontSizeBase-5",
+        "fontPrimarySizeHeading3": "@fontSizeBase-4",
+        "fontPrimarySizeHeading4": "@fontSizeBase-3",
+        "fontPrimarySizeHeading5": "@fontSizeBase-2",
+        "radiusPrimary": "@radiusBase-1",
+        "radiusPrimaryLG": "@radiusBase-2",
+        "radiusPrimaryOuter": "@radiusBase-5",
+        "radiusPrimarySM": "@radiusBase-3",
+        "radiusPrimaryXS": "@radiusBase-4"
+    }
+}
