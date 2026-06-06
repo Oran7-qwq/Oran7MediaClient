@@ -45,13 +45,15 @@
 
 ## 📌 预览
 
-#### - Oran7MediaPlayer （稳定4k60fps）
-![[Pasted image 20260606144218.png]]
-####  - Oran7MusicPlayer
-![[Pasted image 20260606143620.png]]
-![[Pasted image 20260606143945.png]]
-#### - GUISetting
-![[Pasted image 20260606143813.png]]
+### Oran7MediaPlayer — 稳定 4K 60fps
+![Oran7MediaPlayer 界面](image/screenshot_player.png)
+
+### Oran7MusicPlayer
+![Oran7MusicPlayer 界面1](image/screenshot_music1.png)
+![Oran7MusicPlayer 界面2](image/screenshot_music2.png)
+
+### GUI 设置
+![GUI 设置界面](image/screenshot_settings.png)
 
 ---
 
