@@ -46,14 +46,13 @@
 ## 📌 预览
 
 ### Oran7MediaPlayer — 稳定 4K 60fps
-![Oran7MediaPlayer 界面](image/screenshot_player.png)
+![Oran7MediaPlayer 界面](preview/Oran7VidoPlayer.png)
 
 ### Oran7MusicPlayer
-![Oran7MusicPlayer 界面1](image/screenshot_music1.png)
-![Oran7MusicPlayer 界面2](image/screenshot_music2.png)
+![Oran7MusicPlayer 界面](preview/Oran7MusicPlayer.png)
 
 ### GUI 设置
-![GUI 设置界面](image/screenshot_settings.png)
+![GUI 设置界面](preview/GUISetting.png)
 
 ---
 
