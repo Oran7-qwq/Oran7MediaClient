@@ -1,0 +1,15 @@
+# 第三方依赖，不参与语言统计
+ffmpeg6.0/* linguist-vendored
+ffmpeg6.0/**/* linguist-vendored
+
+# QWindowKit 子模块
+3rdparty/* linguist-vendored
+3rdparty/**/* linguist-vendored
+
+# 预编译二进制
+SQLite/**/*.dll linguist-vendored
+SQLite/**/*.exe linguist-vendored
+
+# 构建产物
+build/* linguist-vendored
+build/**/* linguist-vendored

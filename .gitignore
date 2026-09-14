@@ -40,17 +40,13 @@ CMakeUserPresets.json
 !ffmpeg6.0/bin/**
 !ffmpeg6.0/lib/**
 
-# ---- FFmpeg SDK 裁剪（以下规则必须放在上面的 ! 放行之后，后匹配者优先）------
-# 纯文档，编译和运行都不需要
+# ---- FFmpeg 随附文档裁剪（须放在上面的 ! 放行之后，后匹配者优先）------------
+# 示例程序源码、roff man 页（GitHub 语言统计会把 .1/.3 识别成 Roff）、
+# 以及遗留的 ffpreset / ffprobe.xsd，编译与运行均不需要
 ffmpeg6.0/share/
 
-# 与项目无关的示例/命令行程序（源码中 0 处引用）
-# 注意：ffmpeg.exe 和 ffprobe.exe 被 QProcess 实际调用，SDL2.dll 是音频输出依赖，
-#       三者均已保留，不要加进来
-ffmpeg6.0/bin/ffplay.exe
-ffmpeg6.0/bin/x264.exe
-ffmpeg6.0/bin/x265.exe
-ffmpeg6.0/bin/aac-enc.exe
+# bin/ 下的可执行文件一律保留：ffmpeg.exe / ffprobe.exe 被 QProcess 调用，
+# SDL2.dll 是音频输出依赖，其余 dll 供链接与运行
 
 # Qt 生成
 moc_*.cpp
