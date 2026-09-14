@@ -212,14 +212,14 @@ Rectangle {
     ListModel {
         id: middleListModel
         ListElement {
-            iconImage: "qrc:/image/icon-park-outline_like.png"
-            iconText: "LocalMusic"
-            pageName: "MyFavoriteMusicPage"
+            iconImage: "qrc:/image/ep_collection-tag.-no-middle-transparent.png"
+            iconText: "我整合的音乐"
+            pageName: "LocalMusicPage"
         }
         ListElement {
-            iconImage: "qrc:/image/arcticons_star-music-tag-editor.png"
-            iconText: "本地音乐"
-            pageName: "LocalMusicPage"
+            iconImage: "qrc:/image/thesvg_netease-cloud-music.png"
+            iconText: "从网易云搜索"
+            pageName: "SearchMusicPage"
         }
     }
     //中间的列表
@@ -313,10 +313,10 @@ Rectangle {
                         root.itemSelected_index = model.index + topListModel.count
                         switch (index) {
                         case 0:
-                            BasicConfig.pushMyFavoriteMusicStackInto_RightPageMainStackView();
+                            BasicConfig.pushLocalMusicStackInto_RightPageMainStackView();
                             break;
                         case 1:
-                            BasicConfig.pushLocalMusicStackInto_RightPageMainStackView();
+                            BasicConfig.pushSearchMusicStackInto_RightPageMainStackView();
                             break;
                         default:
                             break;

@@ -24,6 +24,8 @@
             "__style__": {
                 "OpenSettingWin": false,
                 "backgroundImage": "C:/Users/funny/Pictures/OranMediaClientWallPaper/9f7bce2f6287e8ef426dfdc62b2fcbc1.jpg",
+                "backgroundMode": "Video",
+                "backgroundVideo": "qrc:/image/background.mp4",
                 "settingContent_visiable": false,
                 "settingWinItemDefalutWidth": 252,
                 "themeColor": "#34ffff",

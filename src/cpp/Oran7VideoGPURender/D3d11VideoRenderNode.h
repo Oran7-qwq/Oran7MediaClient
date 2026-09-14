@@ -13,6 +13,8 @@
 
 extern "C" {
 #include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
+#include <libavutil/pixdesc.h>
 }
 
 #ifdef WIN32
@@ -35,6 +37,11 @@ public:
 
     bool takePendingSourceSizeChanged(int &w, int &h);
     bool takePendingDxgifromat(DXGI_FORMAT &fmt);
+
+    // 当前帧的实际信息（prepare() 后更新），供 VideoItem 每秒采集
+    DXGI_FORMAT currentDxgiFormat() const { return m_currentDxgiFormat; }
+    bool isHardwareFrame() const { return m_lastFrameIsD3D11; }
+    QString decodeDeviceName() const;
 
     void prepare() override;
     void render(const RenderState *state) override;
@@ -61,6 +68,12 @@ private:
     QSize m_bgraSize;
     DXGI_FORMAT m_targetFmt = DXGI_FORMAT_UNKNOWN;
 
+    // 软解 CPU 帧上载：swscale 上下文 + 缓存参数
+    SwsContext *m_swsCtx = nullptr;
+    AVPixelFormat m_lastSrcCpuFmt = AV_PIX_FMT_NONE;
+    int m_swsSrcW = 0;
+    int m_swsSrcH = 0;
+
     int m_lastSrcW = 0;
     int m_lastSrcH = 0;
 
@@ -70,10 +83,15 @@ private:
     bool m_hasPendingDXGIFormatChanged = false;
     DXGI_FORMAT m_pendingDxgiFmt = DXGI_FORMAT_UNKNOWN;
 
+    // 当前帧的实际格式信息（prepare() 后更新，供 VideoItem 采集）
+    DXGI_FORMAT m_currentDxgiFormat = DXGI_FORMAT_UNKNOWN;
+    bool m_lastFrameIsD3D11 = false;     // 最近一帧是否来自 D3D11VA 硬解
+
     bool initD3D11Resources();
     bool ensureRgbaTarget(int w, int h, DXGI_FORMAT fmt);
     bool ensureVideoProcessor(int w, int h);
     bool blitNv12ToRgba(ID3D11Texture2D *srcTex, int w, int h, int slice);
+    bool uploadCpuFrameToRgba(AVFrame *cur);
     void clearBlack();
 
     //QRhi

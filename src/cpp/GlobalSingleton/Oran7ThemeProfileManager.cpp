@@ -116,7 +116,7 @@ void Oran7ThemeProfileManager::initializeDefaultTheme(Oran7Theme *q)
                 QJsonDocument componentDoc = QJsonDocument::fromJson(compRaw);
                 if (!componentDoc.isNull() && componentDoc.isObject()) {
                     components[componentName] = componentDoc.object();
-                    CONFIG_LOG << "Oran7ThemeProfileManager: Loaded component" << componentName;
+                    //CONFIG_LOG << "Oran7ThemeProfileManager: Loaded component" << componentName;
                 }
                 else
                     WARNING_LOG << "Oran7ThemeProfileManager: Failed to parse component" << componentName;
@@ -165,9 +165,9 @@ void Oran7ThemeProfileManager::initializeDefaultTheme(Oran7Theme *q)
     if (userConfigFile.open(QIODevice::WriteOnly)) {
         userConfigFile.write(doc.toJson(QJsonDocument::Indented));
         userConfigFile.close();
-        CONFIG_LOG << "Oran7ThemeProfileManager: Initialized default theme profile with"
-                     << (defaultTheme.contains("__component__") ? defaultTheme["__component__"].toObject().size() : 0)
-                     << "components";
+        // CONFIG_LOG << "Oran7ThemeProfileManager: Initialized default theme profile with"
+        //              << (defaultTheme.contains("__component__") ? defaultTheme["__component__"].toObject().size() : 0)
+        //              << "components";
     } else {
         ERROR_LOG << "Oran7ThemeProfileManager: Failed to create profile-default.json";
     }
@@ -225,7 +225,7 @@ bool Oran7ThemeProfileManager::saveThemeProfile(const QString& profileName, cons
     file.close();
 
     emit themeProfileChanged(profileName);
-    //CONFIG_LOG << "Oran7ThemeProfileManager >> Saved theme profileDir:" << filePath;
+    CONFIG_LOG << "Oran7ThemeProfileManager >> Saved theme profileDir:" << filePath;
 
     return true;
 }

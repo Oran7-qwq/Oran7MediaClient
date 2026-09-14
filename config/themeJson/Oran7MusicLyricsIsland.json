@@ -1,0 +1,27 @@
+{
+"__init__":{
+        "__vars__":{
+            "textColorBase":"$genColor(#ffffff)",
+            "textSizeBase": "$genFontSize(22)",
+            "floatingBackdropColor": "$genColor(#000000)"
+        }
+    },
+    "__style__":{
+        "blurEffectEnabled": true,
+        "saturation":0.3,
+        "brightness":0.1,
+        "contrast": 0.3,
+
+        "lyricsFontSize":20,
+        "backgroundImageEnabled": false,
+        "backgroundImage_url":"",
+
+        "floatingEnabled": false,
+        "floatingLocked": false,
+        "floatingClickThrough": false,
+        "floatingAlwaysOnTop": true,
+        "floatingOpacity": 0.9,
+        "floatingX": -1,
+        "floatingY": -1
+    }
+}

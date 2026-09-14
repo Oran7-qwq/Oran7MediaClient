@@ -4,10 +4,12 @@ import QtQuick 2.15
 
 import Oran7UI.Impl
 
+/**  ======================================
+            这个文件用来临时缓存设置状态，和属性定义（运行时）
+=========================================**/
+
 Item {
     id: root
-
-    // d
 
     // === 全局动画窗口状态聚合 ===
     // 当前打开的动画窗口数量（由各 Oran7AnimatedWindow 自动维护）
@@ -26,6 +28,10 @@ Item {
     property bool settingWindow_isOpening_Or_isClosing: false
     property bool firstOpenSettingWin: true
 
+    // 设置窗口可见性状态(从主题系统挪到此普通单例,避免每次开关触发主题全量重算)
+    property bool openSettingWin: false
+    property bool settingContentVisible: false
+
     property real itemHeight: 30
     property real textPixelSize: 16
     property string fontFamily : "微软雅黑"
@@ -42,7 +48,7 @@ Item {
     //--- statue manager ---
     //过滤内层控件聚焦状态
     readonly property bool __SurelySetingWinIsFocus__: !isOtherItemActive && settingWinActive
-    readonly property bool settingWinActive : Oran7Theme.Oran7MainGUI.OpenSettingWin
+    readonly property bool settingWinActive : openSettingWin
     readonly property bool isOtherItemActive:activeOtherItemCount > 0
     /*引用计数机制
     * Contain of : Oran7TextField ; Oran7ColorPickWindow

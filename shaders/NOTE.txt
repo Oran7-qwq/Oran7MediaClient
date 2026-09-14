@@ -1,1 +1,6 @@
-着色器文件
+# 着色器文件
+
+# SHADERS FILE
+
+video.frag
+video.vert

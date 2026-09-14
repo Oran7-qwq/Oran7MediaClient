@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Oran7MediaClient VERSION 0.7 LANGUAGES CXX)
+project(Oran7MediaClient VERSION 0.7 LANGUAGES C CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -8,6 +8,9 @@ set(CMAKE_AUTORCC ON)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# 生成 compile_commands.json，供 Qt Creator clangd 代码模型使用
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # 查找Qt6组件
 find_package(Qt6 REQUIRED COMPONENTS
@@ -23,6 +26,8 @@ find_package(Qt6 REQUIRED COMPONENTS
     ShaderTools
     Multimedia
     Network
+    WebSockets
+    Concurrent
 )
 
 # 设置 Qt 策略以避免 QTP0001 警告
@@ -39,6 +44,46 @@ add_compile_definitions(
     QWK_QUICK_LIBRARY=1
     QWK_CORE_LIBRARY=1
 )
+
+# ============================================================
+# libdatachannel — WHIP/WebRTC 推流
+# ============================================================
+# 说明：从 spark-meeting 源码移入，带完整 deps（libjuice/libsrtp/usrsctp/plog）
+# 依赖：OpenSSL（MinGW 下通过 MSYS2 安装: pacman -S mingw-w64-x86_64-openssl）
+option(SPARK_MEDIA_PUBLISHER_WITH_LIBDATACHANNEL
+       "Enable WHIP/WebRTC publishing via libdatachannel" ON)
+
+if(SPARK_MEDIA_PUBLISHER_WITH_LIBDATACHANNEL)
+    # ---- Qt MinGW 11.2 编译，MSYS2 提供 OpenSSL ----
+    if(MINGW)
+        # OpenSSL 来自 MSYS2（Qt MinGW 不自带）
+        if(EXISTS "C:/msys64/mingw64/include/openssl/ssl.h")
+            set(OPENSSL_ROOT_DIR "C:/msys64/mingw64" CACHE PATH
+                "OpenSSL root (from MSYS2)")
+        endif()
+    endif()
+
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(PREFER_SYSTEM_LIB OFF CACHE BOOL "" FORCE)
+    set(NO_EXAMPLES ON CACHE BOOL "" FORCE)
+    set(NO_TESTS ON CACHE BOOL "" FORCE)
+    set(NO_WEBSOCKET ON CACHE BOOL "" FORCE)
+    set(RTC_UPDATE_VERSION_HEADER OFF CACHE BOOL "" FORCE)
+
+    # libsrtp 的 printf 格式警告 + libjuice 的 GetProcAddress 函数指针强转警告：全部静默
+    # （-Wno-error=cast-function-type 只是把报错降级成警告，仍会刷屏，须用 -Wno-cast-function-type）
+    set(SAVED_C_FLAGS "${CMAKE_C_FLAGS}")
+    set(SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-format -Wno-cast-function-type")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-cast-function-type")
+
+    add_subdirectory(3rdparty/libdatachannel libdatachannel_build)
+
+    set(CMAKE_C_FLAGS "${SAVED_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${SAVED_CXX_FLAGS}")
+    unset(SAVED_C_FLAGS)
+endif()
+# ============================================================
 
 # 添加全局单例 GlobalSingleton 配置路径
 set(GLOBAL_SINGLETON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/GlobalSingleton")
@@ -57,15 +102,42 @@ set(ORAN7_SEVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/Oran7Sever")
 set(QtQuicCppExtend_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/QtQuicCppExtend")
 #添加Oran7Utils模块配置路径
 set(ORAN7_UTILS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/Oran7Utils")
+#添加网易云扫码登录 ncm 模块配置路径
+set(NCM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/ncm")
+#nayuki QR-Code-generator（本地二维码生成）
+set(QRCODEGEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/qrcodegen")
 
 set(PROJECT_MAIN_SOURCES
     main.cpp
     qml.qrc res.qrc
 )
 
-file(GLOB_RECURSE CORE_SOURCES "src/cpp/*.cpp" "src/cpp/*.h")
+# ==================== brotli 解码器（B站弹幕 protover=3 满速流）====================
+set(BROTLI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/brotli")
+set(BROTLI_SOURCES
+    ${BROTLI_DIR}/dec/bit_reader.c
+    ${BROTLI_DIR}/dec/decode.c
+    ${BROTLI_DIR}/dec/huffman.c
+    ${BROTLI_DIR}/dec/state.c
+    ${BROTLI_DIR}/common/constants.c
+    ${BROTLI_DIR}/common/context.c
+    ${BROTLI_DIR}/common/dictionary.c
+    ${BROTLI_DIR}/common/platform.c
+    ${BROTLI_DIR}/common/shared_dictionary.c
+    ${BROTLI_DIR}/common/transform.c
+)
+
+# CONFIGURE_DEPENDS：每次构建时自动重扫源文件，新增 .cpp/.h 无需手动重新配置 CMake
+file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS "src/cpp/*.cpp" "src/cpp/*.h")
 # 排除已移至 Oran7Core 共享库的单例文件（避免 EXE/DLL 各自编译一份）
-list(FILTER CORE_SOURCES EXCLUDE REGEX "src/cpp/GlobalSingleton/(GlobalHelper|AppJsonConfigManager|Oran7ThemeProfileManager)\\.")
+list(FILTER CORE_SOURCES EXCLUDE REGEX "src/cpp/GlobalSingleton/(GlobalHelper|AppJsonConfigManager|Oran7ThemeProfileManager|Oran7Async)\\.")
+
+# 网易云扫码登录 ncm 模块 + nayuki 二维码库
+file(GLOB_RECURSE NCM_SOURCES CONFIGURE_DEPENDS "${NCM_DIR}/*.cpp" "${NCM_DIR}/*.h")
+list(APPEND NCM_SOURCES
+    ${QRCODEGEN_DIR}/qrcodegen.cpp
+    ${QRCODEGEN_DIR}/qrcodegen.hpp
+)
 # 排除 QtQuicCppExtend 目录（用于 QML 模块）
 #list(FILTER CORE_SOURCES EXCLUDE REGEX "src/cpp/QtQuicCppExtend/.*")
 
@@ -74,6 +146,8 @@ list(FILTER CORE_SOURCES EXCLUDE REGEX "src/cpp/GlobalSingleton/(GlobalHelper|Ap
 set(ORAN7_CORE_SOURCES
     src/cpp/GlobalSingleton/GlobalHelper.h
     src/cpp/GlobalSingleton/GlobalHelper.cpp
+    src/cpp/GlobalSingleton/Oran7Async.h
+    src/cpp/GlobalSingleton/Oran7Async.cpp
     src/cpp/GlobalSingleton/AppJsonConfigManager.h
     src/cpp/GlobalSingleton/AppJsonConfigManager.cpp
     src/cpp/GlobalSingleton/Oran7ThemeProfileManager.h
@@ -138,6 +212,9 @@ qt_add_resources(Oran7UI_Impl "resource"
           config/themeJson/Oran7MusicPlaylistView.json
           config/themeJson/Oran7MusicPlayControls.json
           config/themeJson/Oran7MusicLyricsWindow.json
+          config/themeJson/Oran7VideoPlayer.json
+          config/themeJson/Oran7ScreenCapture.json
+          config/themeJson/Oran7MusicLyricsIsland.json
 
           config/default.json
 )
@@ -167,7 +244,30 @@ qt_add_executable(Oran7MediaClient
     MANUAL_FINALIZATION
     ${PROJECT_MAIN_SOURCES}
     ${CORE_SOURCES}
+    ${NCM_SOURCES}
+    ${BROTLI_SOURCES}
 )
+
+# 告知 SDL2 不要劫持 main（避免 SDL_main 与 Qt 的 qMain 冲突）
+target_compile_definitions(Oran7MediaClient PRIVATE SDL_MAIN_HANDLED)
+
+# libdatachannel WHIP/WebRTC 推流支持
+if(SPARK_MEDIA_PUBLISHER_WITH_LIBDATACHANNEL)
+    if(TARGET datachannel-static)
+        target_compile_definitions(Oran7MediaClient PRIVATE
+            SPARK_MEDIA_PUBLISHER_WITH_LIBDATACHANNEL
+            RTC_ENABLE_MEDIA=1)
+        target_link_libraries(Oran7MediaClient PRIVATE datachannel-static)
+    elseif(TARGET datachannel)
+        target_compile_definitions(Oran7MediaClient PRIVATE
+            SPARK_MEDIA_PUBLISHER_WITH_LIBDATACHANNEL
+            RTC_ENABLE_MEDIA=1)
+        target_link_libraries(Oran7MediaClient PRIVATE datachannel)
+    else()
+        message(WARNING "libdatachannel subdir added but no target found. "
+                "WHIP publisher will fall back to dryRun mode.")
+    endif()
+endif()
 
 # ===================== ShaderEffect 自动编译 QSB ================
 qt_add_shaders(Oran7MediaClient "shaders"
@@ -175,10 +275,14 @@ qt_add_shaders(Oran7MediaClient "shaders"
     FILES
         shaders/video.vert
         shaders/video.frag
+        shaders/gradientText.frag
+        shaders/octgrams.frag
+        shaders/fractal.frag
+        shaders/clouds.frag
 )
 # =======================================================
 
-# ======== 配置资源直接嵌入 EXE（兜底 DLL 的 QRC 注册失败）=========
+# ======== 配置资源直接嵌入 EXE=========
 qt_add_resources(Oran7MediaClient "config_resource"
       PREFIX "/"
       FILES
@@ -214,6 +318,10 @@ if(WIN32)
         #拷贝 SQLite 文件夹到 exe 目录
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${SQLITE_DIR}" "${APP_OUT_DIR}/SQLite"
+
+        #拷贝 MSYS2 zlib1.dll（B站弹幕 zlib 解压用，同 OpenSSL DLL 的处理方式）
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "C:/msys64/mingw64/bin/zlib1.dll" "${APP_OUT_DIR}/zlib1.dll"
     )
 endif()
 # ========================================================
@@ -233,6 +341,14 @@ target_include_directories(Oran7MediaClient
     ${ORAN7_SEVER_DIR}
     ${ORAN7_UTILS_DIR}
     ${QtQuicCppExtend_DIR}
+    ${NCM_DIR}
+    ${NCM_DIR}/crypto
+    ${NCM_DIR}/network
+    ${NCM_DIR}/protocol
+    ${NCM_DIR}/api
+    ${NCM_DIR}/session
+    ${QRCODEGEN_DIR}
+    ${BROTLI_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -256,6 +372,8 @@ target_link_libraries(Oran7MediaClient
     Qt6::ShaderTools
     Qt6::Multimedia
     Qt6::Network
+    Qt6::WebSockets
+    Qt6::Concurrent
     Qt6::GuiPrivate
     # QWindowKit 库（参考 HuskarUI 方法）
     QWKCore
@@ -269,7 +387,30 @@ target_link_libraries(Oran7MediaClient
     # SDL2 库
     SDL2 SDL2main
     # Windows 系统库
-    d3dcompiler dxgi dwmapi
+    d3dcompiler dxgi dwmapi ole32 uuid dbghelp
+    # MSYS2 libwinpthread：解决 MSYS2 OpenSSL 引入的 nanosleep64 等符号。
+    # Qt MinGW 11.2 的 libwinpthread 没有这些 64 位时间函数，MSYS2 版本提供。
+    # MSYS2 libwinpthread 编译时带了 -fstack-protector，需要 Qt MinGW 的 libssp 配合。
+    # 全部放末尾，确保 Qt 自身符号优先，只填充缺失项。
+    "C:/msys64/mingw64/lib/libwinpthread.a"
+    # MSYS2 libcrypto：网易云 weapi 加密（AES/RSA）
+    "C:/msys64/mingw64/lib/libcrypto.dll.a"
+    # MSYS2 zlib：B站直播弹幕 zlib 压缩解压（qUncompress 不能解裸 zlib 流）
+    "C:/msys64/mingw64/lib/libz.dll.a"
+    "D:/Qt/Tools/mingw1120_64/lib/gcc/x86_64-w64-mingw32/11.2.0/libssp.a"
+)
+
+# 仅给需要 OpenSSL 的源文件加 include 路径，避免 MSYS2 头文件全局遮蔽 MinGW 标准头
+set_source_files_properties(
+    ${NCM_DIR}/crypto/CryptoProvider.cpp
+    ${NCM_DIR}/crypto/WeapiCrypto.cpp
+    PROPERTIES INCLUDE_DIRECTORIES "${OPENSSL_ROOT_DIR}/include"
+)
+
+# B站弹幕 zlib 解压同样只给该源文件加 MSYS2 include（zlib.h）
+set_source_files_properties(
+    ${ORAN7_PLAYER_DIR}/BilibiliDanmakuClient.cpp
+    PROPERTIES INCLUDE_DIRECTORIES "C:/msys64/mingw64/include"
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.

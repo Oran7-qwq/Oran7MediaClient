@@ -27,7 +27,7 @@ ApplicationWindow {
 
     property real taskbarHeight: 50
     property bool isAnimating: false
-    property bool requestedVisible: Oran7Theme.Oran7MainGUI.OpenSettingWin
+    property bool requestedVisible: Oran7MainUiSetting.openSettingWin
     property bool enable__dwmBlur__: true
 
     signal restoreMainWindowFocusRequested
@@ -42,8 +42,6 @@ ApplicationWindow {
         //setup 只做一次，并且在 QML 组件完成后做
         __windowAgent.setup(root)
         root.color = "transparent"
-
-        preloadTimer.start()
 
         if (requestedVisible)
             openWindow()
@@ -100,7 +98,7 @@ ApplicationWindow {
             anchors.top: parent.top
             anchors.topMargin: 80
             layer.enabled: true
-            opacity: Oran7Theme.Oran7MainGUI.settingContent_visiable ? 1 : 0
+            opacity: Oran7MainUiSetting.settingContentVisible ? 1 : 0
             Behavior on opacity {NumberAnimation{duration:Oran7Theme.Primary.durationMid}}
             Behavior on scale {NumberAnimation{duration: Oran7Theme.Primary.durationVeryFast}}
             layer.effect: ColorOverlay{
@@ -123,7 +121,7 @@ ApplicationWindow {
         // 使用 Loader 预加载窗口，在启动时加载，避免首次打开卡顿
         Loader {
             id: mainUiSettingLoader
-            active: false  // 启动时由预加载定时器触发
+            active: false  // 默认不加载,由外部逐个控制 active 激活(不连锁)
             sourceComponent: mainUiSettingComponent
             x: 0
             y: 0
@@ -137,7 +135,7 @@ ApplicationWindow {
 
         Loader {
             id: mediaPlayerSettingLoader
-            active: false  // 启动时由预加载定时器触发
+            active: false  // 默认不加载,由外部逐个控制 active 激活(不连锁)
             sourceComponent: mediaPlayerSettingComponent
             x: 0
             y: 0
@@ -151,7 +149,7 @@ ApplicationWindow {
 
         Loader {
             id: screenCaptureSettingLoader
-            active: false  // 启动时由预加载定时器触发
+            active: false  // 默认不加载,由外部逐个控制 active 激活(不连锁)
             sourceComponent: screenCaptureSettingComponent
             x: 0
             y: 0
@@ -165,7 +163,7 @@ ApplicationWindow {
 
         Loader {
             id: musicPlayListSettingLoader
-            active: false  // 启动时由预加载定时器触发
+            active: false  // 默认不加载,由外部逐个控制 active 激活(不连锁)
             sourceComponent: musicPlayListSettingComponent
             x: 0
             y: 0
@@ -203,13 +201,13 @@ ApplicationWindow {
         }
     }
     component UseExplainLabel: Label {
-        font.pixelSize: Oran7MainUiSetting.textPixelSize + 5
+        font.pixelSize: Oran7MainUiSetting.textPixelSize - 2
         font.family: Oran7MainUiSetting.fontFamily
         font.bold: true
         font.italic: true
         color:Oran7Theme.Oran7MainGUI.themeColor
 
-        opacity: Oran7Theme.Oran7MainGUI.settingContent_visiable  ? 1 : 0
+        opacity: Oran7MainUiSetting.settingContentVisible  ? 1 : 0
         Behavior on opacity {
             PropertyAnimation{
                 duration: Oran7MainUiSetting.toggleOpenAniDuration
@@ -268,29 +266,62 @@ ApplicationWindow {
     function handle_OpenSettingWin_signal(){//处理打开设置窗口的信号
         if(Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing)return;
 
-        if (!Oran7Theme.Oran7MainGUI.OpenSettingWin) {
-            openAllPanels();
+        if (!Oran7MainUiSetting.openSettingWin) {
+            // 先显示窗口并让其稳定,再启动面板动画
+            Oran7MainUiSetting.openSettingWin = true;
+            openPanelsDelayTimer.start();
         } else {
             closeAllPanels();
         }
     }
 
+    // 等窗口最大化/显示稳定后再执行原有打开动画(保留 y 滑动视觉)
+    Timer {
+        id: openPanelsDelayTimer
+        interval: 120
+        repeat: false
+        onTriggered: root.openAllPanels()
+    }
+
     function openAllPanels() {
-        var panels = [
-            mainUiSettingLoader.item,
-            mediaPlayerSettingLoader.item,
-            screenCaptureSettingLoader.item,
-            musicPlayListSettingLoader.item
-        ];
-        // 所有面板同时准备（进入场景图，height=0）
-        for (var i = 0; i < panels.length; i++) {
-            if (panels[i] && panels[i].prepareForOpen) {
-                panels[i].prepareForOpen();
+        // 打开设置时才激活面板(启动不预加载);已加载过的直接复用
+        mainUiSettingLoader.active = true;
+        mediaPlayerSettingLoader.active = true;
+        screenCaptureSettingLoader.active = true;
+        musicPlayListSettingLoader.active = true;
+        openPanelsTimer.tries = 0;
+        openPanelsTimer.start();
+    }
+
+    // 等 4 个面板全部实例化完成后,执行 prepareForOpen + startOpenAnimation
+    Timer {
+        id: openPanelsTimer
+        interval: 30
+        repeat: true
+        property int tries: 0
+        onTriggered: {
+            if (openPanelsTimer.tries++ > 100) { // 最多等 3 秒兜底
+                openPanelsTimer.stop();
+                return;
             }
-        }
-        for (var j = 0; j < panels.length; j++) {
-            if (panels[j] && panels[j].startOpenAnimation) {
-                panels[j].startOpenAnimation();
+            var panels = [
+                mainUiSettingLoader.item,
+                mediaPlayerSettingLoader.item,
+                screenCaptureSettingLoader.item,
+                musicPlayListSettingLoader.item
+            ];
+            for (var i = 0; i < panels.length; i++) {
+                if (!panels[i])
+                    return; // 还有面板没加载完,继续等
+            }
+            openPanelsTimer.stop();
+            for (var j = 0; j < panels.length; j++) {
+                if (panels[j] && panels[j].prepareForOpen)
+                    panels[j].prepareForOpen();
+            }
+            for (var k = 0; k < panels.length; k++) {
+                if (panels[k] && panels[k].startOpenAnimation)
+                    panels[k].startOpenAnimation();
             }
         }
     }
@@ -364,17 +395,6 @@ ApplicationWindow {
     // --- tools Component ---
     Oran7DelayTimer {
         id: delayTimer
-    }
-
-    Timer {
-        id: preloadTimer
-        interval: 10
-        onTriggered: {
-            mainUiSettingLoader.active = true;
-            mediaPlayerSettingLoader.active = true;
-            screenCaptureSettingLoader.active = true;
-            musicPlayListSettingLoader.active = true;
-        }
     }
 
     Timer{

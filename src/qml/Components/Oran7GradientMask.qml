@@ -1,11 +1,10 @@
 // Oran7GradientMask.qml
 import QtQuick 2.15
-import Qt5Compat.GraphicalEffects
 
 Item {
     id: root
 
-    // 外部自定义内容区域，不限定 Column
+    // 外部自定义内容区域（通常为白色 Text/Image，其笔画 alpha 作为渐变上色的形状）
     default property alias content: maskContent.data
 
     // 允许外部访问内容容器
@@ -24,7 +23,7 @@ Item {
     // true: 动态渐变；false: 静态渐变
     property bool dynamicGradient: false
 
-    // true: 启用渐变遮罩；false: 显示原始内容
+    // true: 启用渐变遮罩（渐变上色）；false: 显示原始内容
     property bool gradientMaskEnabled: true
 
     property int transitionDuration: 1000
@@ -146,7 +145,7 @@ Item {
             endColorValue: "#FF4D6D"
         },
 
-        //  糖果红橙
+        // 16 糖果红橙
         {
             beginColorValue: "#FF4D6D",
             middleColorValue: "#FF3D00",
@@ -241,36 +240,23 @@ Item {
         setGradientImmediately(gradientColorIndex)
     }
 
-    LinearGradient {
-        id: gradientLayer
-        anchors.fill: parent
-        visible: false
-
-        start: root.gradientStart
-        end: root.gradientEnd
-
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: root.beginColor }
-            GradientStop { position: 0.5; color: root.middleColor }
-            GradientStop { position: 1.0; color: root.endColor }
-        }
-    }
-
+    // === 内容容器（白字/图形）：渲染到 layer，由 shader 用其 alpha 重新着色为渐变 ===
     Item {
         id: maskContent
 
         anchors.fill: parent
 
-        // 必须始终保持在渲染树中可见，否则 OpacityMask 无法捕获其像素作为遮罩（grab 到空图）
-        // 启用遮罩时 OpacityMask 在上层覆盖，因此不会出现双重渲染的视觉问题
-    }
+        layer.enabled: root.gradientMaskEnabled
+        layer.effect: ShaderEffect {
+            id: gradientShader
 
-    OpacityMask {
-        anchors.fill: parent
-        visible: root.gradientMaskEnabled
+            property color beginColor: root.beginColor
+            property color middleColor: root.middleColor
+            property color endColor: root.endColor
 
-        source: gradientLayer
-        maskSource: maskContent
+            // 渐变方向：水平（begin → middle → end）；source 由 layer 自动绑定
+            fragmentShader: "qrc:/shaders/gradientText.frag.qsb"
+        }
     }
 
     ParallelAnimation {
@@ -310,14 +296,3 @@ Item {
         }
     }
 }
-
-//遮罩对象说明：
-// 子对象类型                        是否会参与遮罩
-// Text                                     会，文字笔画区域参与
-// Image                            会，图片非透明区域参与
-// Rectangle                    会，如果它有不透明颜色
-// Row / Column / Item	本身通常不产生可见像素，但它们的可见子项会参与
-// Timer / Connections                  不会，它们没有视觉输出
-// color: "transparent" 的控件	基本不会产生遮罩
-// opacity: 0 的控件               不会产生有效遮罩
-// opacity: 0.5 的控件             会产生半透明遮罩

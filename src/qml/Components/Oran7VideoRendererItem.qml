@@ -13,6 +13,10 @@ Rectangle {
     property int renderObject: Client.VideoPlayerRender
     property Item videoTextureItem: null
 
+    // 弹幕覆盖层：直播播放时置 true，外部通过 danmakuLayer.spawn/showSuperChat 投递内容
+    property bool danmakuEnabled: false
+    property alias danmakuLayer: danmakuLayer
+
     // 确保在窗口可见时才尝试连接
     visible: true
     clip: true
@@ -44,6 +48,17 @@ Rectangle {
             z: 10
             themeColor: "#04FFFFFF"
             visible: root.videoTextureItem !== null
+        }
+
+        Oran7DanmakuLayer {
+            id: danmakuLayer
+            // 跟随 D3D11VideoItem（其几何永远铺满 host，即整个视频渲染区域）
+            x: root.videoTextureItem ? root.videoTextureItem.x : 0
+            y: root.videoTextureItem ? root.videoTextureItem.y : 0
+            width: root.videoTextureItem ? root.videoTextureItem.width : 0
+            height: root.videoTextureItem ? root.videoTextureItem.height : 0
+            z: 20
+            active: root.danmakuEnabled
         }
     }
     // ========= 诊断：裸 ShaderEffectSource（不经过 MultiEffect）=========
@@ -97,7 +112,10 @@ Rectangle {
         target:Client
         function onVideoRenderInfoUpdated(info)
         {
-            root.videoInfo = info
+            // 只接受自己来源的帧信息：screen → "screen"，player → "player"
+            var expected = (root.renderObject === Client.ScreenCaptureRender) ? "screen" : "player";
+            if (info.sourceTag === expected)
+                root.videoInfo = info
         }
     }
     property var videoInfo: ({})

@@ -53,13 +53,22 @@ bool D3D11VideoRenderNode::takePendingSourceSizeChanged(int &w, int &h)
 
 bool D3D11VideoRenderNode::takePendingDxgifromat(DXGI_FORMAT &fmt)
 {
-    if(!m_hasPendingDXGIFormatChanged)
-        return false;
+    // 始终返回当前实际格式（不论是否刚变化），避免调用方拿到 DXGI_FORMAT_UNKNOWN
+    fmt = m_currentDxgiFormat;
 
-    fmt = m_pendingDxgiFmt;
+    if (!m_hasPendingDXGIFormatChanged)
+        return (m_currentDxgiFormat != DXGI_FORMAT_UNKNOWN);
+
     m_hasPendingDXGIFormatChanged = false;
-
     return true;
+}
+
+QString D3D11VideoRenderNode::decodeDeviceName() const
+{
+    if (m_lastFrameIsD3D11)
+        return QStringLiteral("d3d11va");
+    else
+        return QStringLiteral("cpu");
 }
 
 
@@ -207,6 +216,97 @@ bool D3D11VideoRenderNode::blitNv12ToRgba(ID3D11Texture2D *srcTex, int srcW, int
     return SUCCEEDED(hr);
 }
 
+bool D3D11VideoRenderNode::uploadCpuFrameToRgba(AVFrame *cur)
+{
+    if (!cur || !m_dev || !m_ctx)
+        return false;
+
+    const int w = cur->width;
+    const int h = cur->height;
+    if (w <= 0 || h <= 0)
+        return false;
+
+    // 确保 RGBA 目标纹理存在且尺寸匹配
+    ensureRgbaTarget(w, h, DXGI_FORMAT_B8G8R8A8_UNORM);
+    if (!m_rgbaTex)
+        return false;
+
+    const AVPixelFormat srcFmt = static_cast<AVPixelFormat>(cur->format);
+
+    // sws 上下文缓存：仅在源尺寸或格式变化时重建
+    if (!m_swsCtx || m_lastSrcCpuFmt != srcFmt || m_swsSrcW != w || m_swsSrcH != h) {
+        if (m_swsCtx) {
+            sws_freeContext(m_swsCtx);
+            m_swsCtx = nullptr;
+        }
+
+        m_swsCtx = sws_getContext(w, h, srcFmt,
+                                   w, h, AV_PIX_FMT_BGRA,
+                                   SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
+        if (!m_swsCtx) {
+            static bool logged = false;
+            if (!logged) {
+                logged = true;
+                WARNING_LOG << "uploadCpuFrameToRgba: sws_getContext failed, srcFmt="
+                            << av_get_pix_fmt_name(srcFmt);
+            }
+            return false;
+        }
+        m_lastSrcCpuFmt = srcFmt;
+        m_swsSrcW = w;
+        m_swsSrcH = h;
+        INFO_LOG << "uploadCpuFrameToRgba: created sws ctx, fmt="
+                 << av_get_pix_fmt_name(srcFmt) << " size=" << w << "x" << h;
+    }
+
+    // 分配临时 BGRA AVFrame 作为 sws 输出
+    AVFrame *bgraFrame = av_frame_alloc();
+    if (!bgraFrame) return false;
+
+    bgraFrame->format = AV_PIX_FMT_BGRA;
+    bgraFrame->width  = w;
+    bgraFrame->height = h;
+    if (av_frame_get_buffer(bgraFrame, 0) < 0) {
+        av_frame_free(&bgraFrame);
+        return false;
+    }
+
+    sws_scale(m_swsCtx,
+              cur->data, cur->linesize, 0, h,
+              bgraFrame->data, bgraFrame->linesize);
+
+    // 上载到 D3D11 RGBA 纹理
+    // linesize[0] 可能与 w*4 不一致（av_frame_get_buffer 的默认对齐），需要做 pitch 适配
+    const int expectedStride = w * 4;
+    if (bgraFrame->linesize[0] == expectedStride) {
+        D3D11_BOX box{};
+        box.right  = UINT(w);
+        box.bottom = UINT(h);
+        box.back   = 1;
+        m_ctx->UpdateSubresource(m_rgbaTex.Get(), 0, &box,
+                                 bgraFrame->data[0],
+                                 UINT(bgraFrame->linesize[0]), 0);
+    } else {
+        // pitch 不匹配：逐行拷贝到连续缓冲区后再上载
+        std::vector<uint8_t> packed(w * h * 4);
+        const uint8_t *src = bgraFrame->data[0];
+        for (int y = 0; y < h; ++y) {
+            memcpy(packed.data() + y * expectedStride,
+                   src + y * bgraFrame->linesize[0],
+                   expectedStride);
+        }
+        D3D11_BOX box{};
+        box.right  = UINT(w);
+        box.bottom = UINT(h);
+        box.back   = 1;
+        m_ctx->UpdateSubresource(m_rgbaTex.Get(), 0, &box,
+                                 packed.data(), UINT(expectedStride), 0);
+    }
+
+    av_frame_free(&bgraFrame);
+    return true;
+}
+
 void D3D11VideoRenderNode::clearBlack()
 {
     if (!m_dev || !m_ctx)
@@ -291,60 +391,87 @@ void D3D11VideoRenderNode::prepare()
         return;
     }
 
-    auto *srcTex = reinterpret_cast<ID3D11Texture2D *>(cur->data[0]);
-    if (!srcTex) {
-        av_frame_free(&cur);
-        return;
-    }
-
-    D3D11_TEXTURE2D_DESC sdesc{};
-    srcTex->GetDesc(&sdesc);
-
-    // 分配尺寸（含 D3D padding，如 4096×1808）vs 可见尺寸（视频真实分辨率，如 4096×1800）
-    const int allocW = int(sdesc.Width);
-    const int allocH = int(sdesc.Height);
     const int visibleW = cur->width;
     const int visibleH = cur->height;
 
-    if (allocW != m_lastSrcW || allocH != m_lastSrcH) {
-        m_lastSrcW = allocW;
-        m_lastSrcH = allocH;
-        // 传递可见尺寸给 QML 层，用于 contentRect 宽高比计算
-        m_pendingW = visibleW;
-        m_pendingH = visibleH;
-        m_hasPendingSizeChanged = true;
-    }
-    if(sdesc.Format != m_pendingDxgiFmt)
-    {
-        m_pendingDxgiFmt = sdesc.Format;
-        m_hasPendingDXGIFormatChanged = true;
-    }
+    // 记录当前帧的格式类型（供 VideoItem 每秒采集用）
+    m_lastFrameIsD3D11 = (cur->format == AV_PIX_FMT_D3D11);
 
-    // RGBA 目标纹理使用可见尺寸，不含 D3D padding
-    ensureRgbaTarget(visibleW, visibleH, DXGI_FORMAT_B8G8R8A8_UNORM);
-
-    if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
-        // VideoProcessor 使用分配尺寸创建（源纹理完整尺寸）
-        if (!m_vp || !m_vpEnum) {
-            if (!ensureVideoProcessor(allocW, allocH)) {
-                av_frame_free(&cur);
-                return;
-            }
+    if (cur->format == AV_PIX_FMT_D3D11) {
+        // === GPU 硬件解码帧路径 ===
+        auto *srcTex = reinterpret_cast<ID3D11Texture2D *>(cur->data[0]);
+        if (!srcTex) {
+            av_frame_free(&cur);
+            return;
         }
-        const int slice = int(reinterpret_cast<intptr_t>(cur->data[1]));
-        // blit 只转换可见区域，排除 D3D padding
-        blitNv12ToRgba(srcTex, visibleW, visibleH, slice);
-    } else if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-               sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) {
-        // 只复制可见区域到 RGBA 目标纹理
-        D3D11_BOX box{};
-        box.left = 0;
-        box.top = 0;
-        box.front = 0;
-        box.right = visibleW;
-        box.bottom = visibleH;
-        box.back = 1;
-        m_ctx->CopySubresourceRegion(m_rgbaTex.Get(), 0, 0, 0, 0, srcTex, 0, &box);
+
+        D3D11_TEXTURE2D_DESC sdesc{};
+        srcTex->GetDesc(&sdesc);
+
+        // 记录当前 DXGI 格式
+        m_currentDxgiFormat = sdesc.Format;
+
+        // 分配尺寸（含 D3D padding，如 4096×1808）vs 可见尺寸（视频真实分辨率，如 4096×1800）
+        const int allocW = int(sdesc.Width);
+        const int allocH = int(sdesc.Height);
+
+        if (allocW != m_lastSrcW || allocH != m_lastSrcH) {
+            m_lastSrcW = allocW;
+            m_lastSrcH = allocH;
+            // 传递可见尺寸给 QML 层，用于 contentRect 宽高比计算
+            m_pendingW = visibleW;
+            m_pendingH = visibleH;
+            m_hasPendingSizeChanged = true;
+        }
+        if(sdesc.Format != m_pendingDxgiFmt)
+        {
+            m_pendingDxgiFmt = sdesc.Format;
+            m_hasPendingDXGIFormatChanged = true;
+        }
+
+        // RGBA 目标纹理使用可见尺寸，不含 D3D padding
+        ensureRgbaTarget(visibleW, visibleH, DXGI_FORMAT_B8G8R8A8_UNORM);
+
+        if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010) {
+            // VideoProcessor 使用分配尺寸创建（源纹理完整尺寸）
+            if (!m_vp || !m_vpEnum) {
+                if (!ensureVideoProcessor(allocW, allocH)) {
+                    av_frame_free(&cur);
+                    return;
+                }
+            }
+            const int slice = int(reinterpret_cast<intptr_t>(cur->data[1]));
+            // blit 只转换可见区域，排除 D3D padding
+            blitNv12ToRgba(srcTex, visibleW, visibleH, slice);
+        } else if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+                   sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) {
+            // 只复制可见区域到 RGBA 目标纹理
+            D3D11_BOX box{};
+            box.left = 0;
+            box.top = 0;
+            box.front = 0;
+            box.right = visibleW;
+            box.bottom = visibleH;
+            box.back = 1;
+            m_ctx->CopySubresourceRegion(m_rgbaTex.Get(), 0, 0, 0, 0, srcTex, 0, &box);
+        }
+    }
+    else {
+        // === CPU 软件解码帧路径（YUV420P / NV12 / BGRA 等）===
+        if (!uploadCpuFrameToRgba(cur)) {
+            av_frame_free(&cur);
+            return;
+        }
+        // CPU 帧上载到 m_rgbaTex 后 DXGI 格式固定为 BGRA
+        m_currentDxgiFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+        // 尺寸变更通知
+        if (visibleW != m_lastSrcW || visibleH != m_lastSrcH) {
+            m_lastSrcW = visibleW;
+            m_lastSrcH = visibleH;
+            m_pendingW = visibleW;
+            m_pendingH = visibleH;
+            m_hasPendingSizeChanged = true;
+        }
     }
 
     av_frame_free(&cur);
@@ -426,6 +553,14 @@ void D3D11VideoRenderNode::doReleaseResources()
     m_ubuf.reset();
     m_sampler.reset();
     m_rhiTex.reset();
+
+    //释放 swscale 上下文
+    if (m_swsCtx) {
+        sws_freeContext(m_swsCtx);
+        m_swsCtx = nullptr;
+    }
+    m_lastSrcCpuFmt = AV_PIX_FMT_NONE;
+    m_swsSrcW = m_swsSrcH = 0;
 
     //释放 D3D11 资源
     m_vp.Reset();

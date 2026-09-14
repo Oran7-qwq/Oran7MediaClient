@@ -109,6 +109,7 @@ bool AppConfigManager::saveConfig()
 {
     if (!m_modified) return true;
 
+    QElapsedTimer cfgT; cfgT.start();
     QFile file(configFilePath());
     if (!file.open(QIODevice::WriteOnly))
     {
@@ -122,6 +123,7 @@ bool AppConfigManager::saveConfig()
     file.close();
 
     m_modified = false;
+    CONFIG_LOG << "AppConfigManager::saveConfig:cost" << cfgT.elapsed() << "ms";
     return true;
 }
 
@@ -424,16 +426,25 @@ QString AppConfigManager::getLastUsedFile() const
     if (m_config.contains("last_used_file") && m_config["last_used_file"].isString())
     {
         QString lastFile = m_config["last_used_file"].toString();
-        // 检查文件是否仍然存在
-        if (!lastFile.isEmpty() && QFile::exists(lastFile))
-        {
+        if (lastFile.isEmpty())
+            return "";
+        // 网络 URL（网易云播放链接）无本地文件，跳过存在性检查
+        if (lastFile.startsWith(QLatin1String("http://"))
+            || lastFile.startsWith(QLatin1String("https://")))
             return lastFile;
-        }
+        // 检查本地文件是否仍然存在
+        if (QFile::exists(lastFile))
+            return lastFile;
     }
     return "";
 }
 
-void AppConfigManager::setLastUsedFile(const QString& filePath)
+bool AppConfigManager::getLastUsedFileIsVip() const
+{
+    return m_config.value(QLatin1String("last_used_file_isvip")).toBool(false);
+}
+
+void AppConfigManager::setLastUsedFile(const QString& filePath, bool isVip)
 {
     if (filePath.isEmpty())
     {
@@ -441,17 +452,21 @@ void AppConfigManager::setLastUsedFile(const QString& filePath)
         return;
     }
 
-    // 验证文件路径是否有效
-    if (!QFile::exists(filePath))
+    // 网络 URL（网易云播放链接）无本地文件，跳过存在性检查；本地文件才校验存在
+    const bool isUrl = filePath.startsWith(QLatin1String("http://"))
+                    || filePath.startsWith(QLatin1String("https://"));
+    if (!isUrl && !QFile::exists(filePath))
     {
         WARNING_LOG << "AppConfigManager::setLastUsedFile:File does not exist:" << filePath;
         return;
     }
 
     QString currentLastFile = getLastUsedFile();
-    if (currentLastFile != filePath)
+    const bool vipChanged = m_config.value(QLatin1String("last_used_file_isvip")).toBool(false) != isVip;
+    if (currentLastFile != filePath || vipChanged)
     {
         m_config["last_used_file"] = filePath;
+        m_config["last_used_file_isvip"] = isVip;
         m_modified = true;
 
         // 自动保存配置
@@ -469,6 +484,7 @@ void AppConfigManager::clearLastUsedFile()
     if (m_config.contains("last_used_file") && !m_config["last_used_file"].toString().isEmpty())
     {
         m_config["last_used_file"] = "";
+        m_config["last_used_file_isvip"] = false;
         m_modified = true;
 
         // 自动保存配置

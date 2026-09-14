@@ -1,0 +1,63 @@
+# ---- 本地工具 / 个人配置 ----------------------------------------------------
+.claude/
+
+# ---- IDE -------------------------------------------------------------------
+.vscode/
+.qtcreator/
+*.code-workspace
+
+# Qt Creator 生成的文件
+CMakeLists.txt.user
+CMakeLists.txt.user.*
+*.autosave
+
+# ---- 构建产物 --------------------------------------------------------------
+build/
+build-*/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+*.cmake.stamp
+
+# 编译产物（注意：ffmpeg6.0/ 是随仓库分发的预编译依赖，下面已显式放行）
+*.o
+*.obj
+*.so
+*.so.*
+*.dylib
+*.a
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.dll
+*.exe
+*.app/
+
+# 放行随仓库分发的 FFmpeg 预编译 SDK
+!ffmpeg6.0/**
+!ffmpeg6.0/bin/**
+!ffmpeg6.0/lib/**
+
+# Qt 生成
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.moc
+.qmake.stash
+Makefile
+Makefile.*
+*.pro.user
+*.pro.user.*
+
+# ---- 打包 / 发布 -----------------------------------------------------------
+Oran7MediaClient-ReleasePackage.ini
+
+# ---- 系统 ------------------------------------------------------------------
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+.DS_Store

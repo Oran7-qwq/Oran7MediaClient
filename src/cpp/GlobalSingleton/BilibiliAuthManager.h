@@ -14,7 +14,7 @@
  * @brief B站扫码登录认证管理器
  *
  * 通过B站QR码登录流程获取用户Cookie（SESSDATA、DedeUserID、bili_jct），
- * 提供给 BilibiliRoomAddressCatch 和 FFPlayer 使用，以获取原画画质直播流。
+ * 提供给 BilibiliRoomAddressCatch 和 Oran7FFplayerCore 使用，以获取原画画质直播流。
  *
  * 使用方式：
  *   QML:  BilibiliAuthManager.startLogin() / .isLoggedIn / .loginState
@@ -83,12 +83,25 @@ public:
      */
     QString ffmpegCookieString() const;
 
+    // --- 内部方法 ---
+
+    /**
+     * @brief 不校验登录状态、直接拼出 Cookie 字符串（校验/FFmpeg 等内部路径使用，
+     *        这些路径在 m_isLoggedIn 置位之前就需要携带 Cookie）
+     */
+    QString rawCookieString() const;
+
     // --- 属性读取 ---
 
     bool isLoggedIn() const;
     const QString& userName() const;
     const QString& qrCodeUrl() const;
     LoginState loginState() const;
+
+    /**
+     * @brief 获取已登录用户的 DedeUserID（弹幕认证等场景需要真实 uid 才能收到弹幕）
+     */
+    QString dedeUserId() const;
 
     // --- 持久化 ---
 
@@ -166,6 +179,7 @@ private:
     QString m_dedeUserId;
     QString m_biliJct;
     QString m_userName;
+    QString m_uid;                 ///< nav 接口返回的 mid（弹幕认证用真实 uid）
     bool m_isLoggedIn = false;
 };
 

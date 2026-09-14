@@ -54,8 +54,8 @@ Item {
         repeat: false
         onTriggered: {
             Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = true
-            Oran7Theme.installComponentToken("Oran7MainGUI","OpenSettingWin",true)
-            Oran7Theme.installComponentToken("Oran7MainGUI","settingContent_visiable",true)
+            Oran7MainUiSetting.openSettingWin = true
+            Oran7MainUiSetting.settingContentVisible = true
             settingSound.playOpen();
         }
     }
@@ -134,7 +134,7 @@ Item {
 
         onStarted: {
              //first index of settingWindow
-            Oran7Theme.installComponentToken("Oran7MainGUI","settingContent_visiable",false)
+            Oran7MainUiSetting.settingContentVisible = false
             Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = true
         }
 
@@ -149,7 +149,7 @@ Item {
 
              //first index of settingWindow
             Oran7MainUiSetting.clickedOutSide()
-            Oran7Theme.installComponentToken("Oran7MainGUI","OpenSettingWin",false)
+            Oran7MainUiSetting.openSettingWin = false
             settingSound.playClose();
         }
     }
@@ -208,7 +208,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:true
+                    property bool expand:false
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -269,7 +269,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:true
+                    property bool expand:false
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -286,6 +286,17 @@ Item {
                                 checked: Oran7Theme.Oran7MainGUI.DWMBlurEffectEnabled
                                 onSwitchToggleChanged: function (checked) {
                                     Oran7Theme.saveComponentToken("Oran7MainGUI","DWMBlurEffectEnabled",checked)
+                                }
+                            }
+                        }
+                        // --- BackgroundMode: Image / Video ---
+                        // 控制主窗口背景是静态图片还是循环视频，默认 Video
+                        Oran7SettingItem {
+                            text: "Bkgrd Mode:" + (Oran7Theme.Oran7MainGUI.backgroundMode === "Video" ? "Video" : "Image")
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MainGUI.backgroundMode === "Video"
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundMode", checked ? "Video" : "Image")
                                 }
                             }
                         }
@@ -319,6 +330,34 @@ Item {
                                 }
                             }
                         }
+                        // --- item: backgroundVideoPath ---
+                        Oran7SettingItem {
+                            text: "Background Video:"
+                            showTag: false
+                        }
+                        Oran7TextFieldItem {
+                            id: background_video_textField
+                            tempText: Oran7Theme.Oran7MainGUI.backgroundVideo
+                            placeholderText: "please input video path."
+                            detectEnable: true
+                            detectType: Oran7MainUiSetting.DetectionType.FileDetection
+                            onEnterPressed: {
+                                Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundVideo",tempText)
+                            }
+                            anchors.rightMargin: background_videoOpen.height + 2
+                            Oran7OpenFolderItem {
+                                id: background_videoOpen
+                                fileDialog_selectReset: true
+                                isMultiSelect: false
+                                anchors.left: parent.right
+                                anchors.leftMargin: 2
+                                onReady: {
+                                    Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundVideo",background_videoOpen.filesArray[0]);
+                                    background_video_textField.textField.text = Oran7Theme.Oran7MainGUI.backgroundVideo
+                                    background_video_textField.tempText = Oran7Theme.Oran7MainGUI.backgroundVideo
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -331,7 +370,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:true
+                    property bool expand:false
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 

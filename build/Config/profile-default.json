@@ -3,9 +3,9 @@
         "Oran7CaptionBar": {
             "__init__": {
                 "__vars__": {
-                    "colorPrimaryBase": "$genColor(#476cff)",
-                    "iconColorBase": "$genColor(#77f7f3)",
-                    "textColorBase": "$genColor(#00bbbb)"
+                    "colorPrimaryBase": "$genColor(#2f54eb)",
+                    "iconColorBase": "$genColor(#50ffff)",
+                    "textColorBase": "$genColor(#50ffff)"
                 }
             },
             "__style__": {
@@ -22,32 +22,67 @@
         "Oran7MainGUI": {
             "__init__": {
                 "__vars__": {
-                    "colorPrimaryBase": "$genColor(#fa8c16)"
+                    "colorPrimaryBase": "$genColor(#ff4646)"
                 }
             },
             "__style__": {
                 "DWMBlurEffectEnabled": false,
                 "OpenSettingWin": false,
-                "backgroundImage": "C:/Users/funny/Desktop/Oran7MediaClient-Release/Config/wallpaperResource/9f7bce2f6287e8ef426dfdc62b2fcbc1.jpg",
+                "backgroundImage": "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Config/wallpaperResource/a0092cd57fc13ea8316d68a523c9dcfa_720.jpeg",
+                "backgroundMode": "Video",
+                "backgroundVideo": "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Config/wallpaperResource/CYWL.mp4",
                 "isDarkMode": true,
                 "settingContent_visiable": false,
                 "settingWinItemDefalutWidth": 252,
-                "soundEffectVolume": 0.7,
-                "themeColor": "#fa8c16",
+                "soundEffectVolume": 0.8,
+                "themeColor": "#ff4646",
                 "topBarDefaultHeight": 50
+            }
+        },
+        "Oran7MusicLyricsIsland": {
+            "__init__": {
+                "__vars__": {
+                    "floatingBackdropColor": "$genColor(#d0d0d0)",
+                    "textColorBase": "$genColor(#ffffff)",
+                    "textSizeBase": "$genFontSize(22)"
+                }
+            },
+            "__style__": {
+                "backgroundImageEnabled": false,
+                "backgroundImage_url": "C:/Users/funny/QtProject.doc/Oran7MediaClient/image/Oran7.jpg",
+                "blurEffectEnabled": true,
+                "brightness": 0.1,
+                "contrast": 0.3,
+                "floatingAlwaysOnTop": true,
+                "floatingBackdropColor": "$genColor(#d0d0d0)",
+                "floatingClickThrough": false,
+                "floatingEnabled": true,
+                "floatingLocked": false,
+                "floatingOpacity": 0.9,
+                "floatingX": 1583,
+                "floatingY": 933,
+                "lyricsFontSize": 20,
+                "saturation": 0.3
             }
         },
         "Oran7MusicLyricsWindow": {
             "__init__": {
                 "__vars__": {
-                    "textColorBase": "$genColor(#ff6f77)",
-                    "textSizeBase": "$genFontSize(30)"
+                    "textColorBase": "$genColor(#52c41a)",
+                    "textSizeBase": "$genFontSize(20)"
                 }
             },
             "__style__": {
                 "blurEffectEnabled": true,
                 "brightness": 0,
                 "contrast": 0.2,
+                "floatingAlwaysOnTop": true,
+                "floatingClickThrough": true,
+                "floatingEnabled": true,
+                "floatingLocked": true,
+                "floatingOpacity": 0.8,
+                "floatingX": 1312,
+                "floatingY": 886,
                 "progressVisibleBar_dynamicGradientEnabled": false,
                 "saturation": 0
             }
@@ -56,8 +91,8 @@
             "__init__": {
                 "__vars__": {
                     "colorPrimaryBase": "$genColor(#Preset_Volcano)",
-                    "iconColorBase": "$genColor(#f0f0f0)",
-                    "textColorBase": "$genColor(#9d57ff)"
+                    "iconColorBase": "$genColor(#ffffff)",
+                    "textColorBase": "$genColor(#5cffff)"
                 }
             },
             "__style__": {
@@ -66,7 +101,7 @@
                 "contrast": 0.3,
                 "playButtonColor": "#ff0000",
                 "playButton_GradientColorIndex": 0,
-                "progressVisibleBar_ColorIndex": 13,
+                "progressVisibleBar_ColorIndex": 12,
                 "progressVisibleBar_dynamicGradientEnabled": false,
                 "saturation": 0.3
             }
@@ -75,16 +110,35 @@
             "__init__": {
                 "__vars__": {
                     "colorPrimaryBase": "$genColor(#Preset_Volcano)",
-                    "textColorBase": "$genColor(#26ffff)"
+                    "textColorBase": "$genColor(#ff535b)"
                 }
             },
             "__style__": {
-                "listViewFontPixelSize": 18
+                "listViewFontPixelSize": 17,
+                "textEffectEnabled": true,
+                "textGlowColor": "#66FFFFFF",
+                "textGlowRadius": 2,
+                "textGlowStrength": 0.55,
+                "textOutlineColor": "#000000",
+                "textOutlineWidth": 1,
+                "textShadowColor": "#00000000",
+                "textShadowOffsetX": 1.2,
+                "textShadowOffsetY": 1.2
             }
         },
         "Oran7ProgressSlider": {
             "__style__": {
                 "moveThreshold": "2"
+            }
+        },
+        "Oran7ScreenCapture": {
+            "__style__": {
+                "ScaleMode": "Fit"
+            }
+        },
+        "Oran7VideoPlayer": {
+            "__style__": {
+                "ScaleMode": "Fill"
             }
         }
     },

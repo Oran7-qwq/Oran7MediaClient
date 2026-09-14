@@ -66,19 +66,33 @@ BilibiliAuthManager::LoginState BilibiliAuthManager::loginState() const
     return m_loginState;
 }
 
-QString BilibiliAuthManager::cookieString() const
+QString BilibiliAuthManager::dedeUserId() const
 {
-    if (!m_isLoggedIn || m_sessdata.isEmpty())
+    // 优先用 nav 接口拿到的 mid；登录 URL 提取的 DedeUserID 作兜底
+    return m_uid.isEmpty() ? m_dedeUserId : m_uid;
+}
+
+QString BilibiliAuthManager::rawCookieString() const
+{
+    if (m_sessdata.isEmpty())
         return {};
 
     return QString("SESSDATA=%1; DedeUserID=%2; bili_jct=%3")
         .arg(m_sessdata, m_dedeUserId, m_biliJct);
 }
 
+QString BilibiliAuthManager::cookieString() const
+{
+    if (!m_isLoggedIn)
+        return {};
+    return rawCookieString();
+}
+
 QString BilibiliAuthManager::ffmpegCookieString() const
 {
     // FFmpeg 的 cookies 选项格式与HTTP相同：name=value; name=value
-    return cookieString();
+    // 播放 B 站直播时也必须在 m_isLoggedIn 置位前可用，直接用未校验的原始值
+    return rawCookieString();
 }
 
 // ==================== 登录流程 ====================
@@ -145,9 +159,17 @@ void BilibiliAuthManager::logout()
 
 void BilibiliAuthManager::loadCookies()
 {
-    m_sessdata = AppConfigManager::ins().getValueQVariant("bilibili_auth.sessdata").toString();
-    m_dedeUserId = AppConfigManager::ins().getValueQVariant("bilibili_auth.dede_user_id").toString();
-    m_biliJct = AppConfigManager::ins().getValueQVariant("bilibili_auth.bili_jct").toString();
+    // 旧版本曾把 URL 编码的 Cookie 原样存盘（SESSDATA 含 %2C/%2A），
+    // 加载时做一次兜底解码修复，避免已登录用户重启后校验失败被迫重新登录。
+    const auto decode = [](const QString &v) {
+        if (v.contains('%'))
+            return QUrl::fromPercentEncoding(v.toUtf8());
+        return v;
+    };
+
+    m_sessdata = decode(AppConfigManager::ins().getValueQVariant("bilibili_auth.sessdata").toString());
+    m_dedeUserId = decode(AppConfigManager::ins().getValueQVariant("bilibili_auth.dede_user_id").toString());
+    m_biliJct = decode(AppConfigManager::ins().getValueQVariant("bilibili_auth.bili_jct").toString());
     m_userName = AppConfigManager::ins().getValueQVariant("bilibili_auth.user_name").toString();
 
     if (!m_sessdata.isEmpty())
@@ -310,20 +332,23 @@ void BilibiliAuthManager::onPollReply(QNetworkReply* reply)
             if (headerName == "set-cookie")
             {
                 QString cookieValue = QString::fromUtf8(header.second);
+                const auto decode = [](const QString &v) {
+                    return v.contains('%') ? QUrl::fromPercentEncoding(v.toUtf8()) : v;
+                };
                 if (cookieValue.startsWith("SESSDATA=") && m_sessdata.isEmpty())
                 {
                     int end = cookieValue.indexOf(';');
-                    m_sessdata = cookieValue.mid(9, end > 9 ? end - 9 : -1);
+                    m_sessdata = decode(cookieValue.mid(9, end > 9 ? end - 9 : -1));
                 }
                 else if (cookieValue.startsWith("DedeUserID=") && m_dedeUserId.isEmpty())
                 {
                     int end = cookieValue.indexOf(';');
-                    m_dedeUserId = cookieValue.mid(11, end > 11 ? end - 11 : -1);
+                    m_dedeUserId = decode(cookieValue.mid(11, end > 11 ? end - 11 : -1));
                 }
                 else if (cookieValue.startsWith("bili_jct=") && m_biliJct.isEmpty())
                 {
                     int end = cookieValue.indexOf(';');
-                    m_biliJct = cookieValue.mid(9, end > 9 ? end - 9 : -1);
+                    m_biliJct = decode(cookieValue.mid(9, end > 9 ? end - 9 : -1));
                 }
             }
         }
@@ -384,7 +409,9 @@ void BilibiliAuthManager::extractCookiesFromUrl(const QString& url)
             continue;
 
         QString key = param.left(eqPos);
-        QString value = param.mid(eqPos + 1);
+        // 重要：B站重定向URL里的 cookie 值是 URL 编码的（SESSDATA 含 %2C 逗号 / %2A 星号），
+        // 必须解码后再存盘，否则重启后校验会因非法 Cookie 失败并清空登录态。
+        QString value = QUrl::fromPercentEncoding(param.mid(eqPos + 1).toUtf8());
 
         if (key == "SESSDATA")
             m_sessdata = value;
@@ -404,7 +431,9 @@ void BilibiliAuthManager::validateStoredCookies()
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::UserAgentHeader,
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-    request.setRawHeader("Cookie", cookieString().toUtf8());
+    // 校验发生在 m_isLoggedIn 置位之前，cookieString() 会因未登录返回空串，
+    // 必须直接用未校验的原始 Cookie，否则请求不带 Cookie → nav 返回 -101 → 误判过期并清空登录态
+    request.setRawHeader("Cookie", rawCookieString().toUtf8());
     request.setRawHeader("Referer", "https://www.bilibili.com");
 
     QNetworkReply* reply = m_networkManager->get(request);
@@ -442,9 +471,10 @@ void BilibiliAuthManager::onValidateReply(QNetworkReply* reply)
         // Cookie有效
         m_isLoggedIn = true;
 
-        // 提取用户名
+        // 提取用户名 和 用户uid（弹幕认证需要真实 uid 才能收到弹幕）
         QJsonObject dataObj = root["data"].toObject();
         m_userName = dataObj["uname"].toString();
+        m_uid = QString::number(qint64(dataObj["mid"].toDouble()));
 
         setLoginState(LoginState::Success);
         emit loginStatusChanged();

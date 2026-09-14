@@ -35,7 +35,7 @@ extern "C" {
 
 #include <assert.h>
 
-#define MAX_QUEUE_SIZE (100 * 1024 * 1024) //about vidoe And audio accumulate
+#define MAX_QUEUE_SIZE (32 * 1024 * 1024) //about vidoe And audio accumulate
 #define MAX_PACKET_QUEUE_NUM 75          //each packet queue
 /**
  * @brief extern flush_pkt     刷新标志数据包(空包仅作处理标志)
@@ -45,7 +45,7 @@ extern AVPacket flush_pkt;
 /**
  * @brief DEFAULT_VOLUM_SIZE
  */
-extern  int DEFAULT_VOLUM_SIZE;                  //the default ffplayer volum size
+extern int DEFAULT_VOLUM_SIZE;                  //the default ffplayer volum size
 
 /**
  * @brief 支持的video硬件解码库,解码器名称
@@ -120,7 +120,7 @@ typedef struct Frame {
 
 /* 这是一个循环队列，windex是指其中的首元素(待写入数据帧索引)，rindex是指其中的尾部元素(待读取数据帧索引). */
 typedef struct FrameQueue {
-    Frame	queue[FRAME_QUEUE_SIZE];            // FRAME_QUEUE_SIZE  最大size, 数字太大时会占用大量的内存，需要注意该值的设置
+    Frame	 queue[FRAME_QUEUE_SIZE];            // FRAME_QUEUE_SIZE  最大size, 数字太大时会占用大量的内存，需要注意该值的设置
     int		rindex;                                             // 读索引。待播放时读取此帧进行播放，播放后此帧成为上一帧
     int		windex;                                           // 写索引
     int		size;                                                // 当前数据帧队列，总帧数量

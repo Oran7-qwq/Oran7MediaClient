@@ -11,8 +11,10 @@
 #include <QUrlQuery>
 #include <QFile>
 #include <QTextStream>
+#include <QRegularExpression>
 
 #include "GlobalHelper.h"
+#include "NcmSession.h"
 
 /**
  * @brief 在线歌词获取器
@@ -56,13 +58,33 @@ public:
         searchLrclibExact(artist, title);
     }
 
+    /**
+     * @brief 直接按网易云 songId 拉歌词（用于网络资源，无本地文件可提元数据）
+     *        跳过 LRCLIB 级联，直接命中网易云 api/song/lyric?id=<id>
+     */
+    void searchById(qint64 songId, const QString &mediaFilePath, const QString &lrcDirPath)
+    {
+        cancel();
+        m_currentArtist.clear();
+        m_currentTitle.clear();
+        m_currentFilePath  = mediaFilePath;
+        m_currentLrcDirPath = lrcDirPath;
+
+        INFO_LOG << "OnlineLyricsFetcher: fetching lyrics by NetEase songId" << songId;
+        fetchNetEaseLyrics(songId);
+    }
+
     /** 取消正在进行的网络请求 */
     void cancel()
     {
-        if (m_activeReply) {
-            m_activeReply->abort();
-            m_activeReply->deleteLater();
-            m_activeReply = nullptr;
+        // 先取出 reply 并置空 m_activeReply：abort() 可能同步触发 finished 回调，
+        // 回调里会读 m_activeReply；若先 abort 再 deleteLater(m_activeReply)，
+        // 回调可能已把 m_activeReply 置空，导致后续对 NULL 调用 deleteLater 崩溃。
+        QNetworkReply *reply = m_activeReply;
+        m_activeReply = nullptr;
+        if (reply) {
+            reply->abort();
+            reply->deleteLater();
         }
         m_currentFilePath.clear();
     }
@@ -89,12 +111,16 @@ private:
 
         m_activeReply = m_networkManager->get(request);
         connect(m_activeReply, &QNetworkReply::finished, this,
-                [this]() { onLrclibExactReply(); });
+                [this, reply = m_activeReply]() { onLrclibExactReply(reply); });
     }
 
-    void onLrclibExactReply()
+    void onLrclibExactReply(QNetworkReply *reply)
     {
-        QNetworkReply *reply = m_activeReply;
+        // 快速切歌时 m_activeReply 可能已被 cancel()/新一轮 search 覆盖；
+        // 只有该 reply 仍是当前请求时才处理，否则只清理这个旧 reply 并忽略，
+        // 避免对 NULL 调用 deleteLater（崩溃）或误删新的 m_activeReply
+        if (!reply || m_activeReply != reply)
+            return;
         m_activeReply = nullptr;
         reply->deleteLater();
 
@@ -131,12 +157,15 @@ private:
 
         m_activeReply = m_networkManager->get(request);
         connect(m_activeReply, &QNetworkReply::finished, this,
-                [this]() { onLrclibSearchReply(); });
+                [this, reply = m_activeReply]() { onLrclibSearchReply(reply); });
     }
 
-    void onLrclibSearchReply()
+    void onLrclibSearchReply(QNetworkReply *reply)
     {
-        QNetworkReply *reply = m_activeReply;
+        // 快速切歌时 m_activeReply 可能已被 cancel()/新一轮 search 覆盖；
+        // 只有该 reply 仍是当前请求时才处理，否则只清理这个旧 reply 并忽略
+        if (!reply || m_activeReply != reply)
+            return;
         m_activeReply = nullptr;
         reply->deleteLater();
 
@@ -178,12 +207,15 @@ private:
 
         m_activeReply = m_networkManager->get(request);
         connect(m_activeReply, &QNetworkReply::finished, this,
-                [this]() { onNetEaseSearchReply(); });
+                [this, reply = m_activeReply]() { onNetEaseSearchReply(reply); });
     }
 
-    void onNetEaseSearchReply()
+    void onNetEaseSearchReply(QNetworkReply *reply)
     {
-        QNetworkReply *reply = m_activeReply;
+        // 快速切歌时 m_activeReply 可能已被 cancel()/新一轮 search 覆盖；
+        // 只有该 reply 仍是当前请求时才处理，否则只清理这个旧 reply 并忽略
+        if (!reply || m_activeReply != reply)
+            return;
         m_activeReply = nullptr;
         reply->deleteLater();
 
@@ -222,14 +254,22 @@ private:
         request.setHeader(QNetworkRequest::UserAgentHeader, "Oran7MediaClient/1.0");
         request.setRawHeader("Referer", "https://music.163.com");
 
+        // 会员歌曲的歌词需要登录态 Cookie 才能拉取（免费歌曲无登录也可拉）
+        const QString cookie = NcmSession::instance().cookieString();
+        if (!cookie.isEmpty())
+            request.setRawHeader("Cookie", cookie.toUtf8());
+
         m_activeReply = m_networkManager->get(request);
         connect(m_activeReply, &QNetworkReply::finished, this,
-                [this]() { onNetEaseLyricsReply(); });
+                [this, reply = m_activeReply]() { onNetEaseLyricsReply(reply); });
     }
 
-    void onNetEaseLyricsReply()
+    void onNetEaseLyricsReply(QNetworkReply *reply)
     {
-        QNetworkReply *reply = m_activeReply;
+        // 快速切歌时 m_activeReply 可能已被 cancel()/新一轮 search 覆盖；
+        // 只有该 reply 仍是当前请求时才处理，否则只清理这个旧 reply 并忽略
+        if (!reply || m_activeReply != reply)
+            return;
         m_activeReply = nullptr;
         reply->deleteLater();
 
@@ -256,8 +296,7 @@ private:
     /** 保存 LRC 内容到本地文件，emit lyricsFound */
     void saveAndEmit(const QString &lrcContent)
     {
-        QFileInfo fi(m_currentFilePath);
-        QString baseName = fi.completeBaseName();
+        QString baseName = lyricsBaseName(m_currentFilePath);
         QString lrcPath  = m_currentLrcDirPath + "/" + baseName + ".lrc";
 
         QFile file(lrcPath);
@@ -277,6 +316,19 @@ private:
 
     /** 检查当前搜索是否仍然有效（用户没切歌） */
     bool isStillCurrent() const { return !m_currentFilePath.isEmpty(); }
+
+    /** 生成 .lrc 文件名主干：本地文件用原文件名；网络 URL 用 song_<id>（URL 里的 ? 在 Windows 文件名非法） */
+    QString lyricsBaseName(const QString &mediaFilePath) const
+    {
+        if (mediaFilePath.startsWith(QStringLiteral("http://"))
+                || mediaFilePath.startsWith(QStringLiteral("https://"))) {
+            QRegularExpression re(QStringLiteral("id=(\\d+)"));
+            auto m = re.match(mediaFilePath);
+            return m.hasMatch() ? QStringLiteral("song_%1").arg(m.captured(1))
+                                : QStringLiteral("network_song");
+        }
+        return QFileInfo(mediaFilePath).completeBaseName();
+    }
 
     QNetworkAccessManager *m_networkManager;
 

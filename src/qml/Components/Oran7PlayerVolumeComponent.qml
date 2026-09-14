@@ -9,6 +9,9 @@ Item{
     width: volumeIamge.width
     height:volumeIamge.height
 
+    property color icon_defaultColor: "white"
+    property color icon_hoverdColor: "white"
+
     Image {
         id: volumeIamge
         source: "qrc:/image/volume.png"
@@ -20,22 +23,20 @@ Item{
         property bool hovered: false
         property bool popupHovered: false
 
-        layer.enabled: false
+        layer.enabled: true
         layer.effect: ColorOverlay{
             source: volumeIamge
-            color: "white"
+            color:  parent.hovered ? root.icon_hoverdColor : root.icon_defaultColor
         }
         MouseArea{
             id:volumeImageMouseArea
             anchors.fill: parent
             hoverEnabled:true
             onEntered: {
-                 volumeIamge.layer.enabled=true
                  volumeIamge.hovered=true
                  volumeSliderPopup.open()
             }
             onExited: {
-                volumeIamge.layer.enabled=false
                 volumeIamge_exitTimer.restart()
             }
         }

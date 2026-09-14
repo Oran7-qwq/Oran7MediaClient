@@ -31,10 +31,6 @@ extern "C" {
 class D3D11VideoItem : public QQuickItem
 {
     Q_OBJECT
-    // Fit 模式下视频实际绘制区域（item 自身几何，在 parent 坐标系中）。
-    // QML 毛玻璃卡片、遮罩等组件应绑定此 rect，而非 host 全区域。
-    // Fit/Fill 后视频真实绘制区域（item-local 坐标）。
-    // QML 毛玻璃卡片可绑定此 rect 来只覆盖视频内容区域。
     Q_PROPERTY(QRectF videoContentRect READ videoContentRect NOTIFY videoContentRectChanged)
 public:
     explicit D3D11VideoItem(QQuickItem *parent = nullptr);
@@ -104,6 +100,22 @@ private:
     std::atomic<uint64_t> m_submitSeq{0};
     std::atomic<uint64_t> m_renderSeq{0};
     std::atomic_bool m_debugLog{false};  // 默认开，QML 可 setDebugLog(false) 关闭
+
+    // 每秒 submit 帧数统计（每实例独立）
+    int m_submitFps{0};
+    int m_submitCount{0};
+    qint64 m_submitT0{0};
+
+    // 每秒视频信息发射周期计时（每实例独立，避免多实例 static 共享）
+    qint64 m_infoEmitT0{0};
+
+    // 帧间隔抖动检测（每实例独立）
+    qint64 m_lastRenderMs{0};
+
+    // 信号连接守卫（每实例独立，之前 static 导致多实例互相断连）
+    QMetaObject::Connection m_beforeConn;
+    QMetaObject::Connection m_swapConn;
+
     D3D11VideoRenderNode *m_renderNode = nullptr;
     QQuickWindow *m_window = nullptr;
     QRectF m_contentRect;  // Fit/Fill 后的视频绘制区域（item-local 坐标）

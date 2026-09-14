@@ -6,6 +6,7 @@ import "../../Components"
 import Client 1.0
 import Oran7UI.Impl 1.0
 import BilibiliRoomAddressCatch 1.0
+import BilibiliDanmakuClient 1.0
 import BilibiliAuth 1.0
 
 
@@ -67,11 +68,26 @@ Item {
             //Page被激活 -> touch 业务
             root.activeResponseTask()
         }
+        else
+        {
+            root.activeCanceledTask()
+        }
     }
 
     //Page被激活 -> touch 业务
     function activeResponseTask(){
-        //console.log("touch")
+
+    }
+    //Page取消活跃业务
+    function activeCanceledTask(){
+        if (!(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex || BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex))
+            return;
+        if (BasicConfig.isPlaying === true) {
+            if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
+                bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_pause();
+            if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
+                inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause();
+        }
     }
 
     Component.onCompleted: {
@@ -120,7 +136,36 @@ Item {
     Connections {
         target: Client
         function onStopRequested() {
+            bilibiliDanmaku.stop();
+            videoRenderItem.danmakuEnabled = false;
             Client.renderBlackFrame(videoRenderItem.renderObject);
+        }
+    }
+
+    // ==================== B站弹幕客户端 ====================
+    property string danmakuErrorText: ""
+    Timer {
+        id: danmakuErrorHideTimer
+        interval: 6000
+        repeat: false
+        onTriggered: root.danmakuErrorText = ""
+    }
+    BilibiliDanmakuClient {
+        id: bilibiliDanmaku
+        onDanmakuReceived: (text, uname, color, timestamp) => {
+            if (danmakuToggle.checked && videoRenderItem.danmakuEnabled)
+                videoRenderItem.danmakuLayer.spawn(text, color)
+        }
+        onSuperChatReceived: (text, uname, price, color) => {
+            if (danmakuToggle.checked && videoRenderItem.danmakuEnabled)
+                videoRenderItem.danmakuLayer.showSuperChat(text, uname, price, color)
+        }
+        onConnectionChanged: (connected) => {
+            if (connected) root.danmakuErrorText = ""
+        }
+        onErrorOccurred: (message) => {
+            root.danmakuErrorText = message
+            danmakuErrorHideTimer.restart()
         }
     }
 
@@ -301,6 +346,72 @@ Item {
                     color: "#578b2c"
                     visible: bilibiliRoomAddressCatch.urls.length > 0
                 }
+                // ==================== 弹幕开关 + 连接状态 ====================
+                Item {
+                    width: 260
+                    height: 24
+                    Label {
+                        id: dmLabel
+                        text: "弹幕"
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        font.family: "微软雅黑"
+                        font.pixelSize: 14
+                        color: Oran7Theme.Oran7MainGUI.themeColor
+                    }
+                    Rectangle {
+                        id: danmakuToggle
+                        width: 38
+                        height: 22
+                        radius: 11
+                        anchors.left: dmLabel.right
+                        anchors.leftMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: danmakuToggle.checked ? "#578b2c" : "#888888"
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
+                        }
+                        property bool checked: true
+                        Rectangle {
+                            width: parent.height - 6
+                            height: width
+                            radius: width / 2
+                            color: "white"
+                            x: parent.checked ? parent.width - width - 3 : 3
+                            anchors.verticalCenter: parent.verticalCenter
+                            Behavior on x {
+                                NumberAnimation { duration: 150 }
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                danmakuToggle.checked = !danmakuToggle.checked;
+                                if (!danmakuToggle.checked) {
+                                    bilibiliDanmaku.stop();
+                                    videoRenderItem.danmakuEnabled = false;
+                                } else {
+                                    videoRenderItem.danmakuEnabled = (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex && BasicConfig.isPlaying);
+                                    if (videoRenderItem.danmakuEnabled)
+                                        bilibiliDanmaku.start(bilibiliRoomTextFiled.text);
+                                }
+                            }
+                        }
+                    }
+                    Label {
+                        anchors.left: danmakuToggle.right
+                        anchors.leftMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        font.family: "微软雅黑"
+                        font.pixelSize: 11
+                        color: root.danmakuErrorText.length > 0 ? "#d63348"
+                             : (bilibiliDanmaku.isConnected ? "#578b2c" : "#888888")
+                        text: root.danmakuErrorText.length > 0 ? root.danmakuErrorText
+                            : (bilibiliDanmaku.isConnected ? "弹幕已连接"
+                                : (bilibiliDanmaku.active ? "弹幕连接中..." : "弹幕未连接"))
+                    }
+                }
                 Rectangle {
                     id: inputBilibiliRoomNumRect
                     property int collapsedWidth: 140
@@ -435,11 +546,19 @@ Item {
                             BasicConfig.isPlaying = true;
                             videoRenderItem.tryAttachDelayed(); //sureLoad videoItemCpp
                             Client.requestPlayVideo(bilibiliRoomAddressCatch.urls[0]);
+                            // 开启弹幕
+                            if (danmakuToggle.checked) {
+                                videoRenderItem.danmakuEnabled = true;
+                                bilibiliDanmaku.start(bilibiliRoomTextFiled.text);
+                            }
                         }
                         function handle_bilibiliRoomNumWay_pause() {
                             bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl;
                             BasicConfig.isPlaying = false;
                             Client.requestPlayVideo(bilibiliRoomAddressCatch.urls[0]);
+                            // 暂停直播时停止弹幕
+                            bilibiliDanmaku.stop();
+                            videoRenderItem.danmakuEnabled = false;
                         }
                         property bool sureReadyPlay: false
                         MouseArea {
@@ -728,31 +847,31 @@ Item {
                 //     }
                 // }
                 //============= 选择videoScaleMode ==================//
-                property int scaleMode: Client.Fit
-                Label {
-                    id: scaleModeTextLabel
-                    font.pixelSize: 20
-                    font.family: "微软雅黑"
-                    font.bold: true
-                    text: "ScaleMode:"
-                    color: Oran7Theme.Oran7MainGUI.themeColor
-                }
-                Oran7ESelectRect {
-                    labelText: "Fit"
-                    checked: parent.scaleMode === Client.Fit
-                    onClicked: {
-                        parent.scaleMode = Client.Fit;
-                        Client.setScaleMode(Client.VideoPlayerRender, Client.Fit);
-                    }
-                }
-                Oran7ESelectRect {
-                    labelText: "Fill"
-                    checked: parent.scaleMode === Client.Fill
-                    onClicked: {
-                        parent.scaleMode = Client.Fill;
-                        Client.setScaleMode(Client.VideoPlayerRender, Client.Fill);
-                    }
-                }
+                // property int scaleMode: Client.Fit
+                // Label {
+                //     id: scaleModeTextLabel
+                //     font.pixelSize: 20
+                //     font.family: "微软雅黑"
+                //     font.bold: true
+                //     text: "ScaleMode:"
+                //     color: Oran7Theme.Oran7MainGUI.themeColor
+                // }
+                // Oran7ESelectRect {
+                //     labelText: "Fit"
+                //     checked: parent.scaleMode === Client.Fit
+                //     onClicked: {
+                //         parent.scaleMode = Client.Fit;
+                //         Client.setScaleMode(Client.VideoPlayerRender, Client.Fit);
+                //     }
+                // }
+                // Oran7ESelectRect {
+                //     labelText: "Fill"
+                //     checked: parent.scaleMode === Client.Fill
+                //     onClicked: {
+                //         parent.scaleMode = Client.Fill;
+                //         Client.setScaleMode(Client.VideoPlayerRender, Client.Fill);
+                //     }
+                // }
                 //==========================================//
 
                 //in colume

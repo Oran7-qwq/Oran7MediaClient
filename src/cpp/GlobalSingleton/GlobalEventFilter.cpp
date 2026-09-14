@@ -1,5 +1,6 @@
 #include "GlobalEventFilter.h"
 #include <QGuiApplication>
+#include <QCoreApplication>
 #include <QKeyEvent>
 #include <QDebug>
 #include <QDateTime>
@@ -9,6 +10,24 @@
 GlobalEventFilter::GlobalEventFilter(QObject *parent)
     : QObject(parent)
 {
+    // 注册原生事件过滤器（WM_HOTKEY 等系统消息从这里进来）
+    QCoreApplication::instance()->installNativeEventFilter(this);
+
+    // 注册全局热键（RegisterHotKey）：仅注册过的组合在窗口失焦时也会触发，其它键仍走 Qt GUI
+    registerGlobalHotkeys();
+
+    // 全局热键信号延迟派发：原生消息泵里只记 pending，由定时器在事件循环安全阶段 emit，
+    // 避免在原生消息处理中途触发 QML/Client 等重逻辑导致崩溃
+    m_hotkeyDispatchTimer.setInterval(30);
+    m_hotkeyDispatchTimer.setSingleShot(true);
+    connect(&m_hotkeyDispatchTimer, &QTimer::timeout, this, [this]() {
+        if (!m_pendingHotkey.isEmpty()) {
+            const QString name = m_pendingHotkey;
+            m_pendingHotkey.clear();
+            emit keyCombinationTriggered(name);
+        }
+    });
+
     if(__GlobelKeyLogINFO__)
     {
         connect(this, &GlobalEventFilter::escapeKeyPressed, this, []()
@@ -32,12 +51,80 @@ GlobalEventFilter::GlobalEventFilter(QObject *parent)
                 { INFO_LOG << "LEFT key is released."; });
         connect(this, &GlobalEventFilter::rightKeyReleased, this, []()
                 { INFO_LOG << "RIGHT key is released."; });
+
+
+        connect(this, &GlobalEventFilter::keyCombinationTriggered, this, [](QString CombinationS)
+                { INFO_LOG << CombinationS+" key is pressed."; });
+
     }
 }
 
 GlobalEventFilter::~GlobalEventFilter()
 {
+#ifdef Q_OS_WIN
+    for (int id : m_hotkeyIdToName.keys())
+        UnregisterHotKey(nullptr, id);
+#endif
+    QCoreApplication::instance()->removeNativeEventFilter(this);
+}
 
+// ============ 全局热键（RegisterHotKey） ============
+// 仅在此注册的组合会走全局（窗口失焦也触发）；其它按键/组合都走正常 Qt GUI 事件。
+// 需要拓展新的全局组合时，在 addHotkey(...) 追加一行即可。
+void GlobalEventFilter::registerGlobalHotkeys()
+{
+#ifdef Q_OS_WIN
+    int nextId = 1;
+    auto addHotkey = [&](const QString &name, quint32 mods, quint32 vk) {
+        if (RegisterHotKey(nullptr, nextId, mods, vk)) {
+            m_globalHotkeys.insert(name);
+            m_hotkeyIdToName.insert(nextId, name);
+            if (__GlobelKeyLogINFO__)
+                INFO_LOG << "GlobalHotkey registered: " << name << " (id=" << nextId << ")";
+        } else {
+            if (__GlobelKeyLogINFO__)
+                INFO_LOG << "GlobalHotkey FAILED: " << name << " err=" << int(GetLastError());
+        }
+        ++nextId;
+    };
+
+    // 默认：Ctrl+Right 全局热键（失焦也能触发）。
+    // MOD_NOREPEAT 避免长按连发 WM_HOTKEY。
+    addHotkey(QStringLiteral("Ctrl+Right"), MOD_CONTROL | MOD_NOREPEAT, VK_RIGHT);
+
+    // ---- 以后想加其它全局组合，照下面格式追加即可，例如：----
+    // addHotkey("Ctrl+Shift+R", MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'R');
+    // addHotkey("Alt+F4", MOD_ALT | MOD_NOREPEAT, VK_F4);
+#else
+    Q_UNUSED(this)
+#endif
+}
+
+bool GlobalEventFilter::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result)
+{
+#ifdef Q_OS_WIN
+    if ((eventType == QByteArrayLiteral("windows_generic_MSG")
+         || eventType == QByteArrayLiteral("windows_dispatcher_MSG")) && message) {
+        MSG *msg = static_cast<MSG *>(message);
+        // 全局热键按下：Windows 发 WM_HOTKEY 到本线程消息队列
+        if (msg->message == WM_HOTKEY) {
+            const int id = int(msg->wParam);
+            const QString name = m_hotkeyIdToName.value(id);
+            if (!name.isEmpty()) {
+                // 原生消息泵里不做任何 Qt/QML 调用，也不依赖 result 指针：
+                // 只记录 pending，由 m_hotkeyDispatchTimer 在事件循环安全阶段 emit。
+                m_pendingHotkey = name;
+                m_hotkeyDispatchTimer.start();
+                if (result)
+                    *result = 0;
+                return true;
+            }
+        }
+    }
+#else
+    Q_UNUSED(eventType) Q_UNUSED(message) Q_UNUSED(result)
+#endif
+    return false;
 }
 
 /**
@@ -61,19 +148,17 @@ bool GlobalEventFilter::eventFilter(QObject *obj, QEvent *event)
         }
 
         if (event->type() == QEvent::KeyPress) {
-            handleKeyPress(keyEvent);
+            handleKeyPress(keyEvent->key());
         } else if (event->type() == QEvent::KeyRelease) {
-            handleKeyRelease(keyEvent);
+            handleKeyRelease(keyEvent->key());
         }
     }
 
     return QObject::eventFilter(obj, event);
 }
 
-void GlobalEventFilter::handleKeyPress(QKeyEvent *keyEvent)
+void GlobalEventFilter::handleKeyPress(int key)
 {
-    int key = keyEvent->key();
-
     // 检查是否已经按下（防止重复处理）
     if (m_pressedKeys.value(key, false)) {
         if(__GlobelKeyLogINFO__Detail__)
@@ -120,10 +205,8 @@ void GlobalEventFilter::handleKeyPress(QKeyEvent *keyEvent)
     }
 }
 
-void GlobalEventFilter::handleKeyRelease(QKeyEvent *keyEvent)
+void GlobalEventFilter::handleKeyRelease(int key)
 {
-    int key = keyEvent->key();
-
     if(__GlobelKeyLogINFO__Detail__)
         INFO_LOG << "handleKeyRelease: key=" << key << ", m_pressedKeys[" << key << "]=" << m_pressedKeys.value(key, false);
 
@@ -169,22 +252,35 @@ void GlobalEventFilter::handleKeyRelease(QKeyEvent *keyEvent)
         INFO_LOG << "handleKeyRelease: Cleared pressed state for key=" << key;
 }
 
+void GlobalEventFilter::emitCombo(const QString &comboName)
+{
+    // 已注册为全局热键的组合由 WM_HOTKEY 触发，Qt 路径这里跳过，避免重复
+    if (m_globalHotkeys.contains(comboName))
+        return;
+    emit keyCombinationTriggered(comboName);
+}
+
 void GlobalEventFilter::checkKeyCombinations()
 {
     // 检查 Shift + Delete
     if (m_pressedKeys.value(Qt::Key_Shift, false) &&
         m_pressedKeys.value(Qt::Key_Delete, false))
     {
-        //INFO_LOG << "Shift + Delete 组合键被按下";
-        emit keyCombinationTriggered("LShift+Delete");
+        emitCombo(QStringLiteral("LShift+Delete"));
     }
 
     // 检查 Ctrl + S
     if (m_pressedKeys.value(Qt::Key_Control, false) &&
         m_pressedKeys.value(Qt::Key_S, false))
     {
-        // INFO_LOG << "Ctrl + S 组合键被按下";
-        emit keyCombinationTriggered("Ctrl+S");
+        emitCombo(QStringLiteral("Ctrl+S"));
+    }
+
+    // Ctrl + Right（已注册为全局热键时在 emitCombo 里被跳过，走 WM_HOTKEY）
+    if(m_pressedKeys.value(Qt::Key_Right,false)&&
+       m_pressedKeys.value(Qt::Key_Control,false))
+    {
+        emitCombo(QStringLiteral("Ctrl+Right"));
     }
 
     // 检查 Ctrl + Alt + Delete
@@ -192,16 +288,14 @@ void GlobalEventFilter::checkKeyCombinations()
         m_pressedKeys.value(Qt::Key_Alt, false) &&
         m_pressedKeys.value(Qt::Key_Delete, false))
     {
-        // INFO_LOG << "Ctrl + Alt + Delete 组合键被按下";
-        emit keyCombinationTriggered("Ctrl+Alt+Delete");
+        emitCombo(QStringLiteral("Ctrl+Alt+Delete"));
     }
 
     // 检查 Alt + F4
     if (m_pressedKeys.value(Qt::Key_Alt, false) &&
         m_pressedKeys.value(Qt::Key_F4, false))
     {
-        // INFO_LOG << "Alt + F4 组合键被按下";
-        emit keyCombinationTriggered("Alt+F4");
+        emitCombo(QStringLiteral("Alt+F4"));
     }
 
     // 检查 Ctrl + Alt + Del (Windows 安全组合)
@@ -209,7 +303,6 @@ void GlobalEventFilter::checkKeyCombinations()
         m_pressedKeys.value(Qt::Key_Alt, false) &&
         m_pressedKeys.value(Qt::Key_Delete, false))
     {
-        // INFO_LOG << "Ctrl + Alt + Del 组合键被按下";
-        emit keyCombinationTriggered("Ctrl+Alt+Del");
+        emitCombo(QStringLiteral("Ctrl+Alt+Del"));
     }
 }

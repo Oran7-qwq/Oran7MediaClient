@@ -56,6 +56,9 @@ void Oran7ThemePrivate::initializeComponentPropertyHash()
         ADD_COMPONENT_PROPERTY(Oran7MusicPlaylistView);
         ADD_COMPONENT_PROPERTY(Oran7MusicPlayControls);
         ADD_COMPONENT_PROPERTY(Oran7MusicLyricsWindow);
+        ADD_COMPONENT_PROPERTY(Oran7VideoPlayer);
+        ADD_COMPONENT_PROPERTY(Oran7ScreenCapture);
+        ADD_COMPONENT_PROPERTY(Oran7MusicLyricsIsland);
     }
 }
 
@@ -682,16 +685,16 @@ void Oran7ThemePrivate::loadCurrentThemeProfile()
     /*! @note 加载用户主题覆盖 */
     QJsonObject userOverride = Oran7ThemeProfileManager::instance().loadThemeProfile(m_currentThemeProfile);
 
-    INFO_LOG << "loadCurrentThemeProfile: profile=" << m_currentThemeProfile << "userOverride.isEmpty()=" << userOverride.isEmpty();
+    //INFO_LOG << "loadCurrentThemeProfile: profile=" << m_currentThemeProfile << "userOverride.isEmpty()=" << userOverride.isEmpty();
 
     if (!userOverride.isEmpty()) {
-        INFO_LOG << "  userOverride keys:" << userOverride.keys();
+        //INFO_LOG << "  userOverride keys:" << userOverride.keys();
 
         /*! @note 单独处理 __component__，不直接合并到 m_indexJsonObject */
         QJsonObject componentOverrides;
         if (userOverride.contains("__component__")) {
             componentOverrides = userOverride["__component__"].toObject();
-            INFO_LOG << "  __component__ in userOverride:" << componentOverrides.keys();
+            //INFO_LOG << "  __component__ in userOverride:" << componentOverrides.keys();
             userOverride.remove("__component__");
         }
 
@@ -706,7 +709,7 @@ void Oran7ThemePrivate::loadCurrentThemeProfile()
             QString componentName = compIt.key();
             QJsonObject userCompObj = compIt.value().toObject();
 
-            INFO_LOG << "  Processing component override:" << componentName;
+            // INFO_LOG << "  Processing component override:" << componentName;
 
             /*! @note 获取用户主题中的 __style__ */
             QJsonObject __style__{};
@@ -715,15 +718,15 @@ void Oran7ThemePrivate::loadCurrentThemeProfile()
             }
 
             if (__style__.isEmpty()) {
-                INFO_LOG << "    No __style__ overrides found";
+                // INFO_LOG << "    No __style__ overrides found";
             }
 
             /*! @note 存储用户覆盖到 m_defaultTheme的installTokenMap，供 reloadCustomComponentTheme 使用 */
             if (!__style__.isEmpty()) {
                 for (auto It = __style__.constBegin(); It != __style__.constEnd(); ++It) {
                     m_defaultTheme[q].componentMap[componentName].installTokenMap[It.key()] = It->toVariant();
-                    INFO_LOG << "    Stored:" << It.key()<<","
-                             <<m_defaultTheme[q].componentMap[componentName].installTokenMap[It.key()] << "overrides for" << componentName;
+                    // INFO_LOG << "    Stored:" << It.key()<<","
+                             // <<m_defaultTheme[q].componentMap[componentName].installTokenMap[It.key()] << "overrides for" << componentName;
                 }
             }
 
@@ -736,15 +739,15 @@ void Oran7ThemePrivate::loadCurrentThemeProfile()
                 }
             }
             if(__vars__.isEmpty()){
-                INFO_LOG << "    No __vars__ overrides found";
+                // INFO_LOG << "    No __vars__ overrides found";
                 continue;
             }
             ///*! @note 存储用户覆盖到 m_defaultTheme的installTokenMap，供 reloadCustomComponentTheme 使用 */
             if(!__vars__.isEmpty()){
                 for(auto It = __vars__.constBegin(); It!=__vars__.constEnd(); It++){
                     m_defaultTheme[q].componentMap[componentName].installTokenMap[It.key()] = It->toVariant();
-                    INFO_LOG << "    Stored:" << It.key()<<","
-                             <<m_defaultTheme[q].componentMap[componentName].installTokenMap[It.key()] << "overrides for" << componentName;
+                    // INFO_LOG << "    Stored:" << It.key()<<","
+                    //          <<m_defaultTheme[q].componentMap[componentName].installTokenMap[It.key()] << "overrides for" << componentName;
                 }
             }
         }
@@ -834,7 +837,7 @@ void Oran7Theme::reloadTheme()
         QFile fsFile(fsPath);
         if (fsFile.open(QIODevice::ReadOnly)) {
             raw = fsFile.readAll();
-            INFO_LOG << "Oran7Theme: Loaded Index.json from filesystem:" << fsPath;
+            // INFO_LOG << "Oran7Theme: Loaded Index.json from filesystem:" << fsPath;
         }
     }
 

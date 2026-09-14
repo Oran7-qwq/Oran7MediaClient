@@ -158,6 +158,7 @@ Rectangle {
 
         anchors.left: parent.left
         anchors.right: parent.right
+
         color: "transparent"
 
 
@@ -183,6 +184,7 @@ Rectangle {
         //     id: leftTopMenuItem
         //     visible: !topBarRect.haideUI
         //     anchors.top: parent.top
+        //     anchors.topMargin: -5
         //     anchors.left: parent.left
         //     height: 70
         // }
@@ -308,8 +310,8 @@ Rectangle {
                 mainStackView.pageManager.navigateTo(BasicConfig.getUrl(BasicConfig.videoPlayerPage), "VideoPlayerPage");
                 mainStackView.upDateStack();
             }
-            function onPushMyFavoriteMusicStackInto_RightPageMainStackView() {
-                mainStackView.pageManager.navigateTo(BasicConfig.getUrl(BasicConfig.myFavoritePage), "MyFavoriteMusicPage");
+            function onPushSearchMusicStackInto_RightPageMainStackView() {
+                mainStackView.pageManager.navigateTo(BasicConfig.getUrl(BasicConfig.searchMusicPage), "SearchMusicPage");
                 BasicConfig.triggerLoad_localMusicList_Aniamtion(0);
                 mainStackView.upDateStack();
             }
@@ -344,8 +346,8 @@ Rectangle {
                     "VideoPlayerPage": function () {
                         BasicConfig.focusCurrent_SelectedMenuModel("VideoPlayerPage");
                     },
-                    "MyFavoriteMusicPage": function () {
-                        BasicConfig.focusCurrent_SelectedMenuModel("MyFavoriteMusicPage");
+                    "SearchMusicPage": function () {
+                        BasicConfig.focusCurrent_SelectedMenuModel("SearchMusicPage");
                     },
                     "LocalMusicPage": function () {
                         BasicConfig.focusCurrent_SelectedMenuModel("LocalMusicPage");
@@ -359,7 +361,7 @@ Rectangle {
                     pageMap[pageName]();
 
                 //Control BottomPage isVisible
-                if (pageMap[pageName] && (mainStackView.currentItem.pageName === "LocalMusicPage" || mainStackView.currentItem.pageName === "MyFavoriteMusicPage")) {
+                if (pageMap[pageName] && (mainStackView.currentItem.pageName === "LocalMusicPage" || mainStackView.currentItem.pageName === "SearchMusicPage")) {
                     if (bottomRectangle.visibleOpacity === 0) {
                         bottomRectangle.height = 80;
                         bottomRectangle.visibleOpacity = 1.0;
@@ -374,16 +376,17 @@ Rectangle {
         }
 
         /*=====传递Global ListModel 实例=====*/
-        property ListModel myFavoriteMusicListModel: ListModel {
-            id: myFavoriteMusicListModel
+        property ListModel myIntegratedMusicListModel: ListModel {
+            id: myIntegratedMusicListModel
         }
         property ListModel localMusicListModel: ListModel {
             id: localMusicListModel
         }
 
         Component.onCompleted: {
-            BasicConfig.myFavoriteMusicListModel = myFavoriteMusicListModel;
+            BasicConfig.myIntegratedMusicListModel = myIntegratedMusicListModel;
             BasicConfig.localMusicListModel = localMusicListModel;
+            BasicConfig.loadIntegratedMusicFromStore(); // 从 config.json 恢复"我整合的音乐"（照 LocalMusic 启动读顺序）
             start_gradientLayerColorAnimation = false;
         }
     }

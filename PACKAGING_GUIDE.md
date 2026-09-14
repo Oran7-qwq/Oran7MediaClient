@@ -5,7 +5,7 @@
 ## 前置条件
 
 - Windows 10/11 操作系统
-- Qt 6.7.2 (MinGW 64-bit)
+- Qt 6.7.3 (MinGW 64-bit)
 - 已完成 Release 版本构建
 - Git Bash 或类似命令行工具
 
@@ -20,10 +20,10 @@
 ls -la "C:/Users/funny/QtProject.doc/Oran7MediaClient"
 
 # 检查 Release 构建目录是否存在
-ls -la "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Desktop_Qt_6_7_2_MinGW_64_bit-Release"
+ls -la "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Desktop_Qt_6_7_3_MinGW_64_bit-Release"
 
 # 确认主程序存在
-ls -lh "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Desktop_Qt_6_7_2_MinGW_64_bit-Release/Oran7MediaClient.exe"
+ls -lh "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Desktop_Qt_6_7_3_MinGW_64_bit-Release/Oran7MediaClient.exe"
 ```
 
 ### 2. 创建发布目录
@@ -37,7 +37,7 @@ mkdir -p "C:/Users/funny/Desktop/Oran7MediaClient-Release"
 
 ```bash
 # 复制所有 Release 构建文件到发布目录
-cp -r "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Desktop_Qt_6_7_2_MinGW_64_bit-Release/"* "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
+cp -r "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Desktop_Qt_6_7_3_MinGW_64_bit-Release/"* "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
 ```
 
 ### 4. 运行 windeployqt 部署 Qt 依赖
@@ -47,10 +47,10 @@ cp -r "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Desktop_Qt_6_7_2_MinG
 cd "C:/Users/funny/Desktop/Oran7MediaClient-Release"
 
 # 运行 windeployqt 自动部署 Qt 依赖
-/d/Qt/6.7.2/mingw_64/bin/windeployqt Oran7MediaClient.exe
+/d/Qt/6.7.3/mingw_64/bin/windeployqt Oran7MediaClient.exe
 
 # 如果需要更完整的部署，可以指定 QML 源目录
-/d/Qt/6.7.2/mingw_64/bin/windeployqt --qmldir "C:/Users/funny/QtProject.doc/Oran7MediaClient/src/qml" --release --no-translations Oran7MediaClient.exe
+/d/Qt/6.7.3/mingw_64/bin/windeployqt --qmldir "C:/Users/funny/QtProject.doc/Oran7MediaClient/src/qml" --release --no-translations Oran7MediaClient.exe
 ```
 
 ### 5. 清理临时构建文件
@@ -89,12 +89,12 @@ cp -r "C:/Users/funny/QtProject.doc/Oran7MediaClient/shaders" "C:/Users/funny/De
 
 ```bash
 # 查找 MinGW 运行时库
-find /d/Qt/6.7.2/mingw_64/bin -name "libgcc*.dll" -o -name "libstdc++*.dll" -o -name "libwinpthread*.dll"
+find /d/Qt/6.7.3/mingw_64/bin -name "libgcc*.dll" -o -name "libstdc++*.dll" -o -name "libwinpthread*.dll"
 
 # 复制 MinGW 运行时库（通常包括以下三个文件）
-cp /d/Qt/6.7.2/mingw_64/bin/libgcc_s_seh-1.dll "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
-cp /d/Qt/6.7.2/mingw_64/bin/libstdc++-6.dll "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
-cp /d/Qt/6.7.2/mingw_64/bin/libwinpthread-1.dll "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
+cp /d/Qt/6.7.3/mingw_64/bin/libgcc_s_seh-1.dll "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
+cp /d/Qt/6.7.3/mingw_64/bin/libstdc++-6.dll "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
+cp /d/Qt/6.7.3/mingw_64/bin/libwinpthread-1.dll "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
 ```
 
 ### 8. 创建 qt.conf 配置文件
@@ -114,7 +114,7 @@ EOF
 
 ```bash
 # 复制 Oran7UI QML 插件目录
-cp -r "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Desktop_Qt_6_7_2_MinGW_64_bit-Release/Oran7UI" "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
+cp -r "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Desktop_Qt_6_7_3_MinGW_64_bit-Release/Oran7UI" "C:/Users/funny/Desktop/Oran7MediaClient-Release/"
 ```
 
 验证插件是否正确复制：
@@ -162,7 +162,7 @@ Oran7MediaClient - Release 版本
 
 版本信息:
 - 版本: 0.7
-- Qt 版本: 6.7.2
+- Qt 版本: 6.7.3
 - 编译器: MinGW 64-bit
 EOF
 ```
@@ -197,9 +197,9 @@ cd "C:/Users/funny/Desktop/Oran7MediaClient-Release"
 # 使用方法: bash package_release.sh
 
 PROJECT_DIR="C:/Users/funny/QtProject.doc/Oran7MediaClient"
-BUILD_DIR="$PROJECT_DIR/build/Desktop_Qt_6_7_2_MinGW_64_bit-Release"
+BUILD_DIR="$PROJECT_DIR/build/Desktop_Qt_6_7_3_MinGW_64_bit-Release"
 RELEASE_DIR="C:/Users/funny/Desktop/Oran7MediaClient-Release"
-QT_DIR="/d/Qt/6.7.2/mingw_64"
+QT_DIR="/d/Qt/6.7.3/mingw_64"
 
 echo "开始打包 Oran7MediaClient..."
 

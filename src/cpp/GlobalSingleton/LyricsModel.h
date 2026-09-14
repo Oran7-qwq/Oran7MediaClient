@@ -9,6 +9,7 @@ class LyricsModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(int currentLine READ currentLine NOTIFY currentLineChanged)
+    Q_PROPERTY(QString currentText READ currentText NOTIFY currentLineChanged)
     Q_PROPERTY(bool hasLyrics READ hasLyrics NOTIFY hasLyricsChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
@@ -38,6 +39,9 @@ public:
     int currentLine() const { return m_currentLine; }
     bool hasLyrics() const { return m_parser.hasLyrics(); }
     int count() const { return m_parser.lines().size(); }
+
+    /*! @brief 当前高亮行的歌词文本（无歌词或越界返回空串）*/
+    QString currentText() const;
 
 signals:
     void currentLineChanged();

@@ -40,7 +40,8 @@ public:
 
     //---<最近的一次使用的最后一个文件管理功能>---//
     QString getLastUsedFile() const;
-    void setLastUsedFile(const QString& filePath);
+    void setLastUsedFile(const QString& filePath, bool isVip = false);
+    bool getLastUsedFileIsVip() const;
     void clearLastUsedFile();
 
     //---<本地缓存排序记录(sort_type)>---//

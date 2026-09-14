@@ -12,6 +12,13 @@ int LyricsModel::rowCount(const QModelIndex &parent) const
     return m_parser.lines().size();
 }
 
+QString LyricsModel::currentText() const
+{
+    if (m_currentLine >= 0 && m_currentLine < m_parser.lines().size())
+        return m_parser.lines().at(m_currentLine).text;
+    return QString();
+}
+
 QVariant LyricsModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_parser.lines().size())

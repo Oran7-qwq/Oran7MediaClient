@@ -1,4 +1,4 @@
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls
 import QtQuick.Dialogs
 import Qt5Compat.GraphicalEffects
@@ -19,10 +19,58 @@ Item {
     property bool showMultiSelect: true
     property bool allowDragReorder: true
     property bool showDuration: true
+    // 是否显示「喜欢」列与每行的心形收藏按钮（搜索页开启）
+    property bool showLoveButton: false
+    // 是否显示「整合」列与每行的整合按钮（"我整合的音乐"合集；仅在 SearchMusicStack / LocalMusicStack 开启）
+    property bool showIntegrateButton: false
+    // 空列表占位提示：与 pageListModels 逐页对齐，每页一个文案；空字符串表示该页不显示提示
+    property var pageEmptyHintTexts: []
+    // 当前页签的空列表占位文案（当前页模型为空且文案非空时，在列表中间显示渐变大字）
+    readonly property string currentEmptyHintText: root.pageEmptyHintTexts && root.currentPageIndex < root.pageEmptyHintTexts.length
+            ? (root.pageEmptyHintTexts[root.currentPageIndex] || "") : ""
 
     // ===== 模型数据 =====
     property var titleModel: null
     property ListModel listModel: null
+
+    // 多页面模型：数组与 titleModel 索引对齐，切换页签(focIndex)时 listModel 跟随
+    // 未设置(默认 null)时保持旧行为，listModel 仍可由外部直接绑定
+    property var pageListModels: null
+    readonly property int currentPageIndex: titleRepeater.focIndex
+
+    // 初始化：落到第一个页签对应的模型（pageListModels 为空时保持外部 listModel 绑定不动）
+    Component.onCompleted: {
+        if (root.pageListModels && root.pageListModels.length > 0 && root.pageListModels[0])
+            root.listModel = root.pageListModels[0];
+    }
+
+    // 把播放/选中索引同步到当前播放歌曲在本列表的位置：
+    // 包含当前歌曲则聚焦正确行，否则重置 -1（避免残留旧状态）
+    function syncIndicesToCurrentMedia() {
+        var idx = root.indexForCurrentPlaying();
+        playlistFlickable.itemSelected_index = idx;
+        playlistFlickable.playingIndex = BasicConfig.isPlaying ? idx : -1;
+    }
+    // 把当前选中/播放项滚动到列表可见区域：优先居中展示；若上方或下方元素不足
+    // （靠近列表首尾）则自动贴合可见区域边缘，仅保证该项可见
+    function scrollToCurrentIndex() {
+        var idx = playlistFlickable.itemSelected_index >= 0 ? playlistFlickable.itemSelected_index : playlistFlickable.playingIndex;
+        if (idx < 0 || !root.listModel || idx >= root.listModel.count)
+            return;
+        playlistFlickable.positionViewAtIndex(idx, ListView.Center);
+    }
+    // 全局播放歌曲变化时同步
+    Connections {
+        target: BasicConfig
+        function onCurrentMediaFilePathChanged() { root.syncIndicesToCurrentMedia(); }
+    }
+    // 整合模型增删（取消整合/多选删除/新增）后同步：
+    // 被移除的恰好是当前播放/选中行时，把索引重置为 -1
+    Connections {
+        target: BasicConfig.myIntegratedMusicListModel ? BasicConfig.myIntegratedMusicListModel : null
+        function onCountChanged() { root.syncIndicesToCurrentMedia(); }
+    }
+
     property alias curPlayingIndex: playlistFlickable.playingIndex
     property alias curSelectingIndex: playlistFlickable.itemSelected_index
     property alias curHoveredIndex: playlistFlickable.itemHovered_index
@@ -75,6 +123,8 @@ Item {
     signal itemDoubleClicked(int index)
     signal itemAdded(var files)
     signal reorderCompleted(var newOrder)
+    signal itemLoved(int index)
+    signal itemIntegrated(int index)
 
     signal itemSelectAll
     signal itemClearSelectAll
@@ -156,9 +206,41 @@ Item {
         return -1;
     }
 
+    // 切换到指定页签（搜索结果=0 / 网易云中我喜欢的音乐=1 等）
+    function switchToPage(index) {
+        if (titleRepeater && index >= 0 && root.titleModel && index < root.titleModel.length)
+            titleRepeater.focIndex = index;
+    }
+
+    // 根据网易云 songId 反查 model index（网络歌 filepath 是临时地址会变，songId 是稳定标识）
+    function indexForSongId(songId) {
+        if (!root.listModel || !songId || songId <= 0) return -1;
+        for (var k = 0; k < root.listModel.count; k++) {
+            if (root.listModel.get(k).songId === songId) return k;
+        }
+        return -1;
+    }
+
+    // 定位当前播放歌曲在列表的索引：优先按 songId（网络/云端歌稳定标识），
+    // 其次按 filepath（本地歌；必须非空，避免空路径误匹配所有云端项）
+    function indexForCurrentPlaying() {
+        if (Client.currentSongId() > 0) {
+            var sidx = root.indexForSongId(Client.currentSongId());
+            if (sidx >= 0)
+                return sidx;
+        }
+        var fp = BasicConfig.currentMediaFilePath;
+        if (fp && fp.length > 0) {
+            var fpidx = root.indexForFilepath(fp);
+            if (fpidx >= 0)
+                return fpidx;
+        }
+        return -1;
+    }
+
     // 搜索关闭时恢复播放/选中索引
     onSearchActiveChanged: {
-        if (!root.searchActive) {
+        if (!root.searchActive){
             if (_savedPlayingPath !== "")
                 playlistFlickable.playingIndex = indexForFilepath(_savedPlayingPath);
             if (_savedSelectedPath !== "")
@@ -197,6 +279,20 @@ Item {
                     model: root.titleModel ? root.titleModel : ["列表"]
                     anchors.fill: parent
                     property int focIndex: 0
+                    // 页签切换：切到对应页签时把 listModel 换成该页的模型，
+                    // 并同步播放/选中索引（当前播放歌曲在该页签则聚焦正确索引，否则重置 -1）
+                    onFocIndexChanged: {
+                        if (root.pageListModels && root.pageListModels.length > 0
+                                && focIndex >= 0 && focIndex < root.pageListModels.length) {
+                            root.listModel = root.pageListModels[focIndex];
+                            var idx = root.indexForCurrentPlaying();
+                            playlistFlickable.itemSelected_index = idx;
+                            playlistFlickable.playingIndex = BasicConfig.isPlaying ? idx : -1;
+                            root.isMultiSelected = false;
+                            // 切页签后把当前选中/播放项滚动到可见区域最顶部
+                            root.scrollToCurrentIndex();
+                        }
+                    }
                     delegate: Label {
                         text: modelData
                         font.family: "微软雅黑"
@@ -333,9 +429,12 @@ Item {
                 id: multiSelectRect
                 width: 40
                 height: width
+                anchors.top: parent.top
+                anchors.topMargin: 4
                 anchors.right: parent.right
                 anchors.rightMargin: 30
-                anchors.verticalCenter: searchRect.verticalCenter
+                // 盖过 dragController(z=20) 等，保证始终可点击
+                z: 100
 
                 color: "transparent"
                 visible: showMultiSelect
@@ -390,23 +489,29 @@ Item {
                 onCheckedChanged: {
                     if (!root.listModel)
                         return;
-                    if (checked) {
-                        for (var i = 0; i < root.listModel.count; i++) {
+                    if (checked)
+                    {
+                        for (var i = 0; i < root.listModel.count; i++)
+                        {
                             if (root.searchActive) {
                                 if (root.matchesSearch(root.listModel.get(i).music_name,
                                                        root.listModel.get(i).music_artist,
                                                        root.listModel.get(i).music_album))
                                     root.listModel.setProperty(i, "isSelected", true);
-                            } else {
+                            }
+                            else
+                            {
                                 root.listModel.setProperty(i, "isSelected", true);
                             }
                         }
-                    } else {
+                    }
+                    else
+                    {
                         for (var j = 0; j < root.listModel.count; j++)
                             root.listModel.setProperty(j, "isSelected", false);
                     }
                 }
-
+                //全选
                 Image {
                     id: selectAllIcon
                     sourceSize.width: 30
@@ -456,6 +561,82 @@ Item {
                     font.bold: false
                 }
 
+                //批量整合按钮：把多选选中的元素成批加入"我整合的音乐"（哈希查重 + 分片异步插入）
+                // 位置对齐表头"整合"列
+                Image{
+                    id: batchIntegrateBtn
+                    width: 32
+                    height: 32
+                    sourceSize: Qt.size(512,512)
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: root.albumTopLabelLeftMargin - 46 - (root.showLoveButton ? 42 : 0) - 6
+                    // 实心=选中元素均已整合（点击移出）；空心=存在未整合（点击全部加入）
+                    source: batchIntegrateBtn.filled ? "qrc:/image/ep_collection-tag.-no-middle-transparent.png" :
+                                                   "qrc:/image/ep_collection-tag.png"
+                    visible: root.showIntegrateButton
+
+                    mipmap: true
+                    antialiasing: true
+
+                    // 空心=点击将整合所有选中项；实心=点击将取消整合所有选中项。
+                    // 状态仅随点击切换，不受勾选/全选/模型变化等任何其它行为影响
+                    property bool hovered: false
+                    property bool filled: false
+                    layer.enabled: true
+                    layer.effect:ColorOverlay{
+                        source:batchIntegrateBtn
+                        color:batchIntegrateBtn.hovered ? Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"] :
+                                                Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                    }
+                    HoverHandler{
+                        acceptedDevices: PointerDevice.Mouse
+                        onHoveredChanged: {
+                            parent.hovered = hovered
+                            dragController.cursorShape = dragController.cursorShape=  hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        }
+                    }
+                    MouseArea{
+                        anchors.fill: parent
+                        onClicked: {
+                            if (!root.listModel) return;
+                            // 收集多选选中的元素（含 songId/url/filepath，source 按 songId 区分来源）
+                            var items = [];
+                            for (var i = 0; i < root.listModel.count; i++) {
+                                var m = root.listModel.get(i);
+                                if (m.isSelected === true) {
+                                    items.push({
+                                        icon: m.icon,
+                                        music_name: m.music_name,
+                                        music_artist: m.music_artist,
+                                        music_album: m.music_album,
+                                        timesize: m.timesize,
+                                        url: m.url || "",
+                                        filepath: m.filepath,
+                                        songId: m.songId || 0,
+                                        isVip: m.isVip === true,
+                                        source: (m.songId > 0) ? "netease" : "local"
+                                    });
+                                }
+                            }
+                            if (items.length === 0) return;
+                            if (batchIntegrateBtn.filled) {
+                                // 实心 → 取消整合所有选中项
+                                for (var j = 0; j < items.length; j++) {
+                                    var it = items[j];
+                                    BasicConfig.removeIntegratedMusic(it.songId || 0, it.url || "", it.filepath);
+                                }
+                            } else {
+                                // 空心 → 整合所有选中项
+                                BasicConfig.batchAddIntegratedItems(items);
+                            }
+                            // 状态仅随点击在空心/实心间切换
+                            batchIntegrateBtn.filled = !batchIntegrateBtn.filled;
+                        }
+                    }
+                }
+
+                //删除Selected  - items
                 Image{
                     id:deleteBtn
                     width: 37
@@ -484,21 +665,25 @@ Item {
                         anchors.fill: parent
                         onClicked: {
                             if (!root.listModel) return;
-                            var selectedPaths = [];
+                            // 收集选中项（含 filepath + songId，云端/VIP 歌 filepath 为空，需 songId 精确移除）
+                            var selectedItems = [];
                             var curPlayingFilePath = BasicConfig.currentMediaFilePath
                             var deletedPlaying = false;
                             for (var i = 0; i < root.listModel.count; i++)
                             {
                                 if (root.listModel.get(i).isSelected === true) {
-                                    selectedPaths.push(root.listModel.get(i).filepath);
+                                    selectedItems.push({
+                                        filepath: root.listModel.get(i).filepath,
+                                        songId: root.listModel.get(i).songId
+                                    });
                                     if (String(curPlayingFilePath) === String(root.listModel.get(i).filepath))
                                         deletedPlaying = true;
                                 }
                             }
-                            if (selectedPaths.length > 0)
+                            if (selectedItems.length > 0)
                             {
                                 // C++ 端内部会同步停止播放器再删文件，无需手动 sigStop()
-                                root.removeItemOfFiles(selectedPaths);
+                                root.removeItemOfFiles(selectedItems);
                                 // 从后往前移除，避免索引偏移
                                 for (var j = root.listModel.count - 1; j >= 0; j--)
                                 {
@@ -567,6 +752,7 @@ Item {
 
                     text: " # "
                     font.family: "微软雅黑"
+                    font.bold: true
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                     //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
@@ -581,6 +767,7 @@ Item {
                     anchors.leftMargin: root.titleTopLabelLeftMargin
                     text: "   标题"
                     font.family: "微软雅黑"
+                    font.bold: true
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                     //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
@@ -604,6 +791,36 @@ Item {
                         }
                     }
                 }
+                // 整合（我整合的音乐合集）—— 插在「喜欢」左侧
+                Label {
+                    height: parent.height
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: " 整合"
+                    width: 40
+                    anchors.left: parent.left
+                    anchors.leftMargin: root.albumTopLabelLeftMargin - 60 - (root.showLoveButton ? 42 : 0)
+                    visible: root.showIntegrateButton
+                    font.family: "微软雅黑"
+                    font.bold: true
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                    Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
+                }
+                // 喜欢（收藏）—— 插在「标题」和「专辑」之间，靠近右侧专辑
+                Label {
+                    height: parent.height
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: " 喜欢"
+                    width: 40
+                    anchors.left: parent.left
+                    anchors.leftMargin: root.albumTopLabelLeftMargin - 52
+                    visible: root.showLoveButton
+                    font.family: "微软雅黑"
+                    font.bold: true
+                    font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
+                    color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                    Behavior on color{PropertyAnimation{duration: Oran7Theme.Primary.durationMid}}
+                }
                 // 专辑
                 Label {
                     id: localAlbumTopLabel
@@ -615,6 +832,7 @@ Item {
                     anchors.leftMargin: root.albumTopLabelLeftMargin
 
                     font.family: "微软雅黑"
+                    font.bold: true
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                     //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
@@ -665,6 +883,7 @@ Item {
                     anchors.leftMargin: root.timeSizeTopLabelLeftMargin
 
                     font.family: "微软雅黑"
+                    font.bold: true
                     font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
                     //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                     color: Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
@@ -782,7 +1001,7 @@ Item {
                 }
 
                 property string musicTagIconImageSource: "qrc:/image/Oran7.jpg"
-                property string musicTagName: "Oran7"
+                property string musicTagName: "Oran7QwQ"
                 property string musicTagArtist: "Oran柒"
 
                 Oran7RoundedImage{
@@ -1253,24 +1472,41 @@ Item {
                     insertIdx = toIdx;
                 }
 
-                // move 前记录当前播放/选中项的 filepath，move 后按 filepath 重新定位
+                // move 前记录当前播放/选中项的定位键：songId（网易云/云端歌稳定标识）优先，filepath 兜底。
+                // 注意："网易云中我喜欢的音乐"等云端列表所有项 filepath 均为空，必须按 songId 定位
+                var playingId = -1;
+                var selectedId = -1;
                 var playingPath = "";
                 var selectedPath = "";
-                if (playlistFlickable.playingIndex >= 0 && playlistFlickable.playingIndex < root.listModel.count)
-                    playingPath = root.listModel.get(playlistFlickable.playingIndex).filepath;
-                if (playlistFlickable.itemSelected_index >= 0 && playlistFlickable.itemSelected_index < root.listModel.count)
-                    selectedPath = root.listModel.get(playlistFlickable.itemSelected_index).filepath;
+                if (playlistFlickable.playingIndex >= 0 && playlistFlickable.playingIndex < root.listModel.count) {
+                    var pItem = root.listModel.get(playlistFlickable.playingIndex);
+                    playingId = (pItem.songId || 0) > 0 ? pItem.songId : -1;
+                    playingPath = pItem.filepath;
+                }
+                if (playlistFlickable.itemSelected_index >= 0 && playlistFlickable.itemSelected_index < root.listModel.count) {
+                    var sItem = root.listModel.get(playlistFlickable.itemSelected_index);
+                    selectedId = (sItem.songId || 0) > 0 ? sItem.songId : -1;
+                    selectedPath = sItem.filepath;
+                }
 
                 // ListModel.move(from, to, 1) — 原地移动单条
                 root.listModel.move(fromIdx, insertIdx, 1);
 
-                // move 后根据 filepath 找到新索引并更新
+                // move 后重新定位：优先按 songId，其次 filepath（本地歌 filepath 非空）
                 var newPlayingIdx = -1;
                 var newSelectedIdx = -1;
                 for (var k = 0; k < root.listModel.count; k++) {
-                    var fp = root.listModel.get(k).filepath;
-                    if (fp === playingPath)  newPlayingIdx = k;
-                    if (fp === selectedPath) newSelectedIdx = k;
+                    var item = root.listModel.get(k);
+                    if (playingId > 0) {
+                        if (item.songId === playingId) newPlayingIdx = k;
+                    } else if (playingPath && playingPath.length > 0 && item.filepath === playingPath) {
+                        newPlayingIdx = k;
+                    }
+                    if (selectedId > 0) {
+                        if (item.songId === selectedId) newSelectedIdx = k;
+                    } else if (selectedPath && selectedPath.length > 0 && item.filepath === selectedPath) {
+                        newSelectedIdx = k;
+                    }
                 }
                 playlistFlickable.playingIndex = newPlayingIdx;
                 playlistFlickable.itemSelected_index = newSelectedIdx;
@@ -1309,7 +1545,7 @@ Item {
                 color: "white"
                 radius: addNewFileRectangle.initWidth / 2
 
-                visible: root.isMultiSelected ? false : true
+                visible: root.showAddButton && (root.isMultiSelected ? false : true)
 
                 layer.enabled: true
                 layer.effect: DropShadow {
@@ -1503,6 +1739,45 @@ Item {
                             property string itemAlbum: model.music_album
                             property string itemDuration: model.timesize
                             property string itemFilepath: model.filepath
+                            property bool itemIsVip: model.isVip === true
+                            property var itemSongId: model.songId ? model.songId : 0
+                            // 是否已收藏：优先用 model.isLoved（云端"我喜欢的音乐"默认 true 反映网易云喜欢状态），
+                            // 没有该字段时回退到按 url/filepath 扫描本地收藏模型
+                            property bool itemIsLoved: model.isLoved !== undefined ? model.isLoved === true : isRowLoved()
+                            function isRowLoved() {
+                                var fm = BasicConfig.myIntegratedMusicListModel;
+                                // 用已绑定的 itemFilepath，避免在函数体内读 model 解析不可靠
+                                var path = itemFilepath;
+                                if (!fm || !path) return false;
+                                for (var i = 0; i < fm.count; i++) {
+                                    var fav = fm.get(i);
+                                    // 要求 url/filepath 非空再比较，避免 undefined===undefined 误判
+                                    if ((fav.url && fav.url === path) ||
+                                        (fav.filepath && fav.filepath === path)) return true;
+                                }
+                                return false;
+                            }
+                            // 是否已整合到"我整合的音乐"：按 songId/url/filepath 扫描全局整合模型。
+                            // 绑定表达式引用 .count 建立依赖 → 模型增删时自动重新求值，无需手动刷新
+                            property bool itemIsIntegrated: root.showIntegrateButton
+                                    && BasicConfig.myIntegratedMusicListModel
+                                    && BasicConfig.myIntegratedMusicListModel.count >= 0
+                                    && isRowIntegrated()
+                            function isRowIntegrated() {
+                                var im = BasicConfig.myIntegratedMusicListModel;
+                                if (!im) return false;
+                                var sid = itemSongId;
+                                var u = itemUrl;
+                                var p = itemFilepath;
+                                for (var i = 0; i < im.count; i++) {
+                                    var m = im.get(i);
+                                    if (sid > 0 && m.songId === sid) return true;
+                                    if (u && u.length > 0 && m.url === u) return true;
+                                    if (p && p.length > 0 && m.filepath === p) return true;
+                                }
+                                return false;
+                            }
+                            property string itemUrl: model.url ? model.url : ""
                             property bool needsAnimateIn: model.needsAnimateIn === true
 
                             property bool itemIsSelected: model.index === playlistFlickable.itemSelected_index //bind
@@ -1544,7 +1819,10 @@ Item {
                             Connections {
                                 target: root
                                 function onAsk_dir_of_item_index(file_path) {
-                                    if (playlistItem.itemFilepath === file_path) {
+                                    // 网络歌 filepath 是临时地址、云端歌未解析音源时 filepath 为空，
+                                    // 空 file_path 不能用 filepath 匹配（会误匹配所有空路径项），只按 songId 定位当前播放行
+                                    if ((file_path && file_path.length > 0 && playlistItem.itemFilepath === file_path)
+                                        || (Client.currentSongId() > 0 && playlistItem.itemSongId === Client.currentSongId())) {
                                         root.reponse_dir_of_item_index(playlistItem.itemIndex);
                                     }
                                 }
@@ -1698,12 +1976,26 @@ Item {
                                                                                     Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize-7
                                         //Behavior on font.pixelSize{NumberAnimation{duration: Oran7Theme.Primary.durationMid}}
                                         Label {
-                                            id: artistLabel
-                                            text: playlistItem.itemArtist
+                                            id: vipLabel
+                                            text: "[VIP]"
+                                            visible: playlistItem.itemIsVip
                                             anchors.left: parent.right
                                             anchors.leftMargin: 4
                                             anchors.bottom: parent.bottom
-                                            width: playlistFlickable.titleWidth - typeRect.width - coverImage.width - 7
+                                            color: "#ff2d2d"
+                                            font.family: "微软雅黑"
+                                            font.bold: true
+                                            //font.italic: true
+                                            font.pixelSize: Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5 < 12 ? 12 :
+                                                                                    Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize - 5
+                                        }
+                                        Label {
+                                            id: artistLabel
+                                            text: playlistItem.itemArtist
+                                            anchors.left: vipLabel.visible ? vipLabel.right : parent.right
+                                            anchors.leftMargin: 4
+                                            anchors.bottom: parent.bottom
+                                            width: playlistFlickable.titleWidth - typeRect.width - coverImage.width - 7 - (playlistItem.itemIsVip ? vipLabel.implicitWidth + 4 : 0) - (root.showLoveButton ? 50 : 0) - (root.showIntegrateButton ? (root.showLoveButton ? 42 : 50) : 0)
                                             clip: true
                                             font.family: "微软雅黑"
                                             font.bold: true
@@ -1772,11 +2064,13 @@ Item {
                                                                      Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
                                 }
                             }
-                            // 鼠标交互
+                            //悬停itemHovered_index
+                            // 只在进入(hovered=true)时设置；离开时不写，避免快速滑出时残留导致 waveBarChart 被压住。
+                            // 归 -1 由 playlistHoverHandler（离开整个列表）和 onSearchActiveChanged 负责。
                             HoverHandler{
                                 acceptedDevices: PointerDevice.Mouse
                                 onHoveredChanged: {
-                                    if (!root.isMultiSelected) {
+                                    if (hovered && !root.isMultiSelected) {
                                         playlistFlickable.itemHovered_index = playlistItem.itemIndex;
                                     }
                                 }
@@ -1817,6 +2111,97 @@ Item {
                                 //         playlistFlickable.itemHovered_index = playlistItem.itemIndex;
                                 //     }
                                 // }
+                            }
+
+                            // 整合按钮（"我整合的音乐"合集；未整合/已整合两态图标，点击交给页面处理）
+                            Image {
+                                id: integrateImage
+                                anchors.left: parent.left
+                                anchors.leftMargin: playlistFlickable.albumLeftMargin - 60  - (root.showLoveButton ? 42 : 0)
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 30
+                                height: 30
+source: playlistItem.itemIsIntegrated ? "qrc:/image/ep_collection-tag.-no-middle-transparent.png" :
+                                        "qrc:/image/ep_collection-tag.png"
+                                visible: root.showIntegrateButton
+                                smooth: true        // 平滑缩放
+                                mipmap: true        // mipmap 预过滤：大图小尺寸显示不再锯齿
+                                antialiasing: true  // 缩放时边缘抗锯齿
+
+                                property bool isPressed: false
+                                scale: isPressed ? 0.95 : 1.0
+
+                                layer.enabled: true
+                                layer.effect: ColorOverlay {
+                                    source: integrateImage
+                                    // hover 高亮（与播放/暂停图标一致），取消 hover 恢复原色
+                                    color: integrateHoverHandler.hovered ? Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"] :
+                                                                          Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        root.itemIntegrated(playlistItem.itemIndex)
+                                    }
+                                    onPressed: parent.isPressed = true
+                                    onReleased: parent.isPressed = false
+                                }
+                                // hover 高亮处理
+                                HoverHandler {
+                                    id: integrateHoverHandler
+                                    enabled: !root.isMultiSelected
+                                    acceptedDevices: PointerDevice.Mouse
+                                    onHoveredChanged: {
+                                        dragController.cursorShape = hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    }
+                                }
+                            }
+
+                            // 喜欢（收藏）按钮
+                            Image {
+                                id: loveImage
+                                anchors.left: parent.left
+                                anchors.leftMargin: playlistFlickable.albumLeftMargin - 50
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 26
+                                height: 26
+                                source: playlistItem.itemIsLoved ? "qrc:/image/love_NoMiddleTransparent.png" : "qrc:/image/love.png"
+                                visible: root.showLoveButton
+                                smooth: true        // 平滑缩放
+                                mipmap: true        // mipmap 预过滤：大图小尺寸显示不再锯齿
+                                antialiasing: true  // 缩放时边缘抗锯齿
+
+                                property bool isPressed: false
+                                scale: isPressed ? 0.95 : 1.0
+
+                                layer.enabled: true
+                                layer.effect: ColorOverlay {
+                                    source: loveImage
+                                    // hover 高亮（与播放/暂停图标一致），取消 hover 恢复原色
+                                    color: loveHoverHandler.hovered ? Oran7Theme.Oran7MusicPlaylistView["textColorBase-4"] :
+                                                                      Oran7Theme.Oran7MusicPlaylistView["textColorBase-6"]
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        root.itemLoved(playlistItem.itemIndex)
+                                    }
+                                    onPressed: parent.isPressed = true
+                                    onReleased: parent.isPressed = false
+                                }
+                                // hover 高亮处理
+                                HoverHandler {
+                                    id: loveHoverHandler
+                                    enabled: !root.isMultiSelected
+                                    acceptedDevices: PointerDevice.Mouse
+                                    onHoveredChanged: {
+                                        dragController.cursorShape = hovered ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    }
+                                }
                             }
 
                             function formatDuration(seconds) {
@@ -1881,6 +2266,37 @@ Item {
                 onCanceled: {
                     pressedOnDragHandle = false;
                     container.endDrag(false);
+                }
+            }
+
+            // ===== 空列表占位提示：当前页签模型为空时，在列表中间显示渐变大字（内容由 pageEmptyHintTexts 提供）=====
+            Item {
+                id: emptyHintArea
+                visible: root.currentEmptyHintText.length > 0
+                        && root.listModel && root.listModel.count === 0
+                        && !root.isMultiSelected
+                anchors.horizontalCenter: playlistFlickable.horizontalCenter
+                anchors.verticalCenter: playlistFlickable.verticalCenter
+                z: 5
+
+                Oran7GradientMask {
+                    anchors.centerIn: parent
+                    width: emptyHintLabel.implicitWidth
+                    height: emptyHintLabel.implicitHeight
+                    gradientColorIndex: 0
+                    dynamicGradient: true
+                    gradientMaskEnabled: true
+                    transitionDuration: 1000
+                    dynamicInterval: 1000
+
+                    Label {
+                        id: emptyHintLabel
+                        text: root.currentEmptyHintText
+                        font.family: "微软雅黑"
+                        font.bold: false
+                        font.pixelSize: 20
+                        color: "white"
+                    }
                 }
             }
         }

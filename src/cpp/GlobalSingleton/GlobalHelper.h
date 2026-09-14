@@ -18,10 +18,14 @@ enum ERROR_CODE
     ErrorFileInvalid
 };
 
+using ErrorCallback = std::function<void(const std::string& msg)>;
+
 //==================<Self define logInfo Out>=================//
 #pragma once
 #include <QDebug>
 #include <QDateTime>
+
+#include "Oran7Async.h"
 
 class Logger
 {
@@ -42,7 +46,8 @@ public:
            bool showDetail = false,
            bool showData = true,
            bool showThreadId = false)
-        : m_debug(levelToQtType(level))
+        : m_level(level)
+        , m_debug(&m_buf)   // 先格式化进 QString，析构时再经 Oran7Async 后台输出
     {
         m_debug.noquote().nospace();
 
@@ -77,7 +82,29 @@ public:
         return *this;
     }
 
-    ~Logger() = default;
+    ~Logger()
+    {
+        // 通过 Oran7Async::runDetached 在后台线程输出（无 QObject 父子关系，从任意线程调用都线程安全），
+        // 避免控制台 I/O 阻塞主线程
+        const QString line = m_buf;
+        if (line.trimmed().isEmpty())
+            return;
+
+        if (!Oran7Async::isShuttingDown())
+        {
+            //Async
+            Oran7Async::runDetached([line, type = levelToQtType(m_level)]() {
+                QDebug dbg(type);
+                dbg.noquote().nospace() << line;
+            });
+        }
+        else
+        {
+            //Sync
+            QDebug dbg(levelToQtType(m_level));
+            dbg.noquote().nospace() << line;
+        }
+    }
 
 private:
     static QtMsgType levelToQtType(Level level)
@@ -116,6 +143,8 @@ private:
     }
 
 private:
+    Level m_level = Level::Info;
+    QString m_buf;
     QDebug m_debug;
 };
 
@@ -183,6 +212,7 @@ public:
     QString decodeDevice;
     QString renderDevice;
     QString fillModeName;
+    QString sourceTag;      // "player" / "screen"，区分来源
 };
 
 //============= tools function ==============//
@@ -228,6 +258,7 @@ static QVariantMap Oran7VideoInfo_To_QVariantMap(const Oran7VideoInfo &i)
             {"decodeDevice", i.decodeDevice},
             {"renderDevice", i.renderDevice},
             {"fillModeName", i.fillModeName},
+            {"sourceTag",    i.sourceTag},
     };
 }
 

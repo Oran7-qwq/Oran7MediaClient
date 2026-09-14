@@ -1,10 +1,10 @@
 #include "oran7mediaplayer.h"
+#include "Oran7FFplayerCore.h"      // 前向声明后需在此补齐 Oran7FFplayerCore 完整定义
 
 #include "ffmsg.h"
 #include "FFMsgQueue.h"
 #include "GlobalHelper.h"
 
-#include<iostream>
 #include<string.h>
 
 /*Oran7MediaPlayer   Native层播放器总管理类*/
@@ -30,10 +30,10 @@ int Oran7MediaPlayer::oran7mp_create(std::function<int (void *)> msg_loop)
         INFO_LOG<<"Oran7MediaPlayer::oran7mp_create:ffplayer still exist.\n";
     else
         INFO_LOG<<"Oran7MediaPlayer::oran7mp_create:ffplayer not exist,prepare to new one.\n";
-    ffplayer_ = new FFPlayer();
+    ffplayer_ = new Oran7FFplayerCore();
     if(!ffplayer_)
     {
-        WARNING_LOG << " new FFPlayer() failed\n ";
+        WARNING_LOG << " new Oran7FFplayerCore() failed\n ";
         return -1;
     }
     //绑定消息循环回调函数
@@ -65,7 +65,7 @@ int Oran7MediaPlayer::oran7mp_destroy()
         if (ffplayer_)
         {
             ffplayer_->ffp_stop_l();              // 设置 abort_request
-            msg_queue_abort(&ffplayer_->msg_queue_); // 让 get_msg(block=1) 立刻返回
+            msg_queue_abort(ffplayer_->ffp_msg_queue()); // 让 get_msg(block=1) 立刻返回
         }
     }
 
@@ -129,7 +129,7 @@ int Oran7MediaPlayer::oran7mp_prepare_async()
     // 更新Oran7MediaPlayer状态显示 正在准备中
     mp_state_ = MP_STATE_ASYNC_PREPARING;
     //启用消息队列
-    msg_queue_start(&ffplayer_->msg_queue_);
+    msg_queue_start(ffplayer_->ffp_msg_queue());
     //创建消息循环线程并启用
     //第一个this：绑定成员函数到当前对象（Oran7MediaPlayer实例）
     //​​第二个 this​​：作为参数传递给 oran7mp_msg_loop
@@ -230,7 +230,7 @@ int Oran7MediaPlayer::oran7mp_get_msg(AVMessage *msg, int block)
     {
         int continue_wait_next_msg = 0; //是否继续读取下一消息标志
 
-        int retval=msg_queue_get(&ffplayer_->msg_queue_,msg,block);//获取一条队头消息，没有则根据情况阻塞
+        int retval=msg_queue_get(ffplayer_->ffp_msg_queue(),msg,block);//获取一条队头消息，没有则根据情况阻塞
         if(retval < 0)
             return retval;
 

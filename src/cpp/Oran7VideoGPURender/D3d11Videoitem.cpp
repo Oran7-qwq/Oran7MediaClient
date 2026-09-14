@@ -22,6 +22,25 @@ void D3D11VideoItem::submitFrame(AVFrame *frameRef)
 {
     uint64_t seq = m_submitSeq.fetch_add(1, std::memory_order_relaxed) + 1;
 
+    // ---- 每实例独立 submit FPS ----
+    auto nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (m_submitT0 == 0) m_submitT0 = nowMs;
+
+    // 间隔超 2 秒 → 切换了文件，重置统计
+    if (nowMs - m_submitT0 >= 2000) {
+        m_submitFps    = 0;
+        m_submitCount  = 0;
+        m_submitT0     = nowMs;
+        m_infoEmitT0   = nowMs;  // 等积满 1 秒后再发射，避免携旧值
+    }
+    m_submitCount++;
+    if (nowMs - m_submitT0 >= 1000) {
+        m_submitFps = m_submitCount;
+        m_submitCount = 0;
+        m_submitT0 = nowMs;
+    }
+    // --------------------------------
+
     if (m_debugLog.load(std::memory_order_relaxed)) {
         static int submitCount = 0;
         static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
@@ -76,47 +95,52 @@ void D3D11VideoItem::onBeforeRendering()
         return;
 
     //---------------- 帧间隔抖动检测 ----------------//
-    static qint64 lastMs = 0;
     qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-    if (lastMs != 0) {
-        qint64 dt = nowMs - lastMs;
+    if (m_lastRenderMs != 0) {
+        qint64 dt = nowMs - m_lastRenderMs;
         if (dt > 22 && m_debugLog.load(std::memory_order_relaxed)) {
             INFO_LOG << "render jitter dt =" << dt
                      << "submitSeq =" << m_submitSeq.load(std::memory_order_acquire);
         }
     }
-    lastMs = nowMs;
+    m_lastRenderMs = nowMs;
 
     m_renderNode->setFrame(cur);
     // 通知场景图节点内容已变更，使 ShaderEffectSource 等采集组件能感知到更新
     m_renderNode->markDirty(QSGNode::DirtyMaterial);
 
+    //INFO_LOG<<"sendVideoFrameInfo";
+
     //==============  video info (每秒) ================//
-    static int frame_count = 0;
-    static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-    frame_count++;
-    auto now = QDateTime::currentMSecsSinceEpoch();
-    if (now - t0 >= 1000) {
+    auto infoNow = QDateTime::currentMSecsSinceEpoch();
+    if (infoNow - m_infoEmitT0 >= 1000) {
         Oran7VideoInfo info;
         info.srcSize = QSize(cur->width, cur->height);
         info.srcFormat = cur->format;
         info.srcFormatName = QString(av_get_pix_fmt_name(static_cast<AVPixelFormat>(cur->format)));
         info.renderSize = QSize(boundingRect().width(), boundingRect().height());
+
+        // DXGI 格式（始终返回当前值，不再仅限首次变化）
         m_renderNode->takePendingDxgifromat(info.dxgiFormat);
         info.dxgiFormatName = dxgiFormatName(info.dxgiFormat);
-        info.fps = frame_count;
-        info.isFromHardWare = true;
-        info.decodeDevice = "d3d11va";
-        info.renderDevice = "d3d11va";
+
+        // 使用 submit 帧率（每实例独立），不再用 onBeforeRendering 渲染帧率
+        info.fps = m_submitFps;
+
+        // 实际检测是否硬解帧
+        info.isFromHardWare = m_renderNode->isHardwareFrame();
+        info.decodeDevice = m_renderNode->decodeDeviceName();
+        info.renderDevice = QStringLiteral("d3d11rhi");  // 渲染后端始终是 D3D11 RHI
 
         emit sendVideoFrameInfo(info);
 
         if (m_debugLog.load(std::memory_order_relaxed)) {
-            INFO_LOG << "beforeRendering setFrame fps =" << frame_count
-                     << "submitSeq =" << m_submitSeq.load(std::memory_order_acquire);
+            INFO_LOG << "videoInfo submitFps =" << m_submitFps
+                     << "submitSeq =" << m_submitSeq.load(std::memory_order_acquire)
+                     << "decode =" << info.decodeDevice
+                     << "fmt =" << info.dxgiFormatName;
         }
-        frame_count = 0;
-        t0 = now;
+        m_infoEmitT0 = infoNow;
     }
 }
 
@@ -177,17 +201,15 @@ void D3D11VideoItem::hookWindow(QQuickWindow *w)
                 m_videoCtx.Reset();
             }, Qt::DirectConnection);
 
-    static QMetaObject::Connection beforeConn1;
-    if (beforeConn1)
-        disconnect(beforeConn1);
-    beforeConn1 = connect(w, &QQuickWindow::beforeRendering,
+    if (m_beforeConn)
+        disconnect(m_beforeConn);
+    m_beforeConn = connect(w, &QQuickWindow::beforeRendering,
                          this, &D3D11VideoItem::onBeforeRendering,
                          Qt::DirectConnection);
 
-    static QMetaObject::Connection beforeConn2;
-    if (beforeConn2)
-        disconnect(beforeConn2);
-    beforeConn2 = connect(w, &QQuickWindow::frameSwapped, this, [this](){
+    if (m_swapConn)
+        disconnect(m_swapConn);
+    m_swapConn = connect(w, &QQuickWindow::frameSwapped, this, [this](){
         static int count = 0;
         static qint64 t0 = QDateTime::currentMSecsSinceEpoch();
         count++;

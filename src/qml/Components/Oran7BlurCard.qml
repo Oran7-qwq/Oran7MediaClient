@@ -16,6 +16,8 @@ Item {
     property real borderWidth: 1
     property color themeColor: "#24FFFFFF"
 
+    property color backGroundColor: "white"
+
     property bool blurEnabled: true
     property real saturation: 0.3
     property real brightness: 0.1
@@ -112,7 +114,8 @@ Item {
             width: root.width
             height: root.height
             radius: root.borderRadius
-            color: "white"
+            color: root.backGroundColor
+            visible: root.blurEnabled
         }
     }
 

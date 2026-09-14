@@ -14,12 +14,19 @@ Rectangle{
     property alias visibleOpacity: musicPlayControls.visibleOpacity
     color: "transparent"
 
+    // 灵动岛开关信号（转发自内部播放控制组件的 islandClicked）
+    signal islandClicked
+    // 桌面歌词悬浮窗开关信号（转发自内部播放控制组件的 floatingLyricsClicked）
+    signal floatingLyricsClicked
+
     //播放控制内容区域
     Oran7MusicPlayControls{
         id:musicPlayControls
         anchors.fill: parent
         onAlbumCoverClicked: animatedWindow_LyricsWin.open(musicIconItem)
         onLyricsButtonClicked: animatedWindow_LyricsWin.open(musicIconItem)
+        onIslandClicked: root.islandClicked()
+        onFloatingLyricsClicked: root.floatingLyricsClicked()
     }
 
     // 提供给 animatedWindow_LyricsWin.open() 的定位参考项
@@ -35,9 +42,9 @@ Rectangle{
     //全屏歌词窗口
     Oran7AnimatedWindow{
         id: animatedWindow_LyricsWin
-        buttonColor: "#f8c7c7"
-        fullscreenColor: "#f8c7c7"
-        maxTiltAngle: 10
+        buttonColor: "#20FFFFFF"
+        fullscreenColor: "#20FFFFFF"
+        maxTiltAngle: 30
         animDuration: 400
         showCloseButton: false  // 使用自定义关闭按钮，不显示内置的
 
@@ -48,21 +55,14 @@ Rectangle{
                 parent = win.contentItem;
         }
 
-        // 独立的背景图副本，避免模糊源引用 mainWindow 本身导致关闭时闪烁
-        Image {
+        // 复用主窗口的共享背景源（视频/静态图一体），保证动态背景全局只解码一份；
+        // 自身仍是独立副本，避免模糊源引用 mainWindow 本身导致关闭时闪烁
+        ShaderEffectSource {
             id: lyricsWinBackground
             width: mainWindow.width
             height: mainWindow.height
-            sourceSize.width: Screen.width * Screen.devicePixelRatio
-            sourceSize.height: Screen.height * Screen.devicePixelRatio
-            source: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage) ?
-                        "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/defaultBg.jpg"
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: false
-            mipmap: true
-            smooth: false
-            cache: true
-            transformOrigin: Item.Center
+            sourceItem: BasicConfig.backgroundVideoSource
+            live: true
         }
         Oran7BlurCard {
             anchors.fill: parent
@@ -103,7 +103,7 @@ Rectangle{
                 }
             }
             // 歌词显示组件
-            LyricsView {
+            Oran7LyricsView {
                 id: lyricsView
                 anchors.left: parent.left
                 anchors.right: parent.right

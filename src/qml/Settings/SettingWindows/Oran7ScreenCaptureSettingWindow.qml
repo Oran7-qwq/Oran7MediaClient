@@ -6,6 +6,7 @@ import "../GlobalSettings"
 import "../../Components"
 import "../../Components/Oran7SettingUiWindowItems"
 
+import Client 1.0
 import Oran7UI.Impl
 
 Item {
@@ -179,7 +180,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:true
+                    property bool expand:false
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -201,12 +202,23 @@ Item {
                         // --- ScaleMode ---
                         Oran7SettingItem {
                             text: String("ScaleMode：" + String(checked  ? "Fill" : "Fit"))
-                            property bool checked: false
+                            readonly property bool checked: Oran7Theme.Oran7ScreenCapture.ScaleMode === "Fill"
                             Oran7SwitchToggleItem {
                                 checked: parent.checked
                                 onSwitchToggleChanged: function (checked) {
-                                    parent.checked = !parent.checked
+                                    Oran7Theme.saveComponentToken("Oran7ScreenCapture","ScaleMode",checked  ? "Fill" : "Fit")
+                                    parent.updateScreenCaptureRender_ScaleMode()
                                 }
+                            }
+                            Component.onCompleted: {
+                                updateScreenCaptureRender_ScaleMode()
+                            }
+                            function updateScreenCaptureRender_ScaleMode()
+                            {
+                                if(checked)
+                                    Client.setScaleMode(Client.ScreenCaptureRender, Client.Fill);
+                                else
+                                    Client.setScaleMode(Client.ScreenCaptureRender, Client.Fit);
                             }
                         }
                     }

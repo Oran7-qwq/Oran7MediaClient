@@ -7,14 +7,21 @@
 #include "Oran7ScreenCapture.h"
 #include "OnlineLyricsFetcher.h"
 
+#include <QMutex>
 #include <QTimer>
 #include <QObject>
 #include <QTcpSocket>
 #include <QMap>
 #include <QSet>
+#include <QHash>
+#include <QNetworkAccessManager>
+#include <QPair>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QQmlEngine>
+
+#include <atomic>
+#include <memory>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QThread>
@@ -77,6 +84,8 @@ public:
 
     /*! @brief 触发LocalMusicList前端列表刷新*/
     void refreshLocalMusicList();
+    /*! @brief 异步扫描本地音乐文件夹（Oran7Async 线程池），完成后逐条发 localMusicElementReady */
+    Q_INVOKABLE void searchLocalMediaFiles(const QString& folderPath);
     /*! @brief 获取当前正在播放的媒体文件路径*/
     Q_INVOKABLE QString getCurrentMediaFilePath(){return appData.CurMediaFilePath;}
     /*! @brief 更新当前聚焦的媒体文件路径*/
@@ -92,6 +101,8 @@ public:
     //-----------------------------------------------------<Config-->Load-Save接口>-----------------------------------------------------------//
     /*! @brief 获取配置文件记录的上次关闭应用前最后播放的music，并加载*/
     void loadConfig_lastCloseAppFocusedMusic();
+    /*! @brief 持久化的网络歌元数据缺专辑/时长时,按 songId 重新拉取并补发 focusedMusicRestored*/
+    void refetchLastMediaDetail();
     /*! @brief 加载config中保存的LocalMusicStack播放顺序，协商排列顺序*/
     void loadConfig_localMusicList_playOrder();
     /*! @brief 加载ApplicationWindow的width和height配置*/
@@ -119,6 +130,25 @@ public:
     int OutputVideo(const Frame *frame,AVFrame* copy_frame);
     /*! @brief QML前端调用，music列表点击播放事件*/
     Q_INVOKABLE void requestPlayMusic(QString file_path);
+    /*! @brief QML前端播放时注入当前歌曲的网易云 songId（会员歌拉歌词用）*/
+    Q_INVOKABLE void setCurrentMediaSongId(qint64 songId);
+    /*! @brief QML前端播放时注入当前歌曲是否为会员（VIP）歌曲（最近播放记录用）*/
+    Q_INVOKABLE void setCurrentMediaIsVip(bool isVip);
+    /*! @brief QML前端播放网络歌曲时保存其元数据（启动恢复上次播放的网络歌用）*/
+    Q_INVOKABLE void rememberLastMedia(const QString &name, const QString &artist,
+                                       const QString &album, const QString &cover,
+                                       const QString &timesize, qint64 songId, bool isVip);
+    /*! @brief 播放网络歌曲：VIP/登录态用 songId 重新解析真实播放地址（持久化临时链接会过期）；
+     *         解析失败 emit networkPlayResolveFailed */
+    Q_INVOKABLE void playNetworkSong(qint64 songId, const QString &fallbackUrl, bool isVip);
+    /*! @brief 当前播放歌曲的网易云 songId / 是否 VIP（QML 各播放入口统一重新解析用）*/
+    Q_INVOKABLE qint64 currentSongId() const { return m_currentSongId; }
+    Q_INVOKABLE bool currentIsVip() const { return m_currentIsVip; }
+    /*! @brief 设置播放模式（0=顺序播放 1=单曲循环 2=随机播放），单曲循环在歌曲结束时不销毁播放器直接 seek 回 0 重播*/
+    Q_INVOKABLE void setPlayMode(int mode);
+    /*! @brief "我整合的音乐"列表持久化：整体保存/加载到 config.json 的 integratedMusic.list（顺序=传入顺序）*/
+    Q_INVOKABLE void saveIntegratedMusic(const QVariantList &list);
+    Q_INVOKABLE QVariantList loadIntegratedMusic();
     /*! @brief QML前端调用，VideoPlayerStack点击播放事件*/
     Q_INVOKABLE void requestPlayVideo(QString file_path);
     /*! @brief 准备播放指定媒体文件（内部播放逻辑核心）*/
@@ -205,12 +235,14 @@ signals:
     void loginSuccess(QString username);
     /*! @brief 登录输入格式验证结果响应信号*/
     void loginInputFormatValid(int errorFormatCode);
-    /*! @brief 往QML端MyFavoriteMusic的musicListModel推送一条元数据*/
-    void favoriteMusicElementReady(QString icon_path,QString music_name,QString music_artist,QString music_album,QString timesize,QString music_id);
+    /*! @brief 往QML端"我整合的音乐"musicListModel推送一条元数据*/
+    void integratedMusicElementReady(QString icon_path,QString music_name,QString music_artist,QString music_album,QString timesize,QString music_id);
     /*! @brief 往QML端LocalMusic的musicListModel推送一条元数据*/
     void localMusicElementReady(QString icon_path,QString music_name,QString music_artist,QString music_album,QString timesize,QString music_id,QString file_path);
     /*! @brief 清空QML前端LocalMusicStack列表*/
     void localMusicListCleared();
+    /*! @brief 网络歌播放地址解析失败（未登录/无会员/链接失效），QML 据此自动切下一首或暂停*/
+    void networkPlayResolveFailed(qint64 songId);
 
     //=====================<ConfigLoad Or Get Signal from Qml>========================//
     /*! @brief 加载上次关闭App时最后播放的文件信息，恢复播放状态*/
@@ -288,20 +320,27 @@ private:
     //--------------------------<Parameters>-------------------//
     /*! @brief Oran7MediaPlayer实例指针，播放器核心对象*/
     Oran7MediaPlayer *mp_=nullptr;
+    /*! @brief 保护 mp_ 的递归锁：播放器销毁被挪到后台线程（onStop），
+     *  防止 100ms 进度定时器等主线程操作与后台销毁并发使用已释放的指针 */
+    mutable QRecursiveMutex m_mpMutex;
     /*! @brief 播放进度条位置更新请求定时器*/
     QTimer *Progress_SliderPos_ReqUpdateTimer;
     /*! @brief 当前媒体总播放时间，单位ms*/
     long total_duration_ = 0;
     /*! @brief 进度条Seek请求标志位，防止seek期间更新进度*/
     bool req_seeking_ = false;
+    /*! @brief 切歌防重入标志：300ms 延迟创建新播放器回调已在排队时置 true，
+     *         后续切歌请求直接更新 CurMediaFilePath 即可，避免累积多个 singleShot 回调
+     *         导致反复创建/暂停/播放、SDL 音频设备并发开闭。 */
+    bool m_pendingSwitch = false;
     /*! @brief 记录当前播放位置，单位秒（浮点精度）*/
     double Current_SecPosition_ = 0.0;
     /*! @brief 退出时防止帧堆积的原子标志，直接释放渲染资源*/
     std::atomic_bool shutting_down_{false};
 
     //--------------------------<function>-------------------//
-    /*! @brief 调用Native层请求内部FFPlayer返回媒体文件总时长*/
-    void getTotalDuration();
+    /*! @brief 调用Native层请求内部FFPlayer返回媒体文件总时长（传入所属播放器，避免旧播放器消息线程误读全局 mp_）*/
+    void getTotalDuration(Oran7MediaPlayer* p);
     /*! @brief 调用Native层请求内部FFPlayer返回媒体当前播放位置*/
     void reqUpdateCurrentPosition();
 
@@ -312,9 +351,41 @@ private:
     /*! @brief 在线歌词获取器（LRCLIB优先 + 网易云fallback）*/
     OnlineLyricsFetcher *m_lyricsFetcher = nullptr;
 
+    /*! @brief 当前网络歌曲的歌词缓存文件路径（播放结束/停止时销毁，不影响本地歌词）*/
+    QString m_networkLyricsCachePath;
+    void cleanupNetworkLyricsCache();
+    static bool isNetworkUrl(const QString &path);
+    /*! @brief 当前播放歌曲的网易云 songId（播放时由 QML 注入，会员歌拉歌词用）*/
+    qint64 m_currentSongId = 0;
+    /*! @brief 当前播放歌曲是否为会员（VIP）歌曲（最近播放记录用）*/
+    bool m_currentIsVip = false;
+    /*! @brief 播放模式：0=顺序播放 1=单曲循环 2=随机播放（QML 切歌/结束重播时用）*/
+    int m_playMode = 0;
+    /*! @brief 待解析播放的网络歌 songId（一次性，解析完成后清零）*/
+    qint64 m_pendingNetworkSongId = 0;
+    /*! @brief 非 VIP 歌已用外链立即起播（解析在后台并行仅更新缓存，完成后不打断播放）*/
+    bool m_playStartedByFallback = false;
+    /*! @brief 解析失败(-110 限流)是否已重试过一次（防无限重试）*/
+    bool m_retriedOnce = false;
+    /*! @brief 起播打开失败后是否已用已解析地址补救过一次（防无限重试，每首歌复位）*/
+    bool m_openRetryDone = false;
+    /*! @brief 最近解析成功的播放地址缓存：songId -> (url, 缓存时刻ms)
+     *         网易返回的 URL 有效期 expi=1200s，20 分钟内切回同一首歌复用缓存，避免重复解析触发 -110 限流 */
+    QHash<qint64, QPair<QString, qint64>> m_songUrlCache;
+    /*! @brief 恢复上次播放时补全元数据用的网络管理器(专辑/时长缺失时按 songId 重新拉取)*/
+    QNetworkAccessManager *m_metaNam = nullptr;
+    void onNetworkUrlResolved(const QHash<qint64, QString>& urlMap);
+    /*! @brief 取缓存中该 songId 的新鲜播放地址（超过 20min 视为失效并顺手清理）；没有则返回空串 */
+    QString freshCachedUrl(qint64 songId);
+    /*! @brief 起播打开失败后的补救（主线程）：有新鲜的已解析地址就换它重试一次，否则交给自动切歌 */
+    void onPlaybackOpenFailed();
+    static qint64 extractSongId(const QString &s);
+
     //=============================<Client QThread shared_data >======================//
     /*! @brief Client共享数据线程同步互斥锁*/
     mutable QMutex client_mutex;
+    // 异步任务生命周期守卫：析构时置 true，worker 线程检查后提前返回，避免 UAF
+    std::shared_ptr<std::atomic<bool>> m_destroyedFlag;
     //-----------------------------------<Client Global Data>--------------------------------//
     /*! @brief Client全局应用数据结构体，存储播放状态、文件列表、配置等*/
     Oran7AppData appData=Oran7AppData();
@@ -339,14 +410,12 @@ static QRectF calcAspectRectSnapped(const QSizeF &src, const QSizeF &dst, bool f
     if (src.isEmpty() || dst.isEmpty())
         return QRectF(QPointF(0,0), dst);
 
-    // Fill模式：直接拉伸填满目标区域，不保持宽高比
     if (fill) {
         qreal dstWidth = snapToPixel(dst.width(), dpr);
         qreal dstHeight = snapToPixel(dst.height(), dpr);
         return QRectF(QPointF(0, 0), QSizeF(dstWidth, dstHeight));
     }
 
-    // Fit模式：保持宽高比，计算居中显示区域
     const qreal sx = dst.width()  / src.width();
     const qreal sy = dst.height() / src.height();
     const qreal s = std::min(sx, sy);
@@ -355,7 +424,6 @@ static QRectF calcAspectRectSnapped(const QSizeF &src, const QSizeF &dst, bool f
     QPointF topLeft((dst.width() - out.width()) * 0.5,
                     (dst.height() - out.height()) * 0.5);
 
-    //对齐到物理像素
     topLeft.setX(snapToPixel(topLeft.x(), dpr));
     topLeft.setY(snapToPixel(topLeft.y(), dpr));
     out.setWidth (snapToPixel(out.width(),  dpr));

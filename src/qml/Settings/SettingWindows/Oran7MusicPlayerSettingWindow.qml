@@ -182,7 +182,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:true
+                    property bool expand:false
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -228,7 +228,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:true
+                    property bool expand:false
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -375,7 +375,7 @@ Item {
                     gradientMaskEnabled: true
 
                     enableMouseArea: true
-                    property bool expand:true
+                    property bool expand:false
                     onRightClicked: expand = !expand
                     onLeftClicked: expand = !expand
 
@@ -467,6 +467,187 @@ Item {
                             valueDecimals: 1
                             onCommitted: (value, thresholdPosition, ratio) =>{
                                 Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                    }
+                }
+
+                // ~~~~~ MusicLyricsIsland ~~~~~
+                Oran7SettingItem{
+                    id:musicLyricsIsland
+                    index: 3
+                    text:"MusicLyricsIsland"
+                    fontBold:true
+                    gradientMaskEnabled: true
+
+                    enableMouseArea: true
+                    property bool expand:false
+                    onRightClicked: expand = !expand
+                    onLeftClicked: expand = !expand
+
+                    enableHoverHandler: true
+                }
+                Oran7ExpandItem{
+                    expand: musicLyricsIsland.expand
+                    Column {
+                        // --- LyricsIsland_Lyrics-TextFontSize ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicLyricsIsland[tokenName]
+                            title: "Lyrics-TextSize:"
+                            property string componentName: "Oran7MusicLyricsIsland"
+                            property string tokenName: "lyricsFontSize"
+                            sliderValueFrom: 12
+                            sliderValueTo: 40
+                            stepSize: 1
+                            valueDecimals: 0
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                        // --- LyricsIsland_BackdropColor（背景图关闭时的胶囊底色） ---
+                        Oran7ColorSettingGroup{
+                            title:"Backdrop Color:"
+                            checkedColor: Oran7Theme.Oran7MusicLyricsIsland[colorToken+"-6"]
+                            componentName: "Oran7MusicLyricsIsland"
+                            colorToken: "floatingBackdropColor"
+                            onEnterOfTextFiled: function(text){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
+                            }
+                            onColorReady: function(seletedColor){
+                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                            }
+                        }
+                        // --- LyricsIsland_BackgroundImageEnabled ---
+                        Oran7SettingItem {
+                            text: "Background Image:"
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MusicLyricsIsland.backgroundImageEnabled
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MusicLyricsIsland","backgroundImageEnabled",checked)
+                                }
+                            }
+                        }
+                        // --- item: backgroundImage ---
+                        Oran7SettingItem {
+                            text: "background Image Path:"
+                            showTag: false
+                        }
+                        Oran7TextFieldItem {
+                            id: background_image_textField
+                            tempText: Oran7Theme.Oran7MusicLyricsIsland[tokenName]
+                            placeholderText: "please input image path."
+                            property string componentName: "Oran7MusicLyricsIsland"
+                            property string tokenName: "backgroundImage_url"
+                            detectEnable: true
+                            detectType: Oran7MainUiSetting.DetectionType.FileDetection
+                            onEnterPressed: {
+                                Oran7Theme.saveComponentToken(componentName,tokenName,tempText)
+                            }
+                            anchors.rightMargin: background_imageOpen.height + 2
+                            Oran7OpenFolderItem {
+                                id: background_imageOpen
+                                fileDialog_selectReset: true
+                                isMultiSelect: false
+                                anchors.left: parent.right
+                                anchors.leftMargin: 2
+                                onReady: {
+                                    Oran7Theme.saveComponentToken(parent.componentName,parent.tokenName,background_imageOpen.filesArray[0]);
+                                    background_image_textField.textField.text = Oran7Theme.Oran7MusicLyricsIsland[parent.tokenName]
+                                    background_image_textField.tempText = Oran7Theme.Oran7MusicLyricsIsland[parent.tokenName]
+                                }
+                            }
+                        }
+                        //<<--- 悬浮歌词窗（桌面歌词）
+                        Oran7SettingItem{text:"Floating：";fontBold:true;showTag:false}
+                        // --- Floating-Enabled ---
+                        Oran7SettingItem {
+                            text: "Enabled:"
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MusicLyricsIsland.floatingEnabled
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MusicLyricsIsland","floatingEnabled",checked)
+                                }
+                            }
+                        }
+                        // --- Floating-Locked ---
+                        Oran7SettingItem {
+                            text: "Locked:"
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MusicLyricsIsland.floatingLocked
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MusicLyricsIsland","floatingLocked",checked)
+                                }
+                            }
+                        }
+                        // --- Floating-ClickThrough ---
+                        Oran7SettingItem {
+                            text: "ClickThrough:"
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MusicLyricsIsland.floatingClickThrough
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MusicLyricsIsland","floatingClickThrough",checked)
+                                }
+                            }
+                        }
+                        // --- Floating-AlwaysOnTop ---
+                        Oran7SettingItem {
+                            text: "AlwaysOnTop:"
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MusicLyricsIsland.floatingAlwaysOnTop
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MusicLyricsIsland","floatingAlwaysOnTop",checked)
+                                }
+                            }
+                        }
+                        // --- Floating-Opacity ---
+                        Oran7NumSettingGroup{
+                            value:Oran7Theme.Oran7MusicLyricsIsland.floatingOpacity
+                            title: "Opacity:"
+                            property string componentName: "Oran7MusicLyricsIsland"
+                            property string tokenName: "floatingOpacity"
+                            sliderValueFrom: 0.0
+                            sliderValueTo: 1.0
+                            stepSize: 0.05
+                            valueDecimals: 2
+                            onCommitted: (value, thresholdPosition, ratio) =>{
+                                Oran7Theme.saveComponentToken(componentName,tokenName,value)
+                            }
+                        }
+                    }
+                }
+                //<--- title item end hear --->
+                // ~~~~~ NeteasePlayerSetting ~~~~~
+                Oran7SettingItem{
+                    id:neteasePlayerSetting
+                    index: 3
+                    text:"NeteasePlayerSetting"
+                    fontBold:true
+                    gradientMaskEnabled: true
+
+                    enableMouseArea: true
+                    property bool expand:false
+                    onRightClicked: expand = !expand
+                    onLeftClicked: expand = !expand
+
+                    enableHoverHandler: true
+                }
+                Oran7ExpandItem{
+                    expand: neteasePlayerSetting.expand
+                    Column{
+                        // --- Floating-Locked ---
+                        Oran7SettingItem {
+                            text: "Filter NeteaseWander Of Like"
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                checked: Oran7Theme.Oran7MusicLyricsIsland.floatingLocked
+                                onSwitchToggleChanged: function (checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MusicLyricsIsland","floatingLocked",checked)
+                                }
                             }
                         }
                     }

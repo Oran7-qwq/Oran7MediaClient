@@ -55,7 +55,7 @@ Item {
                                 "\""+String(colorBox.color) + "\"" : ""
             detectEnable: root.textField_detectEnable
             detectType: Oran7MainUiSetting.DetectionType.ColorDetection
-            onEnterPressed: {console.log(tempText);root.enterOfTextFiled()}
+            onEnterPressed: {root.enterOfTextFiled(tempText)/*console.log(tempText);*/}
             anchors.rightMargin: Oran7MainUiSetting.itemHeight * 0.7 + 2
             Oran7ColorCheckBox{
                 id:colorBox
