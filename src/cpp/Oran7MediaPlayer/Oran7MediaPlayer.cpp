@@ -3,7 +3,7 @@
 
 #include "ffmsg.h"
 #include "FFMsgQueue.h"
-#include "GlobalHelper.h"
+#include "Oran7GlobalHelper.h"
 
 #include<string.h>
 
@@ -113,7 +113,11 @@ int Oran7MediaPlayer::oran7mp_set_data_source(const char *url)
     if(!url)
         return -1;
 
-    data_source_ = strdup(url); // strdup:分配内存 + 拷贝字符串
+    // 先复制，允许调用方传入旧地址；分配失败时保留当前数据源。
+    char* source = strdup(url);
+    if (!source) return -1;
+    free(data_source_);
+    data_source_ = source;
     return 0;
 }
 
@@ -194,7 +198,8 @@ int Oran7MediaPlayer::oran7mp_get_state()
 int Oran7MediaPlayer::oran7mp_change_state_l(int new_state)
 {
     mp_state_ = new_state;
-    ffp_notify_msg(ffplayer_, FFP_MSG_PLAYBACK_STATE_CHANGED);
+    // 消息携带发生时的状态，避免 GUI 收到时再次读取已变化的内核状态。
+    ffp_notify_msg(ffplayer_, FFP_MSG_PLAYBACK_STATE_CHANGED, new_state);
     return 0;
 }
 

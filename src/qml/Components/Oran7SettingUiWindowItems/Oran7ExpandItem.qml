@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 
 import "../../Settings/GlobalSettings"
-import "../"
+import "../Oran7GlobalComponents"
 
 import Oran7UI.Impl
 
@@ -115,9 +115,12 @@ Item {
             }
         }
 
-        Label{
-            text:"⩔";
-            font.pixelSize: 20
+        // 固定矢量图形，避免数学符号随字体回退变成缺字或表情字形。
+        Image {
+            source: "qrc:/image/oran7-scroll-chevron.svg"
+            width: 20
+            height: 20
+            sourceSize: Qt.size(40, 40)
             anchors.right: parent.right
             anchors.bottom: parent.bottom
         }
@@ -160,9 +163,12 @@ Item {
             }
         }
 
-        Label{
-            text:"⩓";
-            font.pixelSize: 20
+        Image {
+            source: "qrc:/image/oran7-scroll-chevron.svg"
+            width: 20
+            height: 20
+            sourceSize: Qt.size(40, 40)
+            rotation: 180
             anchors.right: parent.right
             anchors.top: parent.top
         }

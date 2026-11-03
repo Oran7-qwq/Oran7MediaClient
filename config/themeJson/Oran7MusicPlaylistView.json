@@ -1,11 +1,42 @@
 {
-    "__init__":{
-        "__vars__":{
-            "colorPrimaryBase":"$genColor(#Preset_Volcano)",
-            "textColorBase":"$genColor(#2a1a22)"
+    "__init__": {
+        "__vars__": {
+            "colorPrimaryBase": "$genColor(#Preset_Volcano)",
+            "textColorBase": "$genColor(#2a1a22)",
+            "rowSurfaceBaseLight": "#edf0f3",
+            "rowSurfaceBaseDark": "#353a40",
+            "rowHoverBaseLight": "#e0e5ea",
+            "rowHoverBaseDark": "#41474f",
+            "rowSelectedBaseLight": "#d7dde3",
+            "rowSelectedBaseDark": "#494f57",
+            "rowTextBaseLight": "#242a31",
+            "rowTextBaseDark": "#f0f1f3",
+            "rowSecondaryBaseLight": "#58616c",
+            "rowSecondaryBaseDark": "#bbc1ca",
+            "rowDetailBaseLight": "#b9c1cb",
+            "rowDetailBaseDark": "#616a75",
+            "rowAccentBaseLight": "#92751b",
+            "rowAccentBaseDark": "#ead16c"
         }
     },
-    "__style__":{
-        "listViewFontPixelSize": 16
+    "__style__": {
+        "rowBackgroundColor": "#ede7db",
+        "rowTextColor": "",
+        "rowAccentColor": "#22d3ee",
+        "listViewFontPixelSize": 16,
+        "rowSurfaceLight": "$alpha(@rowSurfaceBaseLight, 0.78)",
+        "rowSurfaceHoverLight": "$alpha(@rowHoverBaseLight, 0.88)",
+        "rowSurfaceSelectedLight": "$alpha(@rowSelectedBaseLight, 0.92)",
+        "rowTextLight": "@rowTextBaseLight",
+        "rowSecondaryTextLight": "@rowSecondaryBaseLight",
+        "rowDetailLight": "@rowDetailBaseLight",
+        "rowAccentLight": "@rowAccentBaseLight",
+        "rowSurfaceDark": "$alpha(@rowSurfaceBaseDark, 0.78)",
+        "rowSurfaceHoverDark": "$alpha(@rowHoverBaseDark, 0.88)",
+        "rowSurfaceSelectedDark": "$alpha(@rowSelectedBaseDark, 0.92)",
+        "rowTextDark": "@rowTextBaseDark",
+        "rowSecondaryTextDark": "@rowSecondaryBaseDark",
+        "rowDetailDark": "@rowDetailBaseDark",
+        "rowAccentDark": "@rowAccentBaseDark"
     }
 }

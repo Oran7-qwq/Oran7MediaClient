@@ -1,0 +1,8 @@
+# 仅为本机 Windows/MinGW 提供默认值；命令行传入的编译器和路径优先。
+set(ORAN7_QT_ROOT "D:/Qt/6.7.3/mingw_64" CACHE PATH "Qt 安装目录")
+set(ORAN7_MINGW_ROOT "D:/Qt/Tools/mingw1120_64" CACHE PATH "MinGW 工具链目录")
+set(ORAN7_NINJA "D:/Qt/Tools/Ninja/ninja.exe" CACHE FILEPATH "Ninja 可执行文件")
+set(CMAKE_C_COMPILER "${ORAN7_MINGW_ROOT}/bin/gcc.exe" CACHE FILEPATH "C 编译器")
+set(CMAKE_CXX_COMPILER "${ORAN7_MINGW_ROOT}/bin/g++.exe" CACHE FILEPATH "C++ 编译器")
+set(CMAKE_MAKE_PROGRAM "${ORAN7_NINJA}" CACHE FILEPATH "构建工具")
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES ORAN7_QT_ROOT ORAN7_MINGW_ROOT ORAN7_NINJA)

@@ -22,6 +22,116 @@ Rectangle {
     property bool mouseIsInCaptionBar: false
     property bool enableCentering: root.simpleMode  // 控制导航栏图标是否居中
 
+    // 选中与悬停各共用一个滑块；悬停结束只淡出，保留最后位置以便连续滑动。
+    property int navigationHoverIndex: 0
+    readonly property color navigationAccent: Oran7Theme.Oran7CaptionBar.selectedColor
+    property bool navigationAnimationReady: false
+
+    onItemHovered_indexChanged: {
+        if (itemHovered_index >= 0)
+            navigationHoverIndex = itemHovered_index
+    }
+    Component.onCompleted: Qt.callLater(function() { root.navigationAnimationReady = true })
+    onVisibleChanged: {
+        if (!visible) {
+            itemHovered_index = -1
+            mouseIsInCaptionBar = false
+        }
+    }
+
+    component Oran7NavigationSlider: Rectangle {
+        id: slider
+        property int targetIndex: 0
+        property bool selected: false
+        property bool engaged: true
+        readonly property color accentColor: selected ? Qt.darker(root.navigationAccent, 1.12)
+                                                     : Oran7Theme.Oran7CaptionBar.hoveredColor
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: topColumn.width
+        height: 42
+        radius: 9
+        visible: targetIndex >= 0 && targetIndex < topListModel.count + middleListModel.count
+        opacity: engaged ? 1 : 0
+        y: targetIndex < topListModel.count
+           ? topColumn.y + targetIndex * (height + topColumn.spacing)
+           : middleColumn.y + (targetIndex - topListModel.count) * (height + middleColumn.spacing)
+        border.width: 1
+        border.color: Qt.alpha(accentColor, selected ? 0.84 : 0.50)
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop {
+                position: 0
+                color: Qt.alpha(slider.accentColor, slider.selected ? 0.82 : 0.52)
+                Behavior on color { ColorAnimation { duration: 180 } }
+            }
+            GradientStop {
+                position: 0.65
+                color: Qt.alpha(slider.accentColor, slider.selected ? 0.56 : 0.30)
+                Behavior on color { ColorAnimation { duration: 180 } }
+            }
+            GradientStop { position: 1; color: Qt.alpha(slider.accentColor, slider.selected ? 0.32 : 0.16) }
+        }
+
+        Behavior on y {
+            enabled: root.navigationAnimationReady && root.visible
+            NumberAnimation { duration: 340; easing.type: Easing.OutQuint }
+        }
+        Behavior on border.color { ColorAnimation { duration: 180 } }
+        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+        // 左侧定位灯与边缘刻线随整个滑块移动，不在委托里叠加背景。
+        Rectangle {
+            x: 0
+            anchors.verticalCenter: parent.verticalCenter
+            width: 3
+            height: slider.selected ? 22 : 14
+            radius: 1.5
+            color: slider.accentColor
+            Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        }
+        Rectangle {
+            x: 12; y: 1
+            width: Math.max(0, parent.width - 24)
+            height: 1
+            color: Qt.alpha("#ffffff", 0.14)
+        }
+        Rectangle {
+            anchors.right: parent.right
+            anchors.rightMargin: 14
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 5
+            width: Math.max(0, parent.width - 65)
+            height: 1
+            color: Qt.alpha(slider.accentColor, 0.32)
+            visible: !root.simpleMode
+        }
+        Column {
+            anchors.right: parent.right
+            anchors.rightMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 3
+            Repeater {
+                model: 3
+                Rectangle {
+                    width: 3
+                    height: 1
+                    color: Qt.alpha(slider.accentColor, index === 1 ? 0.9 : 0.45)
+                }
+            }
+        }
+    }
+
+    Oran7NavigationSlider {
+        objectName: "navigationHoverHighlight"
+        targetIndex: root.navigationHoverIndex
+        engaged: root.itemHovered_index >= 0 && root.itemHovered_index !== root.itemSelected_index
+    }
+    Oran7NavigationSlider {
+        objectName: "navigationSelectedHighlight"
+        targetIndex: root.itemSelected_index
+        selected: true
+    }
+
     Label {
         id: logoLabel
         text: "Oran柒"
@@ -29,7 +139,7 @@ Rectangle {
         anchors.leftMargin: 58
         anchors.top: parent.top
         anchors.topMargin: 18
-        font.family: "华文琥珀"
+        font.family: "华文琥珀" // 品牌标志固定字体，不跟随主题或界面字体。
         font.bold: true
         font.pixelSize: 22
         color: "#fef2e8"
@@ -42,7 +152,7 @@ Rectangle {
         anchors.top: logoLabel.bottom
         anchors.topMargin: 1
         text: "MediaClient"
-        font.family: "华文琥珀"
+        font.family: "华文琥珀" // 品牌标志固定字体，不跟随主题或界面字体。
         font.bold: true
         font.pixelSize: 22
         color: "#fef2e8"
@@ -55,17 +165,17 @@ Rectangle {
         id: topListModel
         ListElement {
             iconImage: "qrc:/image/hugeicons_ai-video.png"
-            iconText: "VideoPlayer"
+            iconText: "视频播放器"
             pageName: "VideoPlayerPage"
         }
         ListElement {
             iconImage: "qrc:/image/hugeicons_video-camera-ai.png"
-            iconText: "ScreenCpature"
+            iconText: "直播工作台"
             pageName: "ScreenCapturePage"
         }
         ListElement {
             iconImage: "qrc:/image/arcticons_star-music-tag-editor.png"
-            iconText: "NAME??"
+            iconText: "终末地 • 帝江号"
             pageName: "NAME?1"
         }
         ListElement {
@@ -82,34 +192,16 @@ Rectangle {
         anchors.horizontalCenter: root.horizontalCenter
         spacing: 4
 
-        HoverHandler{
-            id:topCaptionBarHoverHandler
-            acceptedDevices: PointerDevice.Mouse
-            onHoveredChanged: {
-                root.mouseIsInCaptionBar = topCaptionBarHoverHandler.hovered
-                if(!topCaptionBarHoverHandler.hovered){
-                    root.itemHovered_index = -1
-                }
-            }
-        }
         Repeater {
             id: topColumnRepeater
             model: topListModel
-            delegate: Rectangle {
+            delegate: Item {
                 id: topColumnRepeaterElementRectangle
+                objectName: "navigationItem" + model.index
                 height: 42
                 width: root.simpleMode ? 42 : 160
-                radius: 10
-                color: root.itemSelected_index === model.index ? Oran7Theme.Oran7CaptionBar.selectedColor :
-                                    root.itemHovered_index === model.index ? Oran7Theme.Oran7CaptionBar.hoveredColor : "transparent"
                 Behavior on x { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
                 Behavior on width { NumberAnimation { duration: Oran7Theme.Primary.durationMid } }
-                Behavior on color{
-                    PropertyAnimation{
-                        duration: Oran7Theme.Primary.durationMid
-                        easing.type:Easing.OutCubic
-                    }
-                }
 
                 Connections {
                     target: BasicConfig
@@ -148,9 +240,9 @@ Rectangle {
                     }
                 }
                 Text {
-                    text: iconText
+                    text: qsTranslate("Oran7Ui", iconText)
                     font.pixelSize: 14
-                    font.family: "微软雅黑"
+                    font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                     font.bold: true
                     color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
                     anchors.left: topListImageIcon.right
@@ -163,6 +255,7 @@ Rectangle {
                     id: topColumnMouseArea
                     anchors.fill: parent
                     hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         root.itemSelected_index = model.index
                         switch (index) {
@@ -178,6 +271,13 @@ Rectangle {
                     }
                     onEntered: {
                         root.itemHovered_index = model.index
+                        root.mouseIsInCaptionBar = true
+                    }
+                    onExited: {
+                        if (root.itemHovered_index === model.index) {
+                            root.itemHovered_index = -1
+                            root.mouseIsInCaptionBar = false
+                        }
                     }
                 }
             }
@@ -198,13 +298,13 @@ Rectangle {
     //"我的"
     Label {
         id: myTextLabel
-        text: "Music"
+        text: qsTranslate("Oran7Ui", "音乐")
         anchors.top: diveLine1.bottom
         anchors.topMargin: 14
         anchors.left: topColumn.left
         anchors.leftMargin: 4
         font.pixelSize: 12
-        font.family: "微软雅黑"
+        font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
         color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
     }
 
@@ -229,34 +329,16 @@ Rectangle {
         anchors.topMargin: 12
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: 4
-        HoverHandler{
-            id:middleCaptionBarHoverHandler
-            acceptedDevices: PointerDevice.Mouse
-            onHoveredChanged: {
-                root.mouseIsInCaptionBar = middleCaptionBarHoverHandler.hovered
-                if(!middleCaptionBarHoverHandler.hovered){
-                    root.itemHovered_index = -1
-                }
-            }
-        }
         Repeater {
             id: middleColumnRepeater
             model: middleListModel
-            delegate: Rectangle {
+            delegate: Item {
                 id: middleColumnRepeaterElementRectangle
+                objectName: "navigationItem" + (model.index + topListModel.count)
                 height: 42
                 width: root.simpleMode ? 42 : 160
-                radius: 10
-                color: root.itemSelected_index - topListModel.count === model.index ? Oran7Theme.Oran7CaptionBar.selectedColor :
-                                    root.itemHovered_index - topListModel.count === model.index ? Oran7Theme.Oran7CaptionBar.hoveredColor : "transparent"
                 Behavior on x { NumberAnimation { duration: 150 } }
                 Behavior on width { NumberAnimation { duration: 150 } }
-                Behavior on color{
-                    PropertyAnimation{
-                        duration: Oran7Theme.Primary.durationMid
-                        easing.type:Easing.OutCubic
-                    }
-                }
 
                 Connections {
                     target: BasicConfig
@@ -294,9 +376,9 @@ Rectangle {
                     }
                 }
                 Text {
-                    text: iconText
+                    text: qsTranslate("Oran7Ui", iconText)
                     font.pixelSize: 14
-                    font.family: "微软雅黑"
+                    font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                     font.bold: true
                     color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
                     anchors.left: middleListImageIcon.right
@@ -309,6 +391,7 @@ Rectangle {
                     id: middleColumnMouseArea
                     anchors.fill: parent
                     hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         root.itemSelected_index = model.index + topListModel.count
                         switch (index) {
@@ -324,6 +407,13 @@ Rectangle {
                     }
                     onEntered: {
                         root.itemHovered_index = model.index + topListModel.count
+                        root.mouseIsInCaptionBar = true
+                    }
+                    onExited: {
+                        if (root.itemHovered_index === model.index + topListModel.count) {
+                            root.itemHovered_index = -1
+                            root.mouseIsInCaptionBar = false
+                        }
                     }
                 }
             }
@@ -332,13 +422,13 @@ Rectangle {
     //" ∨更多"TextLabel
     Label {
         id: moreLabel
-        text: "∨  更多"
+        text: qsTranslate("Oran7Ui", "∨  更多")
         anchors.top: middleColumn.bottom
         anchors.topMargin: 5
         anchors.left: middleColumn.left
         anchors.leftMargin: 2
         font.pixelSize: 13
-        font.family: "微软雅黑"
+        font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
         color: Oran7Theme.Oran7CaptionBar["textColorBase-6"]
     }
     //分割线 2
@@ -364,7 +454,7 @@ Rectangle {
     //     anchors.leftMargin: 2
     //     font.pixelSize: 13
     //     font.bold: true
-    //     font.family: "微软雅黑 Light"
+    //     font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
     //     color:"#fef2e8"
     // }
     // //分割线

@@ -1,44 +1,26 @@
-#ifndef NCMSONGAPI_H
-#define NCMSONGAPI_H
-
-#include <QHash>
-#include <QList>
+#pragma once
+#include "NcmRequest.h"
 #include <QObject>
-#include <QString>
-
+#include <QHash>
+#include <QSet>
+#include <QPointer>
 #include <functional>
-
 class CurlHttpClient;
 
-/**
- * @brief 网易云歌曲播放地址解析 API
- *
- * 明文 POST /api/song/enhance/player/url（ids + br），带登录 Cookie。
- * 注意：必须走 CurlHttpClient(curl.exe/Schannel)，QNAM 通道会被网易对 VIP 歌判定为
- * 异常客户端返回 code:-110（实测 curl 同参数返回 200）。
- */
+// 播放地址走 curl/Schannel；每轮尝试的 ID 在发送前确定，以覆盖同步失败。
 class NcmSongApi : public QObject
 {
     Q_OBJECT
-
 public:
     explicit NcmSongApi(CurlHttpClient* curl, QObject* parent = nullptr);
-
     void setCookieProvider(std::function<QString()> provider);
-
-    /// 批量解析歌曲播放地址（一次请求多个 id）
-    void resolveUrls(const QList<qint64>& ids);
-
+    void resolveUrls(const QList<qint64>& ids, quint64 requestId = 0);
 signals:
-    /// id -> 播放地址；无权限/未登录的歌曲不在 map 里
-    void urlsResolved(const QHash<qint64, QString>& urlMap);
-    void apiError(const QString& message);
-
+    void urlsResolved(quint64 requestId, const QHash<qint64, QString>& urls);
+    void apiError(quint64 requestId, const QString& message);
 private:
-    void onResult(int httpStatus, const QByteArray& body);
-
-    CurlHttpClient* m_curl = nullptr;
+    void finish(quint64 id, int status, const QByteArray& body, const QString& error = {});
+    QPointer<CurlHttpClient> m_curl;
     std::function<QString()> m_cookieProvider;
+    QSet<quint64> m_pending;
 };
-
-#endif // NCMSONGAPI_H

@@ -64,9 +64,9 @@ Popup {
             anchors.top: parent.top
             anchors.topMargin: 50
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "B站扫码登录"
+            text: qsTranslate("Oran7Ui", "B站扫码登录")
             font.pixelSize: 20
-            font.family: "微软雅黑"
+            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
             color: "#2a1a22"
             font.bold: true
         }
@@ -108,7 +108,7 @@ Popup {
                 visible: BilibiliAuthManager.loginState === BilibiliAuthManager.Generating
                 Label {
                     anchors.centerIn: parent
-                    text: "生成中..."
+                    text: qsTranslate("Oran7Ui", "生成中...")
                     font.pixelSize: 14
                     color: "#888888"
                 }
@@ -123,7 +123,7 @@ Popup {
 
                 Label {
                     anchors.centerIn: parent
-                    text: "✓ 登录成功"
+                    text: qsTranslate("Oran7Ui", "✓ 登录成功")
                     font.pixelSize: 18
                     font.bold: true
                     color: "#4CAF50"
@@ -140,7 +140,7 @@ Popup {
                 Label {
                     id: expiredLabel
                     anchors.centerIn: parent
-                    text: "二维码已过期"
+                    text: qsTranslate("Oran7Ui", "二维码已过期")
                     font.pixelSize: 16
                     color: "#FF5722"
                 }
@@ -155,7 +155,7 @@ Popup {
 
                 Label {
                     anchors.centerIn: parent
-                    text: "网络错误"
+                    text: qsTranslate("Oran7Ui", "网络错误")
                     font.pixelSize: 16
                     color: "#F44336"
                 }
@@ -169,7 +169,7 @@ Popup {
             anchors.topMargin: 20
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: 14
-            font.family: "微软雅黑"
+            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
             color: {
                 switch (BilibiliAuthManager.loginState) {
                 case BilibiliAuthManager.Success: return "#4CAF50"
@@ -182,12 +182,12 @@ Popup {
             text: {
                 switch (BilibiliAuthManager.loginState) {
                 case BilibiliAuthManager.Idle: return ""
-                case BilibiliAuthManager.Generating: return "正在生成二维码..."
-                case BilibiliAuthManager.WaitingScan: return "请使用哔哩哔哩App扫描二维码"
-                case BilibiliAuthManager.Scanned: return "扫描成功，请在手机上确认登录"
-                case BilibiliAuthManager.Success: return "登录成功！欢迎 " + BilibiliAuthManager.userName
-                case BilibiliAuthManager.Expired: return "二维码已过期，请点击刷新"
-                case BilibiliAuthManager.Error: return "网络错误，请重试"
+                case BilibiliAuthManager.Generating: return qsTranslate("Oran7Ui", "正在生成二维码...")
+                case BilibiliAuthManager.WaitingScan: return qsTranslate("Oran7Ui", "请使用哔哩哔哩App扫描二维码")
+                case BilibiliAuthManager.Scanned: return qsTranslate("Oran7Ui", "扫描成功，请在手机上确认登录")
+                case BilibiliAuthManager.Success: return qsTranslate("Oran7Ui", "登录成功！欢迎 ") + BilibiliAuthManager.userName
+                case BilibiliAuthManager.Expired: return qsTranslate("Oran7Ui", "二维码已过期，请点击刷新")
+                case BilibiliAuthManager.Error: return qsTranslate("Oran7Ui", "网络错误，请重试")
                 }
             }
         }
@@ -207,9 +207,9 @@ Popup {
 
             Label {
                 anchors.centerIn: parent
-                text: "刷新二维码"
+                text: qsTranslate("Oran7Ui", "刷新二维码")
                 font.pixelSize: 14
-                font.family: "微软雅黑"
+                font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                 color: "white"
             }
 
@@ -230,9 +230,9 @@ Popup {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 40
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "使用哔哩哔哩客户端扫码登录"
+            text: qsTranslate("Oran7Ui", "使用哔哩哔哩客户端扫码登录")
             font.pixelSize: 13
-            font.family: "微软雅黑"
+            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
             color: "#bbbbbe"
         }
     }

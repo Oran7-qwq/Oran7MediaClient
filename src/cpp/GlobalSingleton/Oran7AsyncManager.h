@@ -4,7 +4,7 @@
 #include <QHash>
 #include <QJSValue>
 #include <QObject>
-#include <QThreadPool>
+#include "Oran7TaskHandle.h"
 #include <QVariantMap>
 
 #include <functional>
@@ -30,20 +30,23 @@ public:
     explicit Oran7AsyncManager(QObject* parent = nullptr);
     ~Oran7AsyncManager() override;
 
-    /// 进入退出流程：置位后 run() 不再投递新任务，并等待 m_pool 中任务全部结束，
-    /// 避免 QML 引擎销毁该单例时 QThreadPool 随成员析构、线程仍在等待。
+    /// 取消本对象的待处理任务；退出标志及共享线程池排空由 Oran7Async 负责。
     static void beginShutdown();
 
     /// 注册后台处理器：返回值为结果；异常会被捕获转成 failed 回调
     void registerHandler(const QString& operation, Handler handler);
 
-    /// 执行一个已注册的后台操作。成功回调 completed(result)，失败回调 failed(error)。返回 taskId，未知操作返回 -1。
+    /// 取消后不再调用完成/失败回调；运行中的阻塞操作仍需自行返回。
+    Q_INVOKABLE bool cancel(int taskId);
+    Q_INVOKABLE void cancelAll();
+
+    /// 成功回调 completed(result)，失败回调 failed(error)。无效操作/退出中返回 -1。
     Q_INVOKABLE int run(const QString& operation, const QVariantMap& arguments,
                         QJSValue completed, QJSValue failed = QJSValue());
 
 private:
     QHash<QString, Handler> m_handlers;
-    QThreadPool m_pool;
+    QHash<int, Oran7TaskHandle> m_tasks;
     int m_nextTaskId = 1;
     static inline Oran7AsyncManager* s_instance = nullptr;
 };

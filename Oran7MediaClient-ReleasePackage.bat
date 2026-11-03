@@ -110,7 +110,7 @@ if not exist "%ODIR%" (
 
 REM 2. 复制构建产物（含 POST_BUILD 拷来的 ffmpeg6.0/bin、SQLite/、zlib1.dll）
 echo [2/10] 复制构建产物...
-robocopy "%IDIR%" "%ODIR%" /E /NFL /NDL /NJH /NJS /NP >nul 2>&1
+robocopy "%IDIR%" "%ODIR%" /E /XD Config config.json.credentials Logs refactor-work tests /XF config.json config.json.bak-* config.json.write.lock *.dpapi *.dmp /NFL /NDL /NJH /NJS /NP >nul 2>&1
 if %errorlevel% geq 8 (
     echo [错误] robocopy 复制构建产物失败，退出码 %errorlevel%
     exit /b 1

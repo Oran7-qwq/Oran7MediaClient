@@ -1,123 +1,135 @@
 #include "CurlHttpClient.h"
-
-#include "GlobalHelper.h"
-
+#include "Oran7GlobalHelper.h"
 #include <QDir>
 #include <QFile>
 #include <QProcess>
-#include <QRandomGenerator>
 #include <QStandardPaths>
+#include <QTemporaryDir>
+#include <memory>
+#include <utility>
 
-CurlHttpClient::CurlHttpClient(QObject* parent)
+// QObject 空壳在 GUI 建立后移动，所有进程/文件资源只在后台线程创建和释放。
+class Oran7CurlHttpWorker final : public QObject {
+    Q_OBJECT
+public:
+    Oran7CurlHttpWorker(QString executable, QString root)
+        : m_curl(std::move(executable)), m_temporaryRoot(std::move(root)) {}
+    ~Oran7CurlHttpWorker() override {
+        for (auto* process : findChildren<QProcess*>(QString(), Qt::FindDirectChildrenOnly)) {
+            disconnect(process, nullptr, this, nullptr);
+            if (process->state() != QProcess::NotRunning) {
+                process->kill();
+                process->waitForFinished(1000);
+            }
+            delete process;
+        }
+    }
+    void send(const NcmRequest& req);
+signals:
+    void requestFinished(quint64 requestId, const QString& tag, int httpStatus,
+                         const QByteArray& body, const QString& setCookie);
+    void requestError(quint64 requestId, const QString& tag, const QString& message);
+private:
+    QString m_curl;
+    QString m_temporaryRoot;
+};
+
+CurlHttpClient::CurlHttpClient(QObject* parent, const QString& executable, const QString& temporaryRoot)
     : QObject(parent)
-    , m_curl(curlPath())
 {
+    m_worker = new Oran7CurlHttpWorker(executable.isEmpty() ? curlPath() : executable,
+        temporaryRoot.isEmpty() ? QDir::tempPath() : temporaryRoot);
+    m_worker->moveToThread(&m_thread);
+    connect(&m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+    connect(m_worker, &Oran7CurlHttpWorker::requestFinished, this, &CurlHttpClient::requestFinished, Qt::QueuedConnection);
+    connect(m_worker, &Oran7CurlHttpWorker::requestError, this, &CurlHttpClient::requestError, Qt::QueuedConnection);
+    m_thread.start();
 }
-
+CurlHttpClient::~CurlHttpClient()
+{
+    // 仅服务退出时等待：不向 GUI 转发迟到结果，后台销毁进程后才结束线程。
+    disconnect(m_worker, nullptr, this, nullptr);
+    m_thread.requestInterruption();
+    m_thread.quit();
+    m_thread.wait();
+}
 QString CurlHttpClient::curlPath()
 {
-    const QStringList candidates = {
-        QStringLiteral("C:/Windows/System32/curl.exe"), // 64 位 Windows
-        QStringLiteral("C:/Windows/SysWOW64/curl.exe")  // 32 位
-    };
-    for (const QString& c : candidates) {
-        if (QFile::exists(c))
-            return c;
-    }
+    for (const auto& path : {QStringLiteral("C:/Windows/System32/curl.exe"), QStringLiteral("C:/Windows/SysWOW64/curl.exe")})
+        if (QFile::exists(path)) return path;
     return QStandardPaths::findExecutable(QStringLiteral("curl"));
 }
-
-void CurlHttpClient::send(const NcmRequest& req, const QString& tag)
+void CurlHttpClient::send(const NcmRequest& req)
+{
+    // 请求仅携带值快照；操作系统 CreateProcess 即使耗时，也不会堵住调用线程。
+    auto* worker = m_worker;
+    QMetaObject::invokeMethod(worker, [worker, req] {
+        if (!QThread::currentThread()->isInterruptionRequested()) worker->send(req);
+    }, Qt::QueuedConnection);
+}
+void Oran7CurlHttpWorker::send(const NcmRequest& req)
 {
     if (m_curl.isEmpty()) {
-        emit requestError(QStringLiteral("未找到系统 curl.exe，无法发送网易云请求"), tag);
+        emit requestError(req.id, req.tag, QStringLiteral("未找到系统 curl.exe"));
         return;
     }
-
-    // 请求体写入临时文件，避免命令行长度/转义问题（GET 无 body，跳过）
-    QString bodyPath;
+    auto directory = std::make_shared<QTemporaryDir>(QDir(m_temporaryRoot).filePath("oran7-ncm-XXXXXX"));
+    if (!directory->isValid()) {
+        emit requestError(req.id, req.tag, QStringLiteral("无法创建请求临时目录"));
+        return;
+    }
+    const auto bodyPath = directory->filePath("body");
+    const auto outPath = directory->filePath("response");
+    const auto hdrPath = directory->filePath("headers");
     if (req.isPost) {
-        bodyPath = QDir::temp().filePath(
-            QStringLiteral("ncm_curl_body_%1").arg(QRandomGenerator::global()->generate()));
-        QFile f(bodyPath);
-        if (!f.open(QIODevice::WriteOnly)) {
-            emit requestError(QStringLiteral("无法写入临时请求体"), tag);
+        QFile body(bodyPath);
+        if (!body.open(QIODevice::WriteOnly) || body.write(req.body) != req.body.size()) {
+            emit requestError(req.id, req.tag, QStringLiteral("无法写入临时请求体"));
             return;
         }
-        f.write(req.body);
-        f.close();
     }
-    const QString outPath = QDir::temp().filePath(
-        QStringLiteral("ncm_curl_out_%1").arg(QRandomGenerator::global()->generate()));
-    const QString hdrPath = QDir::temp().filePath(
-        QStringLiteral("ncm_curl_hdr_%1").arg(QRandomGenerator::global()->generate()));
-
-    QStringList args;
-    args << QStringLiteral("--http1.1") << QStringLiteral("--ssl-no-revoke")
-         << QStringLiteral("--globoff") << QStringLiteral("-sS") << QStringLiteral("--max-time") << QStringLiteral("10")
-         << QStringLiteral("--output") << outPath
-         << QStringLiteral("--dump-header") << hdrPath
-         << QStringLiteral("--write-out") << QStringLiteral("%{http_code}");
-    if (req.isPost) {
-        args << QStringLiteral("-X") << QStringLiteral("POST")
-             << QStringLiteral("--data-binary") << (QStringLiteral("@") + bodyPath);
-    }
-    for (auto it = req.headers.constBegin(); it != req.headers.constEnd(); ++it) {
-        args << QStringLiteral("-H")
-             << QStringLiteral("%1: %2").arg(QString::fromLatin1(it.key()),
-                                             QString::fromLatin1(it.value()));
-    }
-    // 必须用 FullyEncoded：QUrl::toString() 默认 PrettyDecoded 会把查询里的中文解码成原始字符，
-    // curl.exe 会报 "URL rejected: Malformed input"（如搜索关键词）
+    QStringList args{"--http1.1", "--ssl-no-revoke", "--globoff", "-sS", "--max-time", "10",
+        "--output", outPath, "--dump-header", hdrPath, "--write-out", "%{http_code}"};
+    if (req.isPost) args << "-X" << "POST" << "--data-binary" << "@" + bodyPath;
+    for (auto it = req.headers.cbegin(); it != req.headers.cend(); ++it)
+        args << "-H" << QString::fromLatin1(it.key()) + ": " + QString::fromLatin1(it.value());
     args << req.url.toString(QUrl::FullyEncoded);
-
-    NETWORK_LOG << "CurlHttpClient:" << (req.isPost ? "POST" : "GET") << req.url.path() << "tag=" << tag;
-
-    QProcess* proc = new QProcess(this);
-    proc->setProcessChannelMode(QProcess::SeparateChannels);
-    connect(proc, &QProcess::finished, this, [this, proc, tag, bodyPath, outPath, hdrPath](
-            int exitCode, QProcess::ExitStatus status) {
-        const int httpStatus = QString::fromUtf8(proc->readAllStandardOutput()).trimmed().toInt();
-        const QByteArray stderrText = proc->readAllStandardError().trimmed();
-
-        QByteArray body;
-        {
-            QFile f(outPath);
-            if (f.open(QIODevice::ReadOnly))
-                body = f.readAll();
-        }
-        // 从响应头里提取 Set-Cookie（803 成功兜底）
-        QString setCookie;
-        {
-            QFile f(hdrPath);
-            if (f.open(QIODevice::ReadOnly)) {
-                const QList<QByteArray> lines = f.readAll().split('\n');
-                for (const QByteArray& line : lines) {
-                    if (line.startsWith("Set-Cookie:")) {
-                        if (!setCookie.isEmpty())
-                            setCookie += QStringLiteral("; ");
-                        setCookie += QString::fromUtf8(line.mid(11)).trimmed();
-                    }
-                }
+    NETWORK_LOG << "Ncm HTTP request=" << req.id << "tag=" << req.tag << "path=" << req.url.path();
+    auto* process = new QProcess(this); // QObject 独占，退出时先终止进程再释放临时目录。
+    auto completed = std::make_shared<bool>(false);
+    connect(process, &QObject::destroyed, [directory] {});
+    connect(process, &QProcess::errorOccurred, this,
+        [this, process, completed, id = req.id, tag = req.tag](QProcess::ProcessError error) {
+            if (error != QProcess::FailedToStart || *completed) return;
+            *completed = true;
+            process->deleteLater();
+            emit requestError(id, tag, QStringLiteral("curl 进程启动失败"));
+        });
+    connect(process, &QProcess::finished, this,
+        [this, process, directory, completed, id = req.id, tag = req.tag, outPath, hdrPath]
+        (int exitCode, QProcess::ExitStatus status) {
+            if (*completed) return;
+            *completed = true;
+            const int httpStatus = QString::fromUtf8(process->readAllStandardOutput()).trimmed().toInt();
+            // stderr 可能包含请求 URL/凭据，不进入日志或向上层传播。
+            process->readAllStandardError();
+            process->deleteLater();
+            if (exitCode != 0 || status != QProcess::NormalExit) {
+                NETWORK_LOG << "Ncm HTTP request=" << id << "tag=" << tag << "exit=" << exitCode;
+                emit requestError(id, tag, QStringLiteral("curl 请求失败（退出码 %1）").arg(exitCode));
+                return;
             }
-        }
-        QFile::remove(outPath);
-        if (!bodyPath.isEmpty())   // GET 无 body，bodyPath 为空
-            QFile::remove(bodyPath);
-        QFile::remove(hdrPath);
-        proc->deleteLater();
-
-        if (exitCode != 0 || status != QProcess::NormalExit) {
-            NETWORK_LOG << "CurlHttpClient: curl failed exit=" << exitCode
-                        << " stderr=" << QString::fromUtf8(stderrText);
-            emit requestError(QStringLiteral("curl 请求失败: %1").arg(QString::fromUtf8(stderrText)),
-                              tag);
-            return;
-        }
-        NETWORK_LOG << "CurlHttpClient: reply http=" << httpStatus
-                    << " len=" << body.size();
-        emit requestFinished(httpStatus, body, setCookie, tag);
-    });
-
-    proc->start(m_curl, args);
+            QFile response(outPath); QByteArray body;
+            if (response.open(QIODevice::ReadOnly)) body = response.readAll();
+            QFile headers(hdrPath); QStringList cookies;
+            if (headers.open(QIODevice::ReadOnly)) {
+                for (const auto& line : headers.readAll().split('\n'))
+                    if (line.toLower().startsWith("set-cookie:")) cookies.append(QString::fromUtf8(line.mid(11)).trimmed());
+            }
+            NETWORK_LOG << "Ncm HTTP request=" << id << "tag=" << tag << "status=" << httpStatus << "bytes=" << body.size();
+            emit requestFinished(id, tag, httpStatus, body, cookies.join("; "));
+        });
+    process->start(m_curl, args);
 }
+
+#include "CurlHttpClient.moc"

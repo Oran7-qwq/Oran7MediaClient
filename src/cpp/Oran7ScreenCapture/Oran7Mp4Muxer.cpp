@@ -41,16 +41,17 @@ bool Oran7Mp4Muxer::open(const char *filePath, int width, int height,AVRational 
     }
 
     const AVCodecContext* enc_ctx = _video_encoder->codecContext();
-    if (enc_ctx && enc_ctx->extradata_size > 0) {
-        _videoStream->codecpar->extradata =(uint8_t*)av_mallocz(enc_ctx->extradata_size +AV_INPUT_BUFFER_PADDING_SIZE);
-        _videoStream->codecpar->extradata_size = enc_ctx->extradata_size;
-        memcpy(_videoStream->codecpar->extradata, enc_ctx->extradata,enc_ctx->extradata_size);
+    if (!enc_ctx || avcodec_parameters_from_context(_videoStream->codecpar, enc_ctx) < 0) {
+        avio_closep(&_muxFmtCtx->pb); avformat_free_context(_muxFmtCtx); _muxFmtCtx = nullptr;
+        return false;
     }
+    _videoStream->avg_frame_rate = av_inv_q(frameRate);
 
     // 3.5 创建音频流
     if (audio_encoder) {
         _audio_encoder = audio_encoder;
         _audioStream = avformat_new_stream(_muxFmtCtx, nullptr);
+        if (!_audioStream) { avio_closep(&_muxFmtCtx->pb); avformat_free_context(_muxFmtCtx); _muxFmtCtx = nullptr; return false; }
         _audioStream->time_base     = AVRational{1, 48000};
         _audioStream->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
         _audioStream->codecpar->codec_id    = AV_CODEC_ID_AAC;
@@ -70,6 +71,7 @@ bool Oran7Mp4Muxer::open(const char *filePath, int width, int height,AVRational 
 
     // 4. 写文件头
     if(avformat_write_header(_muxFmtCtx,nullptr) < 0){
+        avio_closep(&_muxFmtCtx->pb);
         avformat_free_context(_muxFmtCtx);
         _muxFmtCtx = nullptr; return false;
     }
@@ -82,11 +84,11 @@ bool Oran7Mp4Muxer::open(const char *filePath, int width, int height,AVRational 
 
 void Oran7Mp4Muxer::close()
 {
-    if (!_running.exchange(false)) return;
+    _running.store(false);
     if (_thread.joinable())
         _thread.join();
     // muxLoop 退出后，排空编码器 flush 残留包
-    drainRemaining();
+    if (_opened) drainRemaining();
     // 最后写 moov atom
     flush();
 }
@@ -125,8 +127,9 @@ void Oran7Mp4Muxer::muxLoop()
             if (_video_encoder->getPacket(&pkt, 1)) {
                 pkt.stream_index = _videoStream->index;
                 pkt.time_base = _video_encoder->encoderTimeBase();  // 告诉 muxer PTS 单位
-                av_interleaved_write_frame(_muxFmtCtx, &pkt);
+                const int status = av_interleaved_write_frame(_muxFmtCtx, &pkt);
                 av_packet_unref(&pkt);
+                if (status < 0) { if (_onError) _onError("MP4 写入失败"); _running.store(false); return; }
                 vidWrites++;
                 _writeIndex++;
                 got = true;
@@ -139,8 +142,9 @@ void Oran7Mp4Muxer::muxLoop()
             if (_audio_encoder->getPacket(&pkt, 1)) {
                 pkt.stream_index = _audioStream->index;
                 pkt.time_base = _audio_encoder->encoderTimeBase();
-                av_interleaved_write_frame(_muxFmtCtx, &pkt);
+                const int status = av_interleaved_write_frame(_muxFmtCtx, &pkt);
                 av_packet_unref(&pkt);
+                if (status < 0) { if (_onError) _onError("MP4 音频写入失败"); _running.store(false); return; }
                 audWrites++;
                 got = true;
             }
@@ -150,21 +154,21 @@ void Oran7Mp4Muxer::muxLoop()
         static auto lastLog = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
         if (now - lastLog >= std::chrono::seconds(3)) {
-            printf("mux: vid=%lld aud=%lld\n", vidWrites, audWrites);
+            INFO_LOG << "[Muxer] vid=" << vidWrites << " aud=" << audWrites;
             lastLog = now;
         }
 
         if (!got)
             std::this_thread::sleep_for(std::chrono::microseconds(500));
     }
-    printf("mux exit: vid=%lld aud=%lld\n", vidWrites, audWrites);
+    INFO_LOG << "[Muxer] exit vid=" << vidWrites << " aud=" << audWrites;
 }
 
 void Oran7Mp4Muxer::flush()
 {
     if (_muxFmtCtx) {
-        av_write_trailer(_muxFmtCtx);
-        avio_closep(&_muxFmtCtx->pb);
+        if (_opened && av_write_trailer(_muxFmtCtx) < 0 && _onError) _onError("MP4 收尾失败");
+        if (avio_closep(&_muxFmtCtx->pb) < 0 && _onError) _onError("MP4 文件关闭失败");
         avformat_free_context(_muxFmtCtx);
         _muxFmtCtx = nullptr;
     }

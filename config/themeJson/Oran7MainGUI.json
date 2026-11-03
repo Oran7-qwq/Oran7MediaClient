@@ -13,9 +13,6 @@
         "settingWinItemDefalutWidth":252,
         "soundEffectVolume":1.0,
 
-        "settingContent_visiable":false,
-        "OpenSettingWin":false,
-        "isDarkMode":true,
         "DWMBlurEffectEnabled":false
     }
 }

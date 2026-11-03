@@ -39,11 +39,11 @@
 #include "Oran7WhipPublisher.h"
 #include "Oran7VideoEncoder.h"
 #include "Oran7AudioEncoder.h"
-#include "GlobalHelper.h"
+#include "Oran7GlobalHelper.h"
 
 #include <chrono>
 #include <cstring>
-#include <fstream>
+
 #include <random>
 #include <sstream>
 
@@ -80,22 +80,20 @@ struct HttpResponse {
 };
 
 static constexpr int kHttpTimeoutMs = 5000;
-static const char kBearerToken[] = "123456";
-
-static void setAuthHeaders(QNetworkRequest& req) {
-    req.setRawHeader("Authorization", "Bearer 123456");
+static void setAuthHeaders(QNetworkRequest& req, const std::string& token) {
+    if (!token.empty()) req.setRawHeader("Authorization", QByteArray("Bearer ") + QByteArray::fromStdString(token));
 }
 
 static HttpResponse httpPostSync(const std::string& url,
                                   const std::string& body,
-                                  const std::string& contentType)
+                                  const std::string& contentType, const std::string& token)
 {
     HttpResponse r;
     QNetworkAccessManager mgr;
     QNetworkRequest req(QUrl(QString::fromStdString(url)));
     req.setHeader(QNetworkRequest::ContentTypeHeader,
                   QString::fromStdString(contentType));
-    setAuthHeaders(req);
+    setAuthHeaders(req, token);
     req.setTransferTimeout(kHttpTimeoutMs);
 
     QEventLoop loop;
@@ -106,7 +104,7 @@ static HttpResponse httpPostSync(const std::string& url,
 
     if (!reply->isFinished()) {
         reply->abort();
-        WARNING_LOG << "[whip] POST timeout:" << url.c_str();
+        WARNING_LOG << "[whip] POST timeout";
         reply->deleteLater();
         return r;
     }
@@ -123,14 +121,14 @@ static HttpResponse httpPostSync(const std::string& url,
 static HttpResponse httpPatchSync(const std::string& url,
                                    const std::string& body,
                                    const std::string& contentType,
-                                   const std::string& ifMatch = {})
+                                   const std::string& ifMatch, const std::string& token)
 {
     HttpResponse r;
     QNetworkAccessManager mgr;
     QNetworkRequest req(QUrl(QString::fromStdString(url)));
     req.setHeader(QNetworkRequest::ContentTypeHeader,
                   QString::fromStdString(contentType));
-    setAuthHeaders(req);
+    setAuthHeaders(req, token);
     if (!ifMatch.empty())
         req.setRawHeader("If-Match", ifMatch.c_str());
     req.setTransferTimeout(kHttpTimeoutMs);
@@ -157,11 +155,11 @@ static HttpResponse httpPatchSync(const std::string& url,
 }
 
 static int httpDeleteSync(const std::string& url,
-                           const std::string& ifMatch = {})
+                           const std::string& ifMatch, const std::string& token)
 {
     QNetworkAccessManager mgr;
     QNetworkRequest req(QUrl(QString::fromStdString(url)));
-    setAuthHeaders(req);
+    setAuthHeaders(req, token);
     if (!ifMatch.empty())
         req.setRawHeader("If-Match", ifMatch.c_str());
     req.setTransferTimeout(kHttpTimeoutMs);
@@ -186,15 +184,14 @@ static int httpDeleteSync(const std::string& url,
 #ifdef SPARK_MEDIA_PUBLISHER_WITH_LIBDATACHANNEL
 
 static uint32_t randomSsrc() {
-    static std::mt19937 gen(std::random_device{}());
-    static std::uniform_int_distribution<uint32_t> dist(
+    static thread_local std::mt19937 gen(std::random_device{}());
+    static thread_local std::uniform_int_distribution<uint32_t> dist(
         0x10000000, 0xFFFFFFFF);
     return dist(gen);
 }
 
 // h264_mf 硬编默认值，如果 initH264Bsf 能从 extradata 提取实际值则会覆盖
 // 从编码器 extradata/SPS 提取的实际值，初始化前为空。initH264Bsf 填充
-static std::string g_h264ProfileLevelId;
 
 static std::string injectExtmap(const std::string& sdp) {
     static const char* extensions =
@@ -280,6 +277,7 @@ bool Oran7WhipPublisher::open(const Config& cfg,
     }
 
     _cfg      = cfg;
+    _events = std::make_shared<Oran7Events>();
     _videoEnc = videoEnc;
     _audioEnc = audioEnc;
 
@@ -367,8 +365,7 @@ bool Oran7WhipPublisher::open(const Config& cfg,
 // ============================================================================
 
 void Oran7WhipPublisher::close() {
-    if (!_running.exchange(false))
-        return;
+    _running.store(false);
 
     if (_loopThread.joinable())
         _loopThread.join();
@@ -381,6 +378,8 @@ void Oran7WhipPublisher::close() {
     _videoTrack.reset();
     _audioTrack.reset();
     whipDelete();
+    _whipResourcePath.clear();
+    _whipEtag.clear();
 #endif
 
     if (_h264Bsf) {
@@ -422,6 +421,17 @@ void Oran7WhipPublisher::publishLoop() {
     INFO_LOG << "WhipPublisher: publishLoop started";
 
     while (_running.load()) {
+#ifdef SPARK_MEDIA_PUBLISHER_WITH_LIBDATACHANNEL
+        if (!_cfg.dryRun) {
+            std::vector<std::pair<std::string, std::string>> candidates;
+            { std::lock_guard<std::mutex> lock(_events->mutex); candidates.swap(_events->candidates); }
+            for (const auto& candidate : candidates) {
+                if (!_running.load()) break;
+                if (_onIceCandidate) _onIceCandidate(candidate.second, candidate.first);
+                whipPatchIce(candidate.first, candidate.second);
+            }
+        }
+#endif
         AVPacket pkt{};
         bool gotAny = false;
 
@@ -440,7 +450,7 @@ void Oran7WhipPublisher::publishLoop() {
                     }
 
                     // PLI 响应
-                    bool pliTriggered = _forceKeyframe.exchange(false);
+                    bool pliTriggered = _events->forceKeyframe.exchange(false);
                     if (pliTriggered)
                         _videoEnc->requestKeyframe();
                     static int64_t lastIdrPts = 0;
@@ -501,27 +511,7 @@ void Oran7WhipPublisher::publishLoop() {
                         }
                     }
 
-                    // ---- 诊断：保存 sendFrame 前的 Annex-B H.264 到文件 ----
-                    {
-                        static std::ofstream h264File;
-                        static int h264Cnt = 0;
-                        if (!h264File.is_open()) {
-                            h264File.open("C:/temp/after_bsf.h264",
-                                          std::ios::binary | std::ios::app);
-                        }
-                        if (h264File.is_open() && h264Cnt < 300) {
-                            h264File.write(reinterpret_cast<const char*>(sendData),
-                                           sendSize);
-                            h264Cnt++;
-                            if (h264Cnt == 300) {
-                                h264File.close();
-                                INFO_LOG << "H264 dump done: C:/temp/after_bsf.h264";
-                            }
-                        }
-                    }
-                    // ----
-
-                    if (_videoTrack && _videoTrackOpen.load()) {
+                    if (_videoTrack && _events->videoOpen.load()) {
                         ::rtc::binary data(
                             reinterpret_cast<const std::byte*>(sendData),
                             reinterpret_cast<const std::byte*>(sendData) + sendSize);
@@ -552,7 +542,7 @@ void Oran7WhipPublisher::publishLoop() {
                 if (!_cfg.dryRun) {
 #ifdef SPARK_MEDIA_PUBLISHER_WITH_LIBDATACHANNEL
                     uint32_t rtpTs = audioRtpTimestamp(pkt.pts);
-                    if (_audioTrack && _audioTrackOpen.load()) {
+                    if (_audioTrack && _events->audioOpen.load()) {
                         ::rtc::binary data(
                             reinterpret_cast<const std::byte*>(pkt.data),
                             reinterpret_cast<const std::byte*>(pkt.data) + pkt.size);
@@ -625,25 +615,15 @@ bool Oran7WhipPublisher::initPeerConnection() {
 
     _pc = std::make_shared<::rtc::PeerConnection>(rtcCfg);
 
-    _pc->onStateChange([](::rtc::PeerConnection::State s) {
-        INFO_LOG << "[whip] pc state:" << pcStateStr(s).c_str();
+    _pc->onStateChange([events = _events](::rtc::PeerConnection::State s) {
+        std::lock_guard<std::mutex> lock(events->mutex); events->connection = pcStateStr(s);
     });
-    _pc->onIceStateChange([](::rtc::PeerConnection::IceState s) {
-        INFO_LOG << "[whip] ice state:" << iceStateStr(s).c_str();
+    _pc->onIceStateChange([events = _events](::rtc::PeerConnection::IceState s) {
+        std::lock_guard<std::mutex> lock(events->mutex); events->ice = iceStateStr(s);
     });
-    _pc->onGatheringStateChange([](::rtc::PeerConnection::GatheringState s) {
-        INFO_LOG << "[whip] gathering:" << gatherStateStr(s).c_str();
-    });
-
-    _pc->onLocalCandidate([this](::rtc::Candidate cand) {
-        INFO_LOG << "[whip] local ICE:" << std::string(cand).c_str();
-        // 收集本地 ICE 并发送到服务器
-        if (_onIceCandidate)
-            _onIceCandidate(cand.candidate(), cand.mid());
-        // 直接发送 Trickle ICE
-        std::string mid = cand.mid();
-        std::string line = std::string(cand); // 已经是 a=candidate:... 格式
-        whipPatchIce(mid, line);
+    _pc->onLocalCandidate([events = _events](::rtc::Candidate cand) {
+        std::lock_guard<std::mutex> lock(events->mutex);
+        if (events->candidates.size() < 64) events->candidates.emplace_back(cand.mid(), std::string(cand));
     });
 
     _pc->onTrack([](std::shared_ptr<::rtc::Track> track) {
@@ -665,8 +645,7 @@ bool Oran7WhipPublisher::createVideoTrack(std::string* out_mid) {
     ::rtc::Description::Video desc("1",
                                     ::rtc::Description::Direction::SendOnly);
 
-    const auto& plid = _h264ProfileLevelId.empty()
-        ? g_h264ProfileLevelId : _h264ProfileLevelId;
+    const auto& plid = _h264ProfileLevelId;
     if (plid.empty()) {
         WARNING_LOG << "[whip] profile-level-id not yet extracted from SPS"
                        " — SDP may not match actual codec output!";
@@ -689,12 +668,12 @@ bool Oran7WhipPublisher::createVideoTrack(std::string* out_mid) {
              << _videoTrack->mid().c_str()
              << "ssrc:" << _videoSsrc;
 
-    _videoTrack->onOpen([this]() {
-        _videoTrackOpen.store(true);
+    _videoTrack->onOpen([events = _events]() {
+        events->videoOpen.store(true);
         INFO_LOG << "[whip] video track OPENED";
     });
-    _videoTrack->onClosed([this]() {
-        _videoTrackOpen.store(false);
+    _videoTrack->onClosed([events = _events]() {
+        events->videoOpen.store(false);
         WARNING_LOG << "[whip] video track CLOSED";
     });
 
@@ -712,14 +691,14 @@ bool Oran7WhipPublisher::createVideoTrack(std::string* out_mid) {
     packetizer->addToChain(
         std::make_shared<::rtc::RtcpNackResponder>());
     packetizer->addToChain(
-        std::make_shared<::rtc::PliHandler>([this]() {
+        std::make_shared<::rtc::PliHandler>([events = _events]() {
             auto nowUs = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count();
-            int64_t last = _lastPliUs.load();
+            int64_t last = events->lastPliUs.load();
             if (last != 0 && (nowUs - last) < 500000)
                 return;
-            _lastPliUs.store(nowUs);
-            _forceKeyframe.store(true);
+            events->lastPliUs.store(nowUs);
+            events->forceKeyframe.store(true);
 
             static std::atomic<uint64_t> pliCnt{0};
             auto n = pliCnt.fetch_add(1) + 1;
@@ -753,12 +732,12 @@ bool Oran7WhipPublisher::createAudioTrack(std::string* out_mid) {
              << _audioTrack->mid().c_str()
              << "ssrc:" << _audioSsrc;
 
-    _audioTrack->onOpen([this]() {
-        _audioTrackOpen.store(true);
+    _audioTrack->onOpen([events = _events]() {
+        events->audioOpen.store(true);
         INFO_LOG << "[whip] audio track OPENED";
     });
-    _audioTrack->onClosed([this]() {
-        _audioTrackOpen.store(false);
+    _audioTrack->onClosed([events = _events]() {
+        events->audioOpen.store(false);
         WARNING_LOG << "[whip] audio track CLOSED";
     });
 
@@ -779,26 +758,18 @@ bool Oran7WhipPublisher::createAudioTrack(std::string* out_mid) {
 bool Oran7WhipPublisher::generateOffer(std::string* out_sdp) {
     if (!_pc || !out_sdp) return false;
 
-    createAudioTrack(nullptr);
+    if (_audioEnc) createAudioTrack(nullptr);
     if (!createVideoTrack(nullptr))
         return false;
 
+    _pc->onGatheringStateChange([events = _events](::rtc::PeerConnection::GatheringState s) {
+        if (s != ::rtc::PeerConnection::GatheringState::Complete) return;
+        std::lock_guard<std::mutex> lock(events->mutex); events->gatheringDone = true; events->gathered.notify_all();
+    });
     _pc->setLocalDescription();
-
     {
-        std::mutex mtx;
-        std::condition_variable cv;
-        bool done = false;
-        _pc->onGatheringStateChange(
-            [&](::rtc::PeerConnection::GatheringState s) {
-                if (s == ::rtc::PeerConnection::GatheringState::Complete) {
-                    std::lock_guard<std::mutex> lock(mtx);
-                    done = true;
-                    cv.notify_one();
-                }
-            });
-        std::unique_lock<std::mutex> lock(mtx);
-        cv.wait_for(lock, std::chrono::seconds(3), [&]{ return done; });
+        std::unique_lock<std::mutex> lock(_events->mutex);
+        _events->gathered.wait_for(lock, std::chrono::seconds(3), [&] { return _events->gatheringDone; });
     }
 
     auto desc = _pc->localDescription();
@@ -819,7 +790,7 @@ bool Oran7WhipPublisher::generateOffer(std::string* out_sdp) {
 //   PATCH  /whip/resource/{session}  → Trickle ICE，body 是 SDP fragment
 //   DELETE /whip/resource/{session}  → 终止会话
 //
-// 鉴权: Authorization: Bearer 123456
+// 鉴权: Authorization: Bearer <配置中的凭据>
 //
 // ICE 格式: Content-Type: application/trickle-ice-sdpfrag
 //           body: a=mid:0\r\na=candidate:...\r\n
@@ -827,29 +798,31 @@ bool Oran7WhipPublisher::generateOffer(std::string* out_sdp) {
 bool Oran7WhipPublisher::whipPostOffer(const std::string& offerSdp,
                                         std::string* outAnswer)
 {
-    std::string url = _cfg.serverUrl + "/whip";
+    std::string url = _cfg.serverUrl;
 
-    INFO_LOG << "[whip] POST offer to:" << url.c_str();
+    INFO_LOG << "[whip] POST offer";
 
-    auto r = httpPostSync(url, offerSdp, "application/sdp");
+    auto r = httpPostSync(url, offerSdp, "application/sdp", _cfg.bearerToken);
 
     INFO_LOG << "[whip] POST response: status=" << r.status
              << " body_size=" << (int)r.body.size()
-             << " location=" << r.resourcePath.c_str();
+             ;
 
     if (r.status != 201 && r.status != 200) {
         if (_onError) {
             _onError(std::string("[whip] POST offer: HTTP ") +
-                     std::to_string(r.status) + " body=" + r.body);
+                     std::to_string(r.status));
         }
         return false;
     }
 
     // 保存服务器返回的资源路径和 ETag，后续 PATCH/DELETE 要用
-    _whipResourcePath = r.resourcePath;
+    const QUrl endpoint(QString::fromStdString(_cfg.serverUrl));
+    const auto resource = endpoint.resolved(QUrl(QString::fromStdString(r.resourcePath)));
+    if (r.resourcePath.empty() || resource.scheme() != endpoint.scheme() || resource.authority() != endpoint.authority()) return false;
+    _whipResourcePath = resource.toString(QUrl::FullyEncoded).toStdString();
     _whipEtag = r.etag;
-    INFO_LOG << "[whip] resource=" << _whipResourcePath.c_str()
-             << " etag=" << _whipEtag.c_str();
+
 
     *outAnswer = r.body;
     return true;
@@ -862,7 +835,7 @@ bool Oran7WhipPublisher::whipPatchIce(const std::string& mid,
     std::string url;
     if (!_whipResourcePath.empty()) {
         // 拼接服务器地址 + 资源路径
-        url = _cfg.serverUrl + _whipResourcePath;
+        url = _whipResourcePath;
     } else {
         // fallback：还没拿到 resource path 时不发
         return true;
@@ -876,7 +849,7 @@ bool Oran7WhipPublisher::whipPatchIce(const std::string& mid,
 
     auto r = httpPatchSync(url, body,
                            "application/trickle-ice-sdpfrag",
-                           _whipEtag);
+                           _whipEtag, _cfg.bearerToken);
 
     // 更新 ETag
     if (!r.etag.empty())
@@ -898,11 +871,11 @@ bool Oran7WhipPublisher::whipPollCandidates(
     if (_whipResourcePath.empty())
         return true;
 
-    std::string url = _cfg.serverUrl + _whipResourcePath;
+    std::string url = _whipResourcePath;
 
     auto r = httpPatchSync(url, "",
                            "application/trickle-ice-sdpfrag",
-                           _whipEtag);
+                           _whipEtag, _cfg.bearerToken);
     if (!r.etag.empty())
         _whipEtag = r.etag;
 
@@ -915,9 +888,9 @@ bool Oran7WhipPublisher::whipDelete() {
     if (_whipResourcePath.empty())
         return true;
 
-    std::string url = _cfg.serverUrl + _whipResourcePath;
+    std::string url = _whipResourcePath;
 
-    int status = httpDeleteSync(url, _whipEtag);
+    int status = httpDeleteSync(url, _whipEtag, _cfg.bearerToken);
     INFO_LOG << "[whip] DELETE session: status=" << status;
     return true;
 }
@@ -999,7 +972,7 @@ bool Oran7WhipPublisher::initH264Bsf() {
                 if ((d[hdr]&0x1F)==7) {
                     char b[8];
                     snprintf(b,sizeof(b),"%02x%02x%02x",d[hdr+1],d[hdr+2],d[hdr+3]);
-                    _h264ProfileLevelId=b; g_h264ProfileLevelId=_h264ProfileLevelId;
+                    _h264ProfileLevelId=b;
                     INFO_LOG << "[whip] profile-level-id:" << _h264ProfileLevelId.c_str();
                     break;
                 }
@@ -1009,7 +982,7 @@ bool Oran7WhipPublisher::initH264Bsf() {
             auto pSC=[](std::vector<uint8_t>&v){v.push_back(0);v.push_back(0);v.push_back(0);v.push_back(1);};
             for (int i=0;i<nSps;++i){int l=(d[off]<<8)|d[off+1];off+=2;
                 if (i==0&&l>=4){char b[8];snprintf(b,sizeof(b),"%02x%02x%02x",d[off+1],d[off+2],d[off+3]);
-                    _h264ProfileLevelId=b; g_h264ProfileLevelId=_h264ProfileLevelId;
+                    _h264ProfileLevelId=b;
                     INFO_LOG << "[whip] profile-level-id:" << _h264ProfileLevelId.c_str();}
                 pSC(_spsPpsAnnexB);_spsPpsAnnexB.insert(_spsPpsAnnexB.end(),d+off,d+off+l);off+=l;}
             int nPps=d[off++];
@@ -1097,4 +1070,11 @@ std::string Oran7WhipPublisher::streamId() const {
     if (pos != std::string::npos)
         return _whipResourcePath.substr(pos + 1);
     return {};
+}
+
+std::string Oran7WhipPublisher::connectionState() const {
+    std::lock_guard<std::mutex> lock(_events->mutex); return _events->connection;
+}
+std::string Oran7WhipPublisher::iceState() const {
+    std::lock_guard<std::mutex> lock(_events->mutex); return _events->ice;
 }

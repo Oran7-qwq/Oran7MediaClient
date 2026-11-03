@@ -8,9 +8,9 @@
 
 #include "FFPlay_Def.h"
 #include "ffmsg.h"
-#include "GlobalHelper.h"
+#include "Oran7GlobalHelper.h"
 #include "Sonic.h"       // 变速实现，第三方库
-#include "BilibiliAuthManager.h"
+#include "Oran7BilibiliAuthManager.h"
 #include "NcmSession.h"
 #include "SDL2/SDL_audio.h"
 /* Minimum SDL audio buffer size, in samples. */
@@ -97,8 +97,6 @@ Oran7FFplayerCore::~Oran7FFplayerCore()
 {
     this->abort_request = 1;
 
-    if (ic && ic->pb)
-        avio_closep(&ic->pb);
     if (read_thread_ && read_thread_->joinable())
         read_thread_->join();
     delete read_thread_;      // 释放thread内存
@@ -206,7 +204,7 @@ int Oran7FFplayerCore::read_thread()
         // --------- B站认证Cookie注入 ---------
         // 检测到B站直播流URL时，将Cookie注入FFmpeg HTTP请求头
         // 注意：使用headers选项时会覆盖user_agent/referer单独设置，所以需要包含完整头
-        QString bilibiliCookies = BilibiliAuthManager::instance().ffmpegCookieString();
+        QString bilibiliCookies = Oran7BilibiliAuthManager::instance().ffmpegCookieString();
         if (!bilibiliCookies.isEmpty() && QString(input_filename_).contains("bilivideo.com")) {
             QString headers = QString(
                 "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36\r\n"
@@ -262,10 +260,9 @@ int Oran7FFplayerCore::read_thread()
         ffp_notify_msg(this, FFP_MSG_FIND_STREAM_INFO);
         INFO_LOG<<("Notify ffplayer message of ( FFP_MSG_FIND_STREAM_INFO )");
 
-        av_dump_format(ic, 0, input_filename_, 0);
+        INFO_LOG << "[Playback] 媒体探测完成，流数=" << ic->nb_streams;
 
         // 降低FFmpeg内部日志级别，避免HLS直播拉流时大量INFO日志刷屏
-        // av_dump_format之后设置，确保流信息dump正常输出
         av_log_set_level(AV_LOG_WARNING);
 
         /*利用av_find_best_stream选择流*/
@@ -483,7 +480,7 @@ int Oran7FFplayerCore::read_thread()
     catch (const std::exception& e)
     {
         av_log(NULL, AV_LOG_FATAL, "[Oran7FFplayerCore::read_thread:]ERROR Exception: %s\n", e.what());
-        // 必须把失败推给消息队列：否则上层 Client::message_loop 会永远阻塞在
+        // 必须把失败推给消息队列：否则上层 Oran7MediaClient::message_loop 会永远阻塞在
         // msg_queue_get 上，既不切歌也不报错，播放器静默挂死。
         // （FFP_MSG_OPEN_INPUT 及其后的所有消息都在抛异常那行之后，一个都到不了。）
         ffp_notify_msg(this, FFP_MSG_ERROR, ret);
@@ -868,10 +865,9 @@ void Oran7FFplayerCore::stream_close()
     SDL_CondSignal(sampq.cond);
     SDL_CondSignal(pictq.cond);
 
-    // 先强制关闭网络 IO,打断可能阻塞在 av_read_frame 里的读线程,
-    // 否则 join 会一直等网络超时(重连/探测时可能拖很久),导致切歌卡死
-    if (ic && ic->pb)
-        avio_closep(&ic->pb);
+    // 仅通过原子取消与 FFmpeg interrupt_callback 打断读取；不能跨线程释放 ic/pb。
+    // 读线程可能仍在 open/probe/read/reconnect 中，提前 avio_closep 会造成悬空访问。
+    // join 在退役后台执行，网络超时不会阻塞 GUI；流及 I/O 统一在 join 后关闭。
 
     if (read_thread_) {
         safe_join(read_thread_, "read_thread");
@@ -1105,7 +1101,7 @@ int Oran7FFplayerCore::stream_component_open(int stream_index)
             }
             // 允许音频输出
             /*play audio*/
-            // SDL_PauseAudioDevice(audio_dev, 0);//已移动到ffp_pause_l()
+            // 音频启停由 ffp_pause_l()/ffp_start_l() 提交给独占设备。
             break;
         case AVMEDIA_TYPE_VIDEO:
             video_stream = stream_index;    // 获取video的stream索引
@@ -1641,7 +1637,7 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
 int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wanted_nb_channels, int wanted_sample_rate, AudioParams *audio_hw_params)
 {
     (void)wanted_channel_layout;//--->Discard
-    SDL_AudioSpec wanted_spec,spec;
+    SDL_AudioSpec wanted_spec{}, spec{};
     // 音频参数设置SDL_AudioSpec
     wanted_spec.freq = wanted_sample_rate;          // 采样频率
     wanted_spec.format = AUDIO_S16SYS;              // 采样点格式
@@ -1655,7 +1651,7 @@ int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wan
 
     /* SDL_OpenAudioDevice */
     //打开音频设备SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE
-    if(!(audio_dev = SDL_OpenAudioDevice(NULL, 0, &wanted_spec, &spec, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE)))
+    if (!m_audioDevice.open(wanted_spec, spec, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE))
     {
         INFO_LOG<<"[ERROR]Failed to open audio device(SDL_GetError()): "<<std::string(SDL_GetError());
         return -1;
@@ -1677,6 +1673,7 @@ int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wan
                                                                 audio_hw_params->fmt, 1);
     if (audio_hw_params->bytes_per_sec <= 0 || audio_hw_params->frame_size <= 0) {
         av_log(NULL, AV_LOG_ERROR, "av_samples_get_buffer_size failed\n");
+        m_audioDevice.close();
         return -1;
     }
     // 如2帧数据，一帧就是1024个采样点， 1024*2*2 * 2 = 8192字节 (1024采样点，2通道，每个采样点2字节(AV_SAMPLE_FMT_S16)，2帧)
@@ -1688,13 +1685,7 @@ int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wan
  */
 void Oran7FFplayerCore::audio_close()
 {
-    SDL_LockAudioDevice(audio_dev);
-
-    SDL_PauseAudioDevice(audio_dev, 1);
-    SDL_ClearQueuedAudio(audio_dev);
-    SDL_CloseAudioDevice(audio_dev);        // SDL_CloseAudioDevice
-
-    SDL_UnlockAudioDevice(audio_dev);
+    m_audioDevice.close();
 
     INFO_LOG<<"SDL Audio deviceo be closed.";
 }
@@ -1755,18 +1746,7 @@ void Oran7FFplayerCore::stream_toggle_pause_l(int pause_on)
     {
         paused = audclk.paused = vidclk.paused =  pause_on;
     }
-    if(paused==1)
-    {
-        SDL_LockAudioDevice(audio_dev);
-        SDL_PauseAudioDevice(audio_dev,1);
-        SDL_UnlockAudioDevice(audio_dev);
-    }
-    else
-    {
-        SDL_LockAudioDevice(audio_dev);
-        SDL_PauseAudioDevice(audio_dev,0);
-        SDL_UnlockAudioDevice(audio_dev);
-    }
+    m_audioDevice.setPaused(paused == 1);
 }
 
 /**

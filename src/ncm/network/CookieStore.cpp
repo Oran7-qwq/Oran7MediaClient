@@ -1,35 +1,37 @@
 #include "CookieStore.h"
+#include "Oran7AppConfigManager.h"
 
-#include "AppJsonConfigManager.h"
+Oran7DpapiCookiePersistence::Oran7DpapiCookiePersistence() : Oran7DpapiCookiePersistence(Oran7AppConfigManager::ins()) {}
+Oran7DpapiCookiePersistence::Oran7DpapiCookiePersistence(Oran7AppConfigManager& config) : m_config(config) {}
 
-QVariantMap AppJsonCookiePersistence::load()
+QVariantMap Oran7DpapiCookiePersistence::load()
 {
-    QVariantMap data;
-    data["MUSIC_U"]  = AppConfigManager::ins().getValueQVariant("netease_auth.MUSIC_U").toString();
-    data["__csrf"]   = AppConfigManager::ins().getValueQVariant("netease_auth.__csrf").toString();
-    data["nickname"] = AppConfigManager::ins().getValueQVariant("netease_auth.nickname").toString();
-    return data;
+    m_lastError = m_config.credentialError("netease");
+    const auto saved = m_config.snapshot().auth.netease;
+    return {{"MUSIC_U", saved.musicU}, {"__csrf", saved.csrf}, {"nickname", saved.nickname}};
 }
 
-void AppJsonCookiePersistence::save(const QVariantMap& data)
+void Oran7DpapiCookiePersistence::save(const QVariantMap& data)
 {
-    AppConfigManager::ins().setValueQVariant("netease_auth.MUSIC_U",  data.value("MUSIC_U"));
-    AppConfigManager::ins().setValueQVariant("netease_auth.__csrf",   data.value("__csrf"));
-    AppConfigManager::ins().setValueQVariant("netease_auth.nickname", data.value("nickname"));
-    AppConfigManager::ins().saveConfig();
+    auto saved = m_config.snapshot();
+    saved.auth.netease = {data.value("MUSIC_U").toString(), data.value("__csrf").toString(), data.value("nickname").toString()};
+    m_config.updateConfig(saved);
+    m_lastError = m_config.saveConfig() ? m_config.credentialError("netease") : m_config.lastError();
 }
 
-void AppJsonCookiePersistence::clear()
+void Oran7DpapiCookiePersistence::clear()
 {
-    AppConfigManager::ins().setValueQVariant("netease_auth.MUSIC_U", "");
-    AppConfigManager::ins().setValueQVariant("netease_auth.__csrf", "");
-    AppConfigManager::ins().setValueQVariant("netease_auth.nickname", "");
-    AppConfigManager::ins().saveConfig();
+    auto& config = m_config;
+    m_lastError = config.clearCredentialGroup("netease") ? QString() : config.lastError();
 }
 
 CookieStore::CookieStore(QObject* parent)
-    : QNetworkCookieJar(parent)
-    , m_persistence(std::make_unique<AppJsonCookiePersistence>())
+    : CookieStore(std::make_unique<Oran7DpapiCookiePersistence>(), parent)
+{
+}
+
+CookieStore::CookieStore(std::unique_ptr<CookiePersistence> persistence, QObject* parent)
+    : QNetworkCookieJar(parent), m_persistence(std::move(persistence))
 {
 }
 
@@ -87,7 +89,7 @@ bool CookieStore::load()
     m_csrf     = data.value("__csrf").toString();
     m_nickname = data.value("nickname").toString();
     emit cookiesChanged();
-    return true;
+    return m_persistence->lastError().isEmpty();
 }
 
 bool CookieStore::save()
@@ -99,7 +101,7 @@ bool CookieStore::save()
         { QStringLiteral("__csrf"),   m_csrf },
         { QStringLiteral("nickname"), m_nickname }
     });
-    return true;
+    return m_persistence->lastError().isEmpty();
 }
 
 void CookieStore::clear()

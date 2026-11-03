@@ -9,7 +9,10 @@
         }
     },
     "appearance": {
-        "themeProfile": "profile-default"
+        "themeProfile": "profile-default",
+        "language": "zh_CN",
+        "fontFamily": "Microsoft YaHei UI",
+        "fontPixelSize": 16
     },
     "last_used_file": "",
     "local_music_sort": {
@@ -18,6 +21,9 @@
         "sort_type": "birth_time"
     },
     "playerVolume": 25,
+    "player": {
+        "roam_filter_liked": false
+    },
     "recent_files": [],
     "recent_files_max_count": 10,
     "user": {
@@ -30,5 +36,49 @@
         "dede_user_id": "",
         "bili_jct": "",
         "user_name": ""
+    },
+    "screen_capture": {
+        "output_index": 0,
+        "fps": 60,
+        "draw_mouse": true,
+        "debug_log": true
+    },
+    "schemaVersion": 2,
+    "last_used_file_isvip": false,
+    "last_media_name": "",
+    "last_media_artist": "",
+    "last_media_album": "",
+    "last_media_cover": "",
+    "last_media_timesize": "",
+    "last_media_songid": 0,
+    "last_media_isvip": false,
+    "netease_auth": {
+        "MUSIC_U": "",
+        "__csrf": "",
+        "nickname": ""
+    },
+    "integratedMusic": {
+        "list": []
+    },
+    "recording": {
+        "mode": 0,
+        "width": 0,
+        "height": 0,
+        "fps": 60,
+        "bitrate_kbps": 40000,
+        "audio_enabled": true,
+        "output_directory": "",
+        "file_prefix": "Oran7",
+        "whip_url": "",
+        "bearer_token": "",
+        "room_id": "",
+        "publisher_id": "",
+        "stun_url": "",
+        "turn_url": "",
+        "turn_user": "",
+        "turn_password": "",
+        "signaling_url": "",
+        "signaling_user": "",
+        "signaling_password": ""
     }
 }

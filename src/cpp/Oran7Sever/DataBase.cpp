@@ -76,17 +76,17 @@ int Database::validateLogin(QString username,QString password)
         if(query.exec()&&query.next()&&query.value(0).toInt()!=0)
         {
             //账号密码都存在
-            qDebug()<<"[Database:]username:"<<username<<" ,password:"<<password<<"All right.";
+            qDebug() << "[LegacyDatabase] 登录校验成功";
         }
         else
         {
-            qDebug()<<"[Database:]username:"<<username<< "of password Error.";
+            qDebug() << "[LegacyDatabase] 登录校验失败";
             return 2;
         }
     }
     else
     {
-        qDebug()<<"[Database:]username:"<<username<<" is Not Exit";
+        qDebug() << "[LegacyDatabase] 账号不存在";
         return 1;
     }
     return 0;

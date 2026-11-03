@@ -3,7 +3,7 @@ import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
 
 import "../../Settings/GlobalSettings"
-import "../"
+import "../Oran7GlobalComponents"
 
 import Oran7UI.Impl
 
@@ -11,14 +11,14 @@ Rectangle {
     id: root
     anchors.left: parent.left
     anchors.right: parent.right
-    height: Oran7MainUiSetting.itemHeight
+    height: root.rowHeight
 
     color: "transparent"
 
     // 悬停背景层 —— 独立子项，opacity 只影响自己，不影响其他子组件
     Rectangle {
         anchors.fill: parent
-        color: Oran7MainUiSetting.itemHoverdColor
+        color: root.hoverColor
         opacity: enableHoverHandler && hoverHandler.hovered ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Oran7Theme.Primary.durationVerySlow; easing.type: Easing.OutQuint } }
     }
@@ -28,6 +28,12 @@ Rectangle {
     property real radius: 0
 
     property color textColor: Oran7MainUiSetting.textColor
+    // 默认沿用下拉设置样式，其他页面可显式注入自身样式。
+    property real rowHeight: Oran7MainUiSetting.itemHeight
+    property string fontFamily: Oran7MainUiSetting.fontFamily
+    property real fontPixelSize: Oran7MainUiSetting.textPixelSize
+    property color hoverColor: Oran7MainUiSetting.itemHoverdColor
+    property color tagColor: Oran7MainUiSetting.tagColor
     property string text: ""
     property bool fontBold:false
     property bool fontItalic:false
@@ -52,7 +58,7 @@ Rectangle {
         layer.enabled: true
         layer.effect: ColorOverlay{
             source: tagImage
-            color:Oran7MainUiSetting.tagColor
+            color: root.tagColor
         }
         visible: root.showTag
 
@@ -83,8 +89,8 @@ Rectangle {
                 text: root.text
                 font.bold:root.fontBold
                 font.italic: root.fontItalic
-                font.pixelSize: Oran7MainUiSetting.textPixelSize
-                font.family: Oran7MainUiSetting.fontFamily
+                font.pixelSize: root.fontPixelSize
+                font.family: root.fontFamily
                 verticalAlignment: Text.AlignVCenter
                 horizontalAlignment: root.textHAlign
             }

@@ -7,8 +7,7 @@ import QtQuick.Effects
 import Oran7Sound 1.0
 
 import "../GlobalSettings"
-import "../PagesSettings"
-import "../../Components"
+import "../../Components/Oran7GlobalComponents"
 
 import "../../Components/Oran7SettingUiWindowItems"
 
@@ -17,6 +16,7 @@ import Oran7UI.Impl
 ApplicationWindow {
     id: root
     visible: false
+    opacity: 0
     flags: Qt.Window | Qt.FramelessWindowHint
     width: Screen.width
     height: Screen.desktopAvailableHeight
@@ -26,8 +26,16 @@ ApplicationWindow {
     objectName: "__Oran7SettingsContainerWindow__"
 
     property real taskbarHeight: 50
-    property bool isAnimating: false
-    property bool requestedVisible: Oran7MainUiSetting.openSettingWin
+    property string transitionState: "Closed"
+    readonly property bool isAnimating: transitionState !== "Closed" && transitionState !== "Open"
+    property bool initializationComplete: false
+    property bool blankFrameReady: false
+    property bool openDelayReady: false
+    property var openingPanels: []
+    property var closingPanels: []
+    readonly property var panels: [mainUiSettingLoader.item, mediaPlayerSettingLoader.item, musicPlayListSettingLoader.item]
+    property bool displayAllowed: true
+    property bool requestedVisible: displayAllowed && Oran7MainUiSetting.openSettingWin
     property bool enable__dwmBlur__: true
 
     signal restoreMainWindowFocusRequested
@@ -42,9 +50,9 @@ ApplicationWindow {
         //setup 只做一次，并且在 QML 组件完成后做
         __windowAgent.setup(root)
         root.color = "transparent"
-
+        root.initializationComplete = true
         if (requestedVisible)
-            openWindow()
+            openAllPanels()
     }
 
     onScreenChanged: {
@@ -52,10 +60,17 @@ ApplicationWindow {
     }
 
     onRequestedVisibleChanged: {
-        if (requestedVisible)
-            openWindow()
-        else
-            closeWindow()
+        if (!initializationComplete) return
+        if (requestedVisible && transitionState === "Closed") openAllPanels()
+        else if (!requestedVisible && transitionState !== "Closed") closeAllPanels()
+    }
+
+    // 透明展示期间先提交一帧已清空的内容，避免原生窗口复用上次的面板画面。
+    onFrameSwapped: {
+        if (transitionState === "Preparing" && root.visible && !blankFrameReady) {
+            blankFrameReady = true
+            Qt.callLater(root.tryStartOpening)
+        }
     }
 
     // onEnable__dwmBlur__Changed: {
@@ -78,6 +93,7 @@ ApplicationWindow {
     Item {
         id: content
         anchors.fill: parent
+        visible: false
 
         // 背景点击区域 - 必须在面板之前声明，确保面板 z-order 在其上方
         MouseArea {
@@ -148,20 +164,6 @@ ApplicationWindow {
         }
 
         Loader {
-            id: screenCaptureSettingLoader
-            active: false  // 默认不加载,由外部逐个控制 active 激活(不连锁)
-            sourceComponent: screenCaptureSettingComponent
-            x: 0
-            y: 0
-        }
-        Component {
-            id: screenCaptureSettingComponent
-            Oran7ScreenCaptureSettingWindow {
-                winIndex: 3
-            }
-        }
-
-        Loader {
             id: musicPlayListSettingLoader
             active: false  // 默认不加载,由外部逐个控制 active 激活(不连锁)
             sourceComponent: musicPlayListSettingComponent
@@ -181,22 +183,22 @@ ApplicationWindow {
             anchors.margins: 20
             spacing: 4
             UseExplainLabel{
-                text:"Click->↑→↓←: Move the Setting GUI Position."
+                text:qsTranslate("Oran7Ui", "点击方向键：移动设置窗口。")
             }
             UseExplainLabel {
-                text: "ESC: Open or close the setting windows."
+                text: qsTranslate("Oran7Ui", "ESC：打开或关闭设置窗口。")
             }
             UseExplainLabel{
-                text:"Left or right clicke colorful gradient setting item：will extend or shrink setting content."
+                text:qsTranslate("Oran7Ui", "点击渐变标题：展开或收起设置。")
             }
             UseExplainLabel{
-                text:"LeftClick: Click at blank area of setting window will close all setting windows."
+                text:qsTranslate("Oran7Ui", "点击设置窗口空白区域：关闭设置窗口。")
             }
             UseExplainLabel {
-                text: "Enter: Ensure the foucsed TextField value is saved and the setting is applied."
+                text: qsTranslate("Oran7Ui", "Enter：保存并应用当前输入。")
             }
             UseExplainLabel{
-                text:"LShift+Delete: Clear the content of foucsed TextField."
+                text:qsTranslate("Oran7Ui", "左 Shift + Delete：清空当前输入框。")
             }
         }
     }
@@ -230,120 +232,168 @@ ApplicationWindow {
     }
 
     function openWindow() {
-        if(root.enable__dwmBlur__)
+        root.opacity = 0
+        if (root.enable__dwmBlur__) {
             __blurTimer.stop()
-
-        // 先清一次，避免第二次打开 true -> true 没有真正重新应用
-        if(root.enable__dwmBlur__)
-             __windowAgent.setWindowAttribute("dwm-blur", false)
-
-        if (root.visibility !== Window.Maximized)
-            root.showMaximized()
-        else
-            root.visible = true
-
-        if(root.enable__dwmBlur__)
-            __blurTimer.start()
+            __windowAgent.setWindowAttribute("dwm-blur", false)
+        }
+        if (root.visibility !== Window.Maximized) root.showMaximized()
+        else root.visible = true
+        if (root.enable__dwmBlur__) __blurTimer.start()
     }
 
     function closeWindow() {
-        if(root.enable__dwmBlur__)
-            __blurTimer.stop()
-
-        // 关闭前清掉 native blur 状态
-        if(root.enable__dwmBlur__)
-            __windowAgent.setWindowAttribute("dwm-blur", false)
-
+        __blurTimer.stop()
+        if (root.enable__dwmBlur__) __windowAgent.setWindowAttribute("dwm-blur", false)
+        root.opacity = 0
+        content.visible = false
         root.visible = false
-        restoreMainWindowFocus()
+        root.restoreMainWindowFocusRequested()
     }
 
-    function restoreMainWindowFocus() {
-        // 延迟一小段时间确保设置窗口完全关闭后再发出信号
-        root.restoreMainWindowFocusRequested();
-    }
-
-    function handle_OpenSettingWin_signal(){//处理打开设置窗口的信号
-        if(Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing)return;
-
-        if (!Oran7MainUiSetting.openSettingWin) {
-            // 先显示窗口并让其稳定,再启动面板动画
-            Oran7MainUiSetting.openSettingWin = true;
-            openPanelsDelayTimer.start();
-        } else {
-            closeAllPanels();
-        }
-    }
-
-    // 等窗口最大化/显示稳定后再执行原有打开动画(保留 y 滑动视觉)
-    Timer {
-        id: openPanelsDelayTimer
-        interval: 120
-        repeat: false
-        onTriggered: root.openAllPanels()
+    function handle_OpenSettingWin_signal() {
+        // 初次准备和整个关闭过程都算忙，快速按键不能插入半初始化的开关请求。
+        if (root.isAnimating) return
+        if (root.transitionState === "Closed") root.openAllPanels()
+        else root.closeAllPanels()
     }
 
     function openAllPanels() {
-        // 打开设置时才激活面板(启动不预加载);已加载过的直接复用
-        mainUiSettingLoader.active = true;
-        mediaPlayerSettingLoader.active = true;
-        screenCaptureSettingLoader.active = true;
-        musicPlayListSettingLoader.active = true;
-        openPanelsTimer.tries = 0;
-        openPanelsTimer.start();
+        if (root.transitionState !== "Closed") return
+        root.transitionState = "Preparing"
+        root.blankFrameReady = false
+        root.openDelayReady = false
+        content.visible = false
+        root.opacity = 0
+        Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = true
+        Oran7MainUiSetting.settingContentVisible = false
+        Oran7MainUiSetting.openSettingWin = true
+        mainUiSettingLoader.active = true
+        mediaPlayerSettingLoader.active = true
+        musicPlayListSettingLoader.active = true
+        openPanelsTimer.tries = 0
+        openPanelsTimer.start()
     }
 
-    // 等 4 个面板全部实例化完成后,执行 prepareForOpen + startOpenAnimation
-    Timer {
-        id: openPanelsTimer
-        interval: 30
-        repeat: true
-        property int tries: 0
-        onTriggered: {
-            if (openPanelsTimer.tries++ > 100) { // 最多等 3 秒兜底
-                openPanelsTimer.stop();
-                return;
-            }
-            var panels = [
-                mainUiSettingLoader.item,
-                mediaPlayerSettingLoader.item,
-                screenCaptureSettingLoader.item,
-                musicPlayListSettingLoader.item
-            ];
-            for (var i = 0; i < panels.length; i++) {
-                if (!panels[i])
-                    return; // 还有面板没加载完,继续等
-            }
-            openPanelsTimer.stop();
-            for (var j = 0; j < panels.length; j++) {
-                if (panels[j] && panels[j].prepareForOpen)
-                    panels[j].prepareForOpen();
-            }
-            for (var k = 0; k < panels.length; k++) {
-                if (panels[k] && panels[k].startOpenAnimation)
-                    panels[k].startOpenAnimation();
-            }
+    function tryStartOpening() {
+        if (root.transitionState !== "Preparing" || !root.blankFrameReady || !root.openDelayReady) return
+        blankFrameTimeout.stop()
+        root.transitionState = "Opening"
+        root.openingPanels = root.panels.slice()
+        content.visible = true
+        root.opacity = 1
+        Oran7MainUiSetting.settingContentVisible = true
+        settingSound.playOpen()
+        for (var i = 0; i < root.panels.length; ++i) root.panels[i].startOpenAnimation()
+    }
+
+    function panelOpened(panel) {
+        if (root.transitionState !== "Opening" || root.openingPanels.indexOf(panel) < 0) return
+        root.openingPanels = root.openingPanels.filter(function(item) { return item !== panel })
+        if (root.openingPanels.length === 0) {
+            root.transitionState = "Open"
+            Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = false
         }
     }
 
     function closeAllPanels() {
-        var panels = [
-            mainUiSettingLoader.item,
-            mediaPlayerSettingLoader.item,
-            screenCaptureSettingLoader.item,
-            musicPlayListSettingLoader.item
-        ];
-        for (var i = 0; i < panels.length; i++) {
-            if (panels[i] && panels[i].startCloseAnimation) {
-                panels[i].startCloseAnimation();
+        if (root.transitionState === "Closed" || root.transitionState === "Closing") return
+        openPanelsTimer.stop()
+        openPanelsDelayTimer.stop()
+        blankFrameTimeout.stop()
+        root.openingPanels = []
+        root.transitionState = "Closing"
+        Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = true
+        Oran7MainUiSetting.settingContentVisible = false
+        Oran7MainUiSetting.clickedOutSide()
+        var loaded = root.panels.filter(function(panel) { return panel !== null })
+        root.closingPanels = loaded.slice()
+        if (loaded.length === 0) { root.finishClosing(); return }
+        for (var i = 0; i < loaded.length; ++i) loaded[i].startCloseAnimation()
+    }
+
+    function panelClosed(panel) {
+        if (root.transitionState !== "Closing" || root.closingPanels.indexOf(panel) < 0) return
+        root.closingPanels = root.closingPanels.filter(function(item) { return item !== panel })
+        // 所有面板都归零后才能隐藏原生窗口，不能由第一个完成的面板提前收走帧时钟。
+        if (root.closingPanels.length === 0) root.finishClosing()
+    }
+
+    function finishClosing() {
+        root.transitionState = "Closed"
+        root.closeWindow()
+        Oran7MainUiSetting.openSettingWin = false
+        Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = false
+        settingSound.playClose()
+    }
+
+    Timer {
+        id: openPanelsTimer
+        interval: 16
+        repeat: true
+        property int tries: 0
+        onTriggered: {
+            if (root.transitionState !== "Preparing") { stop(); return }
+            if (tries++ > 180) {
+                stop()
+                console.warn("设置面板加载失败，已取消打开")
+                root.closeAllPanels()
+                return
             }
+            for (var i = 0; i < root.panels.length; ++i) if (!root.panels[i]) return
+            stop()
+            // 此时窗口仍隐藏；准备阶段完成后，所有面板都不可见且高度为零。
+            for (var j = 0; j < root.panels.length; ++j) root.panels[j].prepareForOpen()
+            root.openWindow()
+            openPanelsDelayTimer.start()
+            blankFrameTimeout.start()
         }
+    }
+    Timer {
+        id: openPanelsDelayTimer
+        interval: 120
+        onTriggered: {
+            root.openDelayReady = true
+            root.tryStartOpening()
+        }
+    }
+    Timer {
+        id: blankFrameTimeout
+        interval: 3000
+        onTriggered: {
+            console.warn("设置窗口未提交准备帧，已取消打开")
+            root.closeAllPanels()
+        }
+    }
+    Connections {
+        target: mainUiSettingLoader.item
+        function onOpened() { root.panelOpened(mainUiSettingLoader.item) }
+        function onClosed() { root.panelClosed(mainUiSettingLoader.item) }
+    }
+    Connections {
+        target: mediaPlayerSettingLoader.item
+        function onOpened() { root.panelOpened(mediaPlayerSettingLoader.item) }
+        function onClosed() { root.panelClosed(mediaPlayerSettingLoader.item) }
+    }
+    Connections {
+        target: musicPlayListSettingLoader.item
+        function onOpened() { root.panelOpened(musicPlayListSettingLoader.item) }
+        function onClosed() { root.panelClosed(musicPlayListSettingLoader.item) }
     }
 
     // 连接到全局键盘Keys事件过滤器
     Connections {
         target: globalEventFilter
         function onEscapeKeyPressed() {
+            if (Oran7MainUiSetting.activeSettingsPopup) {
+                Oran7MainUiSetting.activeSettingsPopup.close()
+                return
+            }
+            // 选择菜单优先关闭，避免同一次 ESC 又把下拉设置容器切走。
+            if (mainUiSettingLoader.item && mainUiSettingLoader.item.preferencesPopupOpen) {
+                mainUiSettingLoader.item.closePreferencesPopup()
+                return
+            }
             handle_OpenSettingWin_delayTimer.restart()
         }
 
@@ -420,10 +470,6 @@ ApplicationWindow {
                 mediaPlayerSettingLoader.item.y -= 4
                 mediaPlayerSettingLoader.item.savedNormalY = mediaPlayerSettingLoader.item.y
             }
-            if (screenCaptureSettingLoader.item) {
-                screenCaptureSettingLoader.item.y -= 4
-                screenCaptureSettingLoader.item.savedNormalY = screenCaptureSettingLoader.item.y
-            }
             if (musicPlayListSettingLoader.item) {
                 musicPlayListSettingLoader.item.y -= 4
                 musicPlayListSettingLoader.item.savedNormalY = musicPlayListSettingLoader.item.y
@@ -445,10 +491,6 @@ ApplicationWindow {
             if (mediaPlayerSettingLoader.item) {
                 mediaPlayerSettingLoader.item.y += 4
                 mediaPlayerSettingLoader.item.savedNormalY = mediaPlayerSettingLoader.item.y
-            }
-            if (screenCaptureSettingLoader.item) {
-                screenCaptureSettingLoader.item.y += 4
-                screenCaptureSettingLoader.item.savedNormalY = screenCaptureSettingLoader.item.y
             }
             if (musicPlayListSettingLoader.item) {
                 musicPlayListSettingLoader.item.y += 4
@@ -472,10 +514,6 @@ ApplicationWindow {
                 mediaPlayerSettingLoader.item.x -= 4
                 mediaPlayerSettingLoader.item.savedNormalX = mediaPlayerSettingLoader.item.x
             }
-            if (screenCaptureSettingLoader.item) {
-                screenCaptureSettingLoader.item.x -= 4
-                screenCaptureSettingLoader.item.savedNormalX = screenCaptureSettingLoader.item.x
-            }
             if (musicPlayListSettingLoader.item) {
                 musicPlayListSettingLoader.item.x -= 4
                 musicPlayListSettingLoader.item.savedNormalX = musicPlayListSettingLoader.item.x
@@ -497,10 +535,6 @@ ApplicationWindow {
             if (mediaPlayerSettingLoader.item) {
                 mediaPlayerSettingLoader.item.x += 4
                 mediaPlayerSettingLoader.item.savedNormalX = mediaPlayerSettingLoader.item.x
-            }
-            if (screenCaptureSettingLoader.item) {
-                screenCaptureSettingLoader.item.x += 4
-                screenCaptureSettingLoader.item.savedNormalX = screenCaptureSettingLoader.item.x
             }
             if (musicPlayListSettingLoader.item) {
                 musicPlayListSettingLoader.item.x += 4

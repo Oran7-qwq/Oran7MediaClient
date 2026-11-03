@@ -3,127 +3,27 @@ import QtQuick.Controls 2.15
 import Qt5Compat.GraphicalEffects
 
 import "../GlobalSettings"
-import "../../Components"
+import "../../Components/Oran7GlobalComponents"
 import "../../Components/Oran7SettingUiWindowItems"
 
 import Client 1.0
 import Oran7UI.Impl
 
-Item {
+Oran7SettingsPanel {
     id: root
-    visible: false
     width: Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth
-    height: 0  // 静态初始值避免与打开动画的 from:0 产生绑定冲突导致抖动
-    opacity: 0
     x: root.savedNormalX
-    y: 0
 
     property int  winIndex : 1
 
     property real savedNormalX: 80 + Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth * root.winIndex
-    property real savedNormalY: 40
-    property real savedNormalHeight: 700
+    savedNormalY: 40
+    savedNormalHeight: 700
 
     property point clickPos: Qt.point(0, 0)
     property bool mouseIsPressed: false
-    property bool isAnimating: false  // 动画期间禁用 Behavior，防止与显式动画冲突导致抖动
 
-    function prepareForOpen() {
-        window_closeAnimation.stop();
-        root.isAnimating = true;
-        root.opacity = 0;
-        root.y = 0;
-        root.visible = true;
-        root.savedNormalHeight = Math.max(contene_column.implicitHeight + topDragRect.height + 50, 200);
-        root.height = 0;
-    }
-
-    function startOpenAnimation() {
-        window_openAnimation.restart();
-    }
-
-    function startCloseAnimation() {
-        window_openAnimation.stop();
-        root.isAnimating = true;
-        window_closeAnimation.restart();
-    }
-
-    ParallelAnimation {
-        id: window_openAnimation
-        property real aniDuration: Oran7MainUiSetting.toggleOpenAniDuration
-
-        PropertyAnimation {
-            target: root
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "y"
-            from: 0
-            to: root.savedNormalY
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "height"
-            from: 0
-            to: root.savedNormalHeight
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
-        }
-
-        onFinished: {
-            root.isAnimating = false;
-            root.height = Qt.binding(function() { return root.savedNormalHeight; });
-        }
-    }
-
-    ParallelAnimation {
-        id: window_closeAnimation
-        property real aniDuration: Oran7MainUiSetting.toggleOpenAniDuration
-
-        PropertyAnimation {
-            target: root
-            property: "opacity"
-            from: 1
-            to: 0
-            duration: window_closeAnimation.aniDuration
-            easing.type: Easing.InExpo
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "y"
-            from: root.savedNormalY
-            to: 0
-            duration: window_closeAnimation.aniDuration
-            easing.type: Easing.InExpo
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "height"
-            from: root.savedNormalHeight
-            to: 0
-            duration: window_closeAnimation.aniDuration
-            easing.type: Easing.InExpo
-        }
-
-        onFinished: {
-            root.visible = false;
-            root.opacity = 0
-            root.y = 0;
-            root.height = 0;
-            root.isAnimating = false;
-        }
-    }
+    animationDuration: Oran7MainUiSetting.toggleOpenAniDuration
 
     Rectangle {
         id: ui_root
@@ -155,7 +55,7 @@ Item {
 
             Oran7SetingTitleItem{
                 id:topDragRect
-                title:"VideoPlayerSettings"
+                title:qsTranslate("Oran7Ui", "视频播放器设置")
                 anchors.top: parent.top
                 anchors.margins: 2
             }
@@ -174,7 +74,7 @@ Item {
                 Oran7SettingItem{
                     id: videoPlayerSetting
                     index: 0
-                    text:"VideoPlayerNormal"
+                    text:qsTranslate("Oran7Ui", "视频播放")
                     fontBold:true
                     gradientMaskEnabled: true
 
@@ -190,7 +90,7 @@ Item {
                     Column{
                         // --- OpenVideoInfo ---
                         Oran7SettingItem {
-                            text: "OpenVideoInfo:"
+                            text: qsTranslate("Oran7Ui", "显示视频信息")
                             Oran7SwitchToggleItem {
                                 checked: Oran7MainUiSetting.openVideoInfo
                                 onSwitchToggleChanged: function (checked) {

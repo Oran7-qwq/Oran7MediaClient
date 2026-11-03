@@ -4,7 +4,6 @@
 #include "FFPlay_Def.h"     // PacketQueue/FrameQueue/AVPacket/AVRational/FFmpeg 类型（extern "C" 引入）
 #include <thread>
 
-class ImageScaler;                         // 前向声明（仅指针成员，避免拉入完整定义）
 class Oran7FFplayerCore;             // 前向声明（audio_thread/video_thread 的 void* arg 在 Oran7FFmpegDecoderCore.cpp 内再取完整类型）
 
 /**
@@ -50,7 +49,6 @@ private:
 
     // —— 硬件加速帧暂存/缩放 ——
     AVFrame *software_frame = nullptr;   // 用于硬件加速解码缓存从显存中取出的帧数据内存
-    ImageScaler *image_scaler_ = nullptr;
 
     // 用于硬件加速，记录硬件解码输出的 pixelformat（Oran7FFplayerCore.cpp 与 Oran7FFmpegDecoderCore.cpp 共享，唯一定义在 Oran7FFmpegDecoderCore.cpp）
     static enum AVPixelFormat s_hw_pix_fmt;

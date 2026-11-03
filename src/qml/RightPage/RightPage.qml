@@ -12,7 +12,15 @@ Rectangle {
     id: root
     clip: false
 
+    readonly property bool initialPageReady: mainStackView.currentItem !== null
+        && mainStackView.currentItem.width > 0 && mainStackView.currentItem.height > 0
+
     property int topBarHeight: Oran7Theme.Oran7MainGUI.topBarDefaultHeight
+    // 主窗口显式传入展开状态，页面只上报底部播放栏是否需要显示。
+    property bool captionExpanded: true
+    readonly property bool musicPageActive: mainStackView.currentItem !== null
+        && (mainStackView.currentItem.pageName === "LocalMusicPage"
+            || mainStackView.currentItem.pageName === "SearchMusicPage")
 
     //===================background 动态渐变效果 - 在启用============
     // 创建渐变层
@@ -192,16 +200,6 @@ Rectangle {
     }
 
     // ---- 暂停维护 2026/5/4 ---
-    // SearchPopup {
-    //     id: searchPopup
-    //     width: 776
-    //     height: 596
-    //     x: leftTopMenuItem.x
-    //     y: leftTopMenuItem.y + 65
-    //     onClosed: {
-    //         BasicConfig.gradientPosition2 = 1.0;
-    //     }
-    // }
     // LoginPopup {
     //     id: loginPopup
     //     width: 380
@@ -231,14 +229,13 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: openCaptionBtn.openIngState ? 7 : 0
+        anchors.bottomMargin: root.captionExpanded ? 7 : 0
         clip: true
 
         initialItem: Qt.createComponent(BasicConfig.getUrl(BasicConfig.videoPlayerPage)).createObject(mainStackView, {
             "pageName": "VideoPlayerPage"
         })
 
-        property bool isSettingStack: false
         signal upDateStack
 
         function popPage() {
@@ -360,33 +357,10 @@ Rectangle {
                 if (pageMap[pageName])
                     pageMap[pageName]();
 
-                //Control BottomPage isVisible
-                if (pageMap[pageName] && (mainStackView.currentItem.pageName === "LocalMusicPage" || mainStackView.currentItem.pageName === "SearchMusicPage")) {
-                    if (bottomRectangle.visibleOpacity === 0) {
-                        bottomRectangle.height = 80;
-                        bottomRectangle.visibleOpacity = 1.0;
-                    }
-                } else {
-                    if (bottomRectangle.visibleOpacity === 1) {
-                        bottomRectangle.height = 0;
-                        bottomRectangle.visibleOpacity = 0.0;
-                    }
-                }
             }
         }
 
-        /*=====传递Global ListModel 实例=====*/
-        property ListModel myIntegratedMusicListModel: ListModel {
-            id: myIntegratedMusicListModel
-        }
-        property ListModel localMusicListModel: ListModel {
-            id: localMusicListModel
-        }
-
         Component.onCompleted: {
-            BasicConfig.myIntegratedMusicListModel = myIntegratedMusicListModel;
-            BasicConfig.localMusicListModel = localMusicListModel;
-            BasicConfig.loadIntegratedMusicFromStore(); // 从 config.json 恢复"我整合的音乐"（照 LocalMusic 启动读顺序）
             start_gradientLayerColorAnimation = false;
         }
     }

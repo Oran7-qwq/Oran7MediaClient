@@ -1,0 +1,31 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {"major": 3, "minor": 21, "patch": 0},
+  "configurePresets": [
+    {
+      "name": "release",
+      "displayName": "Oran7 Qt 6.7.3 MinGW Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/Desktop_Qt_6_7_3_MinGW_64_bit-Release",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/Oran7MinGW.cmake",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Release", "BUILD_TESTING": false},
+      "environment": {
+        "PATH": "${sourceDir}/ffmpeg6.0/bin;D:/Qt/6.7.3/mingw_64/bin;D:/Qt/Tools/mingw1120_64/bin;C:/msys64/mingw64/bin;$penv{PATH}"
+      }
+    },
+    {
+      "name": "checks",
+      "inherits": "release",
+      "displayName": "Oran7 离线检查（Release，不构建主程序）",
+      "binaryDir": "${sourceDir}/build/P2-4-checks-Release",
+      "cacheVariables": {"BUILD_TESTING": true, "ORAN7_BUILD_APP": false}
+    }
+  ],
+  "buildPresets": [
+    {"name": "release", "configurePreset": "release", "jobs": 2},
+    {"name": "checks", "configurePreset": "checks", "jobs": 2}
+  ],
+  "testPresets": [
+    {"name": "checks", "configurePreset": "checks", "output": {"outputOnFailure": true}, "execution": {"jobs": 1, "noTestsAction": "error"}}
+  ]
+}

@@ -1,6 +1,6 @@
 ---
-status: 🚧 骨架
-updated: 2026-09-08
+status: 📝 持续
+updated: 2026-10-24
 ---
 
 # Bug 日志与修复记录（BUGLOG）
@@ -13,11 +13,24 @@ updated: 2026-09-08
 1. 复制下方「模板」到文件顶部 `## Bug 记录` 之后，填入内容。
 2. 编号递增：`BUG-2026-001`。
 3. 修复后把 `状态` 改为 `已修复`，补上 `验证` 行。
-4. 若根因属于历史决策或易踩坑，另在 [[ADR/README]] 或 [[MODULES]] 对应模块记录一句话并双链回来。
+4. 若根因属于历史决策或易踩坑，另在 [[ADR/README]] 或 [[MODULES - 模块]] 对应模块记录一句话并双链回来。
 
 ## Bug 记录
 
 <!-- 新记录加在下面这条模板之前 -->
+
+### BUG-2026-001：抓屏"应用参数"无响应，`screenCaptureApplyFinished` 永不发射
+
+- **日期**：2026-10-22
+- **状态**：`已修复，用户已验收`
+- **严重度**：中
+- **现象**：打开"录屏设置"改 fps/显示器/鼠标开关后点应用，窗口一直停在"正在应用中"，既没有成功提示也没有回滚提示；抓屏失败时日志里也没有对应错误。
+- **根因**：`Oran7MediaClient` 构造函数内部调用 `InitSignalsAndSlots()`（`src/cpp/Oran7MediaClient/Oran7MediaClient.cpp:95`），其中对 `m_screenCap` 建立了两个连接（`:204-211`）；但 `m_screenCap` 是在 `new Oran7MediaClient(...)` **返回之后**才由 `Oran7ApplicationContext::AppContext_CreateClientObject()` 赋值的（`src/cpp/GlobalSingleton/Oran7ApplicationContext.cpp:40-43`）。构造函数执行时 `m_screenCap == nullptr`，两次 `QObject::connect(nullptr, ...)` 静默失败（只有一条 "invalid nullptr" 告警），于是 `Oran7ScreenCaptureController::errorOccurred` / `captureApplyFinished` 永远到不了 `Oran7MediaClient`，QML 的 `Connections { target: Oran7MediaClient; onScreenCaptureApplyFinished }` 也就永远不会触发。
+- **修复**：2026-10-24 已在 Oran7MediaClient 构造函数体内、InitSignalsAndSlots 前创建控制器（父对象为 this），并删掉 Oran7ApplicationContext 补建分支。退出先停止采集，Oran7MediaClient 析构体内销毁控制器。
+- **验收**：用户于 2026-10-24 确认 P0 验收通过、无额外事故。原验收项：改 fps → 1s 内出现"抓屏参数已应用"；断开目标显示器再应用 → 出现"参数应用失败，已回滚"，且预览恢复；抓屏报错时 `ERROR_LOG` 有输出。
+- **关联**：[[Capture - 录屏与推流]]、[[Core - 单例与胶水层]]、[[REFACTOR - 重构路线]] P0-1
+
+---
 
 ### BUG-0000：<一句话标题>
 
@@ -54,7 +67,7 @@ updated: 2026-09-08
 - **验证**：
   <!-- 如何确认修好 -->
 - **关联**：
-  <!-- [[双链]] -->
+  <!-- 双链：模块 / ADR / 其它 bug -->
 ```
 
 ## 调试工具备忘

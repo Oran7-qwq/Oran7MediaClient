@@ -14,7 +14,7 @@ using Microsoft::WRL::ComPtr;
 class D3D11DeviceProvider : public QObject
 {
     Q_OBJECT
-public:
+  public:
     static D3D11DeviceProvider* instance(); // 单例
 
     // 绑定某个 Window
@@ -33,21 +33,23 @@ public:
     ID3D11VideoContext* videoContext() const { return m_videoCtx.Get(); }
 #endif
 
-signals:
+  signals:
 #ifdef _WIN32
     void deviceReady();
 #endif
     void deviceLost();
 
-private:
+  private:
     explicit D3D11DeviceProvider(QObject* parent = nullptr);
     void hookWindow(QQuickWindow* w);
     void tryInitFromWindow(QQuickWindow* w);
     void cleanup();
+    void clearDevice();
 
-private:
+  private:
     QPointer<QQuickWindow> m_window;
     bool m_connected = false;
+    QMetaObject::Connection m_initConnection, m_invalidateConnection, m_destroyConnection;
 
 #ifdef _WIN32
     ComPtr<ID3D11Device> m_dev;

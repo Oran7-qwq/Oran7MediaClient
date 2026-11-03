@@ -3,156 +3,31 @@ import QtQuick.Controls 2.15
 import Qt5Compat.GraphicalEffects
 
 import "../GlobalSettings"
-import "../../Components"
+import "../../Components/Oran7GlobalComponents"
 import "../../Components/Oran7SettingUiWindowItems"
 
 import Oran7UI.Impl
 
-Item {
+Oran7SettingsPanel {
     id: root
-    visible: false
     width: Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth
-    height: 0
-    opacity: 0
     x: root.savedNormalX
-    y: 0
+
+    readonly property var preferences: typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences : null
+
+    readonly property bool preferencesPopupOpen: preferencesGroup.popupOpen
+    function closePreferencesPopup() { preferencesGroup.closePopup() }
 
     property int  winIndex : 0
 
     property int savedNormalX: 80 + Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth * root.winIndex
-    property real savedNormalY: 40
-    property real savedNormalHeight: 700 // 初始默认值，会根据内容动态调整
+    savedNormalY: 40
+    savedNormalHeight: 700
 
     property point clickPos: Qt.point(0, 0)
     property bool mouseIsPressed: false
-    property bool isAnimating: false  // 动画期间禁用 Behavior，防止与显式动画冲突导致抖动
 
-    function prepareForOpen() {
-        window_closeAnimation.stop();
-        root.isAnimating = true;
-        root.opacity = 0;
-        root.y = 0;
-        root.visible = true;
-        root.savedNormalHeight = Math.max(contene_column.implicitHeight + topDragRect.height + 50, 200);
-        //root.height = root.savedNormalHeight;
-        root.height = 0;
-    }
-
-    function startOpenAnimation() {
-        window_openAnimation.restart();
-    }
-
-    function startCloseAnimation() {
-        window_openAnimation.stop();
-        root.isAnimating = true;
-        window_closeAnimation.restart();
-    }
-
-    Timer {
-        id: openStartedTimer
-        interval: 20
-        repeat: false
-        onTriggered: {
-            Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = true
-            Oran7MainUiSetting.openSettingWin = true
-            Oran7MainUiSetting.settingContentVisible = true
-            settingSound.playOpen();
-        }
-    }
-
-    ParallelAnimation {
-        id: window_openAnimation
-        readonly property real aniDuration: Oran7MainUiSetting.toggleOpenAniDuration
-
-        PropertyAnimation {
-            target: root
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "y"
-            from: 0
-            to: root.savedNormalY
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "height"
-            from: 0
-            to: root.savedNormalHeight
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
-        }
-
-        onStarted: {
-            openStartedTimer.start();
-        }
-
-        onFinished: {
-            root.isAnimating = false;
-            root.height = Qt.binding(function() { return root.savedNormalHeight; });
-        }
-    }
-
-    ParallelAnimation {
-        id: window_closeAnimation
-        readonly property real aniDuration: Oran7MainUiSetting.toggleOpenAniDuration
-
-        PropertyAnimation {
-            target: root
-            property: "opacity"
-            from: 1
-            to: 0
-            duration: window_closeAnimation.aniDuration
-            easing.type: Easing.InExpo
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "y"
-            from: root.savedNormalY
-            to: 0
-            duration: window_closeAnimation.aniDuration
-            easing.type: Easing.InExpo
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "height"
-            from: root.savedNormalHeight
-            to: 0
-            duration: window_closeAnimation.aniDuration
-            easing.type: Easing.InExpo
-        }
-
-        onStarted: {
-             //first index of settingWindow
-            Oran7MainUiSetting.settingContentVisible = false
-            Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = true
-        }
-
-        onFinished: {
-            root.visible = false;
-            root.opacity = 0
-            root.y = 0;
-            root.height = 0;
-            root.isAnimating = false;
-
-            //console.log("finised close,opacity:",root.opacity)
-
-             //first index of settingWindow
-            Oran7MainUiSetting.clickedOutSide()
-            Oran7MainUiSetting.openSettingWin = false
-            settingSound.playClose();
-        }
-    }
+    animationDuration: Oran7MainUiSetting.toggleOpenAniDuration
 
     Rectangle {
         id: ui_root
@@ -184,7 +59,7 @@ Item {
 
             Oran7SetingTitleItem{
                 id:topDragRect
-                title:"Oran7MainUiSettings"
+                title:qsTranslate("Oran7Ui", "主界面设置")
                 anchors.top: parent.top
                 anchors.margins: 2
             }
@@ -199,11 +74,16 @@ Item {
                 anchors.right: parent.right
                 spacing: 2
 
+                Oran7UiPreferencesGroup {
+                    id: preferencesGroup
+                    objectName: "uiPreferencesGroup"
+                    preferences: root.preferences
+                }
                 // ~~~~~ Oran7SettingWindow ~~~~~
                 Oran7SettingItem{
                     id:settingWindowSettings
                     index: 0
-                    text:"SettingWindows"
+                    text:qsTranslate("Oran7Ui", "设置窗口")
                     fontBold:true
                     gradientMaskEnabled: true
 
@@ -219,18 +99,21 @@ Item {
                     Column{
                         // --- item: isDarkMode ---
                         Oran7SettingItem {
-                            text: "Is Dark Mode:"
+                            text: qsTranslate("Oran7Ui", "深色模式")
                             // 开关按钮
                             Oran7SwitchToggleItem {
-                                checked: Oran7Theme.Oran7MainGUI.isDarkMode
+                                id: darkModeSwitch
+                                checked: Oran7Theme.isDark
                                 onSwitchToggleChanged: function (checked) {
-                                    Oran7Theme.saveComponentToken("Oran7MainGUI","isDarkMode",checked)
+                                    Oran7Theme.darkMode = checked ? Oran7Theme.Dark : Oran7Theme.Light
+                                    // 开关内部点击会赋值 checked，恢复与唯一主题状态的绑定。
+                                    darkModeSwitch.checked = Qt.binding(function() { return Oran7Theme.isDark })
                                 }
                             }
                         }
                         // --- theme color set ---
                         Oran7ColorSettingGroup{
-                            title:"SettingWin Theme Color:"
+                            title:qsTranslate("Oran7Ui", "设置窗口主题色")
                             checkedColor:Oran7Theme.Oran7MainGUI.themeColor
                             componentName: "Oran7MainGUI"
                             colorToken:"colorPrimaryBase"
@@ -246,7 +129,7 @@ Item {
                         // --- soundEffectVolume ---
                         Oran7NumSettingGroup{
                             value: Oran7Theme.Oran7MainGUI.soundEffectVolume
-                            title:"SoundEffectVolume："
+                            title:qsTranslate("Oran7Ui", "提示音音量")
                             property string componentName: "Oran7MainGUI"
                             property string tokenName: "soundEffectVolume"
                             sliderValueFrom: 0.0
@@ -263,7 +146,7 @@ Item {
                 // ~~~~~ MainWindowBackGround ~~~~~
                 Oran7SettingItem{
                     id:mainWindowBackGroundSettings
-                    text:"MainBackGround"
+                    text:qsTranslate("Oran7Ui", "主界面背景")
                     index: 1
                     fontBold: true
                     gradientMaskEnabled: true
@@ -280,7 +163,7 @@ Item {
                     Column{
                         // --- DWMBlurEffect ---
                         Oran7SettingItem {
-                            text: "DWMBlurEffect :"
+                            text: qsTranslate("Oran7Ui", "窗口毛玻璃")
                             // 开关按钮
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MainGUI.DWMBlurEffectEnabled
@@ -292,7 +175,7 @@ Item {
                         // --- BackgroundMode: Image / Video ---
                         // 控制主窗口背景是静态图片还是循环视频，默认 Video
                         Oran7SettingItem {
-                            text: "Bkgrd Mode:" + (Oran7Theme.Oran7MainGUI.backgroundMode === "Video" ? "Video" : "Image")
+                            text: qsTranslate("Oran7Ui", "背景模式：") + (Oran7Theme.Oran7MainGUI.backgroundMode === "Video" ? qsTranslate("Oran7Ui", "视频") : qsTranslate("Oran7Ui", "图片"))
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MainGUI.backgroundMode === "Video"
                                 onSwitchToggleChanged: function (checked) {
@@ -302,13 +185,13 @@ Item {
                         }
                         // --- item: backgroundImagePath ---
                         Oran7SettingItem {
-                            text: "Background Image:"
+                            text: qsTranslate("Oran7Ui", "背景图片")
                             showTag: false
                         }
                         Oran7TextFieldItem {
                             id: background_image_textField
                             tempText: Oran7Theme.Oran7MainGUI.backgroundImage
-                            placeholderText: "please input image path."
+                            placeholderText: qsTranslate("Oran7Ui", "请输入图片路径")
                             detectEnable: true
                             detectType: Oran7MainUiSetting.DetectionType.FileDetection
                             onEnterPressed: {
@@ -332,13 +215,13 @@ Item {
                         }
                         // --- item: backgroundVideoPath ---
                         Oran7SettingItem {
-                            text: "Background Video:"
+                            text: qsTranslate("Oran7Ui", "背景视频")
                             showTag: false
                         }
                         Oran7TextFieldItem {
                             id: background_video_textField
                             tempText: Oran7Theme.Oran7MainGUI.backgroundVideo
-                            placeholderText: "please input video path."
+                            placeholderText: qsTranslate("Oran7Ui", "请输入视频路径")
                             detectEnable: true
                             detectType: Oran7MainUiSetting.DetectionType.FileDetection
                             onEnterPressed: {
@@ -365,7 +248,7 @@ Item {
                 Oran7SettingItem{
                     id:captionBarSettings
                     index: 2
-                    text:"CaptionBarSettings"
+                    text:qsTranslate("Oran7Ui", "标题栏设置")
                     fontBold:true
                     gradientMaskEnabled: true
 
@@ -381,7 +264,7 @@ Item {
                     Column{
                         // --- SimpleCaptionBar ---
                         Oran7SettingItem{
-                            text:"SimpleCaptionBar"
+                            text:qsTranslate("Oran7Ui", "简洁标题栏")
                             Oran7SwitchToggleItem{
                                 checked: Oran7Theme.Oran7CaptionBar.isSimpleMode
                                 onSwitchToggleChanged: function (checked) {
@@ -392,7 +275,7 @@ Item {
 
                         // --- CaptionSelectedColor ---
                         Oran7ColorSettingGroup{
-                            title:"CaptionSelectedColor"
+                            title:qsTranslate("Oran7Ui", "标题栏选中颜色")
                             checkedColor: Oran7Theme.Oran7CaptionBar.selectedColor
                             componentName: "Oran7CaptionBar"
                             colorToken:"colorPrimaryBase"
@@ -406,7 +289,7 @@ Item {
 
                         // --- CaptionHoveredColor ---
                         Oran7ColorSettingGroup{
-                            title:"CaptionHoveredColor:"
+                            title:qsTranslate("Oran7Ui", "标题栏悬停颜色")
                             checkedColor: Oran7Theme.Oran7CaptionBar.hoveredColor
                             componentName: "Oran7CaptionBar"
                             colorToken:"colorPrimaryBase"
@@ -420,7 +303,7 @@ Item {
 
                         // --- CaptionIconColor ---
                         Oran7ColorSettingGroup{
-                            title:"CaptionIconColor:"
+                            title:qsTranslate("Oran7Ui", "标题栏图标颜色")
                             checkedColor: Oran7Theme.Oran7CaptionBar[colorToken+"-6"]
                             componentName: "Oran7CaptionBar"
                             colorToken:"iconColorBase"
@@ -433,7 +316,7 @@ Item {
                         }
                         // --- CaptionTextColor ---
                         Oran7ColorSettingGroup{
-                            title:"CaptionTextColor:"
+                            title:qsTranslate("Oran7Ui", "标题栏文字颜色")
                             checkedColor: Oran7Theme.Oran7CaptionBar[colorToken+"-6"]
                             componentName: "Oran7CaptionBar"
                             colorToken:"textColorBase"
@@ -445,10 +328,10 @@ Item {
                             }
                         }
                         //<<---Caption-Background
-                        Oran7SettingItem{text:"Background：";fontBold:true;showTag:false}
+                        Oran7SettingItem{text:qsTranslate("Oran7Ui", "背景");fontBold:true;showTag:false}
                         // --- CaptionBlurEnabled ---
                         Oran7SettingItem {
-                            text: "BlurEnabled:"
+                            text: qsTranslate("Oran7Ui", "启用模糊")
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7CaptionBar.blurEffectEnabled
                                 onSwitchToggleChanged: function (checked) {
@@ -459,7 +342,7 @@ Item {
                         // --- CaptionBlurEffect-saturation ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7CaptionBar.saturation
-                            title: "BlurEffect-Saturation:"
+                            title: qsTranslate("Oran7Ui", "模糊饱和度")
                             property string componentName: "Oran7CaptionBar"
                             property string tokenName: "saturation"
                             sliderValueFrom: -1.0
@@ -473,7 +356,7 @@ Item {
                         // --- CaptionBlurEffect-brightness ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7CaptionBar.brightness
-                            title: "BlurEffect-Brightness:"
+                            title: qsTranslate("Oran7Ui", "模糊亮度")
                             property string componentName: "Oran7CaptionBar"
                             property string tokenName: "brightness"
                             sliderValueFrom: -1.0
@@ -487,7 +370,7 @@ Item {
                         // --- CaptionBlurEffect-contrast ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7CaptionBar.contrast
-                            title: "BlurEffect-Contrast:"
+                            title: qsTranslate("Oran7Ui", "模糊对比度")
                             property string componentName: "Oran7CaptionBar"
                             property string tokenName: "contrast"
                             sliderValueFrom: -1.0

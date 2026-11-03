@@ -8,54 +8,71 @@
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SettingItem.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SwitchToggleItem.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7TextFieldItem.qml</file>
-        <file>src/qml/Components/Oran7AnimatedWindow.qml</file>
-        <file>src/qml/Components/Oran7AuthorBriefItem.qml</file>
-        <file>src/qml/Components/Oran7BlurCard.qml</file>
-        <file>src/qml/Components/Oran7CaptionBar.qml</file>
-        <file>src/qml/Components/Oran7DelayTimer.qml</file>
-        <file>src/qml/Components/Oran7NetEaseLoginButton.qml</file>
-        <file>src/qml/Components/Oran7NetEaseLoginPopup.qml</file>
-        <file>src/qml/Components/Oran7ESelectRect.qml</file>
-        <file>src/qml/Components/Oran7FileDialog.qml</file>
-        <file>src/qml/Components/Oran7Loader.qml</file>
-        <file>src/qml/Components/Oran7MusicPlaylistView.qml</file>
-        <file>src/qml/Components/Oran7PlayerVolumeComponent.qml</file>
-        <file>src/qml/Components/Oran7ProgressSlider.qml</file>
-        <file>src/qml/Components/Oran7ScreenCaptureComponent.qml</file>
-        <file>src/qml/Components/Oran7VideoRendererItem.qml</file>
-        <file>src/qml/Components/Oran7DanmakuLayer.qml</file>
-        <file>src/qml/Components/Oran7WaveBarChart.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7AnimatedWindow.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7AuthorBriefItem.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7BlurCard.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7CaptionBar.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7DelayTimer.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7NetEaseLoginButton.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7NetEaseLoginPopup.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7ESelectRect.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7FileDialog.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7Loader.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7MusicPlaylistView.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7PlaylistDelegate.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7PlaylistReorderController.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7PlaylistSelection.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7PlaylistHeader.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7PlaylistColumns.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7PlayerVolumeComponent.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7ProgressSlider.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7ScreenCaptureComponent.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingSettingsPopup.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingPageState.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingIcon.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7StartupSurface.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7WindowGeometryState.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7StartupWindow.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7MainWindowBackground.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7StudioButton.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7VideoRendererItem.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7DanmakuLayer.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7WaveBarChart.qml</file>
         <file>src/qml/LeftPage/LeftPage.qml</file>
         <file>src/qml/RightPage/MainStackView/LocalMusicStack.qml</file>
         <file>src/qml/RightPage/MainStackView/MainStackView.qml</file>
         <file>src/qml/RightPage/MainStackView/SearchMusicStack.qml</file>
         <file>src/qml/RightPage/MainStackView/ScreenCaptureStack.qml</file>
-        <file>src/qml/RightPage/MainStackView/SettingStack.qml</file>
         <file>src/qml/RightPage/MainStackView/VideoPlayerStack.qml</file>
         <file>src/qml/RightPage/TopMenuBar/BilibiliLoginPopup.qml</file>
-        <file>src/qml/RightPage/TopMenuBar/SearchPopup.qml</file>
         <file>src/qml/RightPage/RightPage.qml</file>
         <file>src/qml/Settings/GlobalSettings/Oran7MainUiSetting.qml</file>
-        <file>src/qml/Settings/PagesSettings/Oran7MediaPlayerSetting.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7VideoPlayerSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7SettingsContainerWindow.qml</file>
+        <file>src/qml/Settings/SettingWindows/Oran7SettingsPanel.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SetingTitleItem.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml</file>
-        <file>src/qml/Settings/SettingWindows/Oran7ScreenCaptureSettingWindow.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorSelectItem.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorCheckBox.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorSettingGroup.qml</file>
-        <file>src/qml/Components/Oran7ColorPickerWindow.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7ColorPickerWindow.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7NumSettingGroup.qml</file>
-        <file>src/qml/Components/Oran7ValueSlider.qml</file>
-        <file>src/qml/Components/Oran7RoundedImage.qml</file>
-        <file>src/qml/Components/Oran7GradientMask.qml</file>
-        <file>src/qml/Components/Oran7ShaderTextMask.qml</file>
+        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7PreferenceChoice.qml</file>
+        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7UiPreferencesGroup.qml</file>
+        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7OptionSettingGroup.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7ValueSlider.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RoundedImage.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7GradientMask.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7ShaderTextMask.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7ExpandItem.qml</file>
-        <file>src/qml/Components/Oran7LyricsView.qml</file>
-        <file>src/qml/Components/Oran7MusicPlayControls.qml</file>
-        <file>src/qml/Components/Oran7LyricsIsland.qml</file>
-        <file>src/qml/Components/Oran7LyricsFloatingWindow.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7LyricsView.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7MusicPlayControls.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7LyricsIsland.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7LyricsIslandState.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7LyricsFloatingWindow.qml</file>
     </qresource>
 </RCC>

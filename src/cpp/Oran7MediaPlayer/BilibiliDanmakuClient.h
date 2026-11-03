@@ -13,7 +13,7 @@ class QNetworkReply;
  * @brief B站直播弹幕客户端
  *
  * 通过 B 站开放弹幕协议（WebSocket 二进制帧）接入直播间弹幕服务器：
- *   1. 调用 getDanmuInfo API 获取弹幕服务器 host/token（已登录则注入 BilibiliAuthManager cookie）
+ *   1. 调用 getDanmuInfo API 获取弹幕服务器 host/token（已登录则注入 Oran7BilibiliAuthManager cookie）
  *   2. 连接 wss://{host}:{wss_port}/sub，发送认证包（protover=1 → 服务器直接下发未压缩 JSON 弹幕）
  *   3. 每 30s 发送心跳保活；断线后自动重连（重新拉取 token）
  *   4. 解析 op=5 通知：普通弹幕（DANMU_MSG）与醒目留言（SUPER_CHAT_MESSAGE）

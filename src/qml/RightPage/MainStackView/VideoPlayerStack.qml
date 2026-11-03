@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
 import "../../Basic"
-import "../../Components"
+import "../../Components/Oran7GlobalComponents"
 import Client 1.0
 import Oran7UI.Impl 1.0
 import BilibiliRoomAddressCatch 1.0
@@ -135,7 +135,7 @@ Item {
     }
     Connections {
         target: Client
-        function onStopRequested() {
+        function onPlaybackStopRequested() {
             bilibiliDanmaku.stop();
             videoRenderItem.danmakuEnabled = false;
             Client.renderBlackFrame(videoRenderItem.renderObject);
@@ -283,8 +283,8 @@ Item {
 
                 //----->First way : open in bilibili room number
                 Label {
-                    text: "bilibili直播房间号 :"
-                    font.family: "微软雅黑"
+                    text: qsTranslate("Oran7Ui", "bilibili直播房间号 :")
+                    font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                     font.pixelSize: 20
                     font.bold: true
                     color: Oran7Theme.Oran7MainGUI.themeColor
@@ -302,16 +302,16 @@ Item {
                         anchors.centerIn: parent
                         spacing: 5
                         Label {
-                            text: BilibiliAuthManager.isLoggedIn ? "✓ B站已登录" : "B站扫码登录"
+                            text: BilibiliAuthManager.isLoggedIn ? qsTranslate("Oran7Ui", "✓ B站已登录") : qsTranslate("Oran7Ui", "B站扫码登录")
                             font.pixelSize: 12
-                            font.family: "微软雅黑"
+                            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                             color: "white"
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         Label {
                             text: BilibiliAuthManager.isLoggedIn ? BilibiliAuthManager.userName : ""
                             font.pixelSize: 11
-                            font.family: "微软雅黑"
+                            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                             color: "#FFE4E1"
                             anchors.verticalCenter: parent.verticalCenter
                             visible: BilibiliAuthManager.isLoggedIn
@@ -337,12 +337,12 @@ Item {
                 Label {
                     text: {
                         if (bilibiliRoomAddressCatch.urls.length > 0) {
-                            return "流: " + bilibiliRoomAddressCatch.selectedCodecName.toUpperCase() + " / " + bilibiliRoomAddressCatch.selectedFormatName.toUpperCase()
+                            return qsTranslate("Oran7Ui", "流: ") + bilibiliRoomAddressCatch.selectedCodecName.toUpperCase() + " / " + bilibiliRoomAddressCatch.selectedFormatName.toUpperCase()
                         }
                         return ""
                     }
                     font.pixelSize: 11
-                    font.family: "微软雅黑"
+                    font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                     color: "#578b2c"
                     visible: bilibiliRoomAddressCatch.urls.length > 0
                 }
@@ -352,10 +352,10 @@ Item {
                     height: 24
                     Label {
                         id: dmLabel
-                        text: "弹幕"
+                        text: qsTranslate("Oran7Ui", "弹幕")
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        font.family: "微软雅黑"
+                        font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                         font.pixelSize: 14
                         color: Oran7Theme.Oran7MainGUI.themeColor
                     }
@@ -403,13 +403,13 @@ Item {
                         anchors.left: danmakuToggle.right
                         anchors.leftMargin: 8
                         anchors.verticalCenter: parent.verticalCenter
-                        font.family: "微软雅黑"
+                        font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                         font.pixelSize: 11
                         color: root.danmakuErrorText.length > 0 ? "#d63348"
                              : (bilibiliDanmaku.isConnected ? "#578b2c" : "#888888")
                         text: root.danmakuErrorText.length > 0 ? root.danmakuErrorText
-                            : (bilibiliDanmaku.isConnected ? "弹幕已连接"
-                                : (bilibiliDanmaku.active ? "弹幕连接中..." : "弹幕未连接"))
+                            : (bilibiliDanmaku.isConnected ? qsTranslate("Oran7Ui", "弹幕已连接")
+                                : (bilibiliDanmaku.active ? qsTranslate("Oran7Ui", "弹幕连接中...") : qsTranslate("Oran7Ui", "弹幕未连接")))
                     }
                 }
                 Rectangle {
@@ -439,7 +439,7 @@ Item {
                     }
                     Connections {
                         target: Client
-                        function onStopRequested() {
+                        function onPlaybackStopRequested() {
                             videoNetwork_Loader.visible = false;
                             if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_LivePlayerIndex)
                                 bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl;
@@ -462,7 +462,7 @@ Item {
                             // 如果是刷新操作且正在播放中，自动用新URL重新播放
                             if (bilibiliRoomAddressCatch.isRefreshing && BasicConfig.isPlaying && urls.length > 0) {
                                 bilibiliRoomAddressCatch.isRefreshing = false;
-                                Client.requestPlayVideo(urls[0]);
+                                Client.playVideo(urls[0]);
                             } else {
                                 bilibiliRoomAddressCatch.isRefreshing = false;
                             }
@@ -478,7 +478,7 @@ Item {
                         anchors.fill: parent
                         anchors.margins: 5
                         color: "black"
-                        font.family: "微软雅黑"
+                        font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                         font.pixelSize: 15
                         background: Rectangle {
                             anchors.fill: parent
@@ -543,9 +543,9 @@ Item {
                         }
                         function handle_bilibiliRoomNumWay_play() {
                             bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_pauseImageSourceUrl;
-                            BasicConfig.isPlaying = true;
+
                             videoRenderItem.tryAttachDelayed(); //sureLoad videoItemCpp
-                            Client.requestPlayVideo(bilibiliRoomAddressCatch.urls[0]);
+                            Client.playVideo(bilibiliRoomAddressCatch.urls[0]);
                             // 开启弹幕
                             if (danmakuToggle.checked) {
                                 videoRenderItem.danmakuEnabled = true;
@@ -554,8 +554,8 @@ Item {
                         }
                         function handle_bilibiliRoomNumWay_pause() {
                             bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl;
-                            BasicConfig.isPlaying = false;
-                            Client.requestPlayVideo(bilibiliRoomAddressCatch.urls[0]);
+
+                            Client.playVideo(bilibiliRoomAddressCatch.urls[0]);
                             // 暂停直播时停止弹幕
                             bilibiliDanmaku.stop();
                             videoRenderItem.danmakuEnabled = false;
@@ -567,11 +567,11 @@ Item {
                             onClicked: {
                                 if (bilibiliRoomNumWayPlayBtnImage.sureReadyPlay === true) {
                                     if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_LivePlayerIndex) {
-                                        BasicConfig.isPlaying = false;
+
                                         BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_LivePlayerIndex;
                                     }
 
-                                    if (BasicConfig.isPlaying === false)
+                                    if (!BasicConfig.isPlaying || Client.mediaSource() !== bilibiliRoomAddressCatch.urls[0])
                                         bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_play();
                                     else
                                         bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_pause();
@@ -615,7 +615,7 @@ Item {
                         }
                         ToolTip {
                             visible: refreshStreamBtnArea.containsMouse
-                            text: "刷新直播流"
+                            text: qsTranslate("Oran7Ui", "刷新直播流")
                             delay: 500
                         }
                     }
@@ -631,8 +631,8 @@ Item {
                 }
                 //----->Second way : open in local folder
                 Label {
-                    text: "从本地文件夹 :"
-                    font.family: "微软雅黑"
+                    text: qsTranslate("Oran7Ui", "从本地文件夹 :")
+                    font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                     font.pixelSize: 20
                     font.bold: true
                     color: Oran7Theme.Oran7MainGUI.themeColor
@@ -675,7 +675,7 @@ Item {
                             //implicitBackgroundWidth: inputFilePathRect.currentWidth
                             text: ""
                             font.pixelSize: 15
-                            font.family: "微软雅黑"
+                            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                             wrapMode: TextArea.Wrap
                             placeholderText: "C:/.../video.mp4"
                             placeholderTextColor: "#888888"
@@ -746,14 +746,14 @@ Item {
                         }
                         function handle_InputFilePathWay_play() {
                             inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_pauseImageSourceUrl;
-                            BasicConfig.isPlaying = true;
+
                             videoRenderItem.tryAttachDelayed();
-                            Client.requestPlayVideo(inputFilePathTextArea.text);
+                            Client.playVideo(inputFilePathTextArea.text);
                         }
                         function handle_InputFilePathWay_pause() {
                             inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                            BasicConfig.isPlaying = false;
-                            Client.requestPlayVideo(inputFilePathTextArea.text);
+
+                            Client.playVideo(inputFilePathTextArea.text);
                         }
 
                         MouseArea {
@@ -762,11 +762,11 @@ Item {
                             onClicked: {
                                 if (inputFilePath_WayPlayBtnImage.sureReadyPlay === true) {
                                     if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex) {
-                                        BasicConfig.isPlaying = false;
+
                                         BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_VideoPlayerIndex;
                                     }
 
-                                    if (BasicConfig.isPlaying === false)
+                                    if (!BasicConfig.isPlaying || Client.mediaSource() !== inputFilePathTextArea.text)
                                         inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_play();
                                     else
                                         inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause();
@@ -814,8 +814,8 @@ Item {
                                     BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_VideoPlayerIndex;
                                 }
                                 inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                                BasicConfig.isPlaying = false;
-                                Client.stopRequested();
+
+                                Client.stopPlayback();
                             }
                         }
                         MouseArea {
@@ -851,7 +851,7 @@ Item {
                 // Label {
                 //     id: scaleModeTextLabel
                 //     font.pixelSize: 20
-                //     font.family: "微软雅黑"
+                //     font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
                 //     font.bold: true
                 //     text: "ScaleMode:"
                 //     color: Oran7Theme.Oran7MainGUI.themeColor
@@ -1004,7 +1004,7 @@ Item {
                     inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
                     videoProgressSlider.progressHandleX = videoProgressSlider.width - videoProgressSlider.progressHandleWidth / 2;
                     videoProgressSlider.visibleProgressX = videoProgressSlider.width;
-                    BasicConfig.isPlaying = false;
+
                 }
             }
         }
@@ -1014,7 +1014,7 @@ Item {
             anchors.leftMargin: 15
             anchors.verticalCenter: playImage.verticalCenter
             color: "white"
-            font.family: "微软雅黑"
+            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
             font.pixelSize: 20
             text: videoProgressSlider.nowTimeText + " - " + videoProgressSlider.allTimeText
         }

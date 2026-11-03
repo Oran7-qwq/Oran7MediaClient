@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.16)
+project(Oran7RenderChecks LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick)
+set(ROOT "${ORAN7_SOURCE_ROOT}")
+add_executable(render_checks main.cpp D3d11Videoitem.h "${ROOT}/src/cpp/Oran7MediaClient/Oran7RenderBridge.cpp" "${ROOT}/src/cpp/Oran7MediaClient/Oran7RenderBridge.h")
+target_include_directories(render_checks PRIVATE "${ROOT}/src/cpp/Oran7MediaClient" "${CMAKE_CURRENT_SOURCE_DIR}" "${ROOT}/src/cpp/GlobalSingleton" "${FFMPEG_ROOT_DIR}/include")
+target_link_libraries(render_checks PRIVATE Qt6::Core Qt6::Gui Qt6::Quick "${FFMPEG_ROOT_DIR}/lib/avutil.lib")
+

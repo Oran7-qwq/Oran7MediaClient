@@ -119,7 +119,7 @@ bool Sever::stopSever()
 void Sever::onNewConnection()
 {
     QTcpSocket *socket=tcpSever->nextPendingConnection();
-    qDebug()<<"[Sever:]New Client connection:"<<socket->peerAddress().toString();
+    qDebug()<<"[Sever:]New Oran7MediaClient connection:"<<socket->peerAddress().toString();
 
     connect(socket,&QTcpSocket::readyRead,this,&Sever::onReadyRead);
     connect(socket,&QTcpSocket::disconnected,this,&Sever::onDisconnected);
@@ -129,7 +129,7 @@ void Sever::onReadyRead()
 {
     QTcpSocket *socket=qobject_cast<QTcpSocket*>(sender());
     if(!socket) return;
-    qDebug()<<"[Sever:]New Client write from:"<<socket->peerAddress();
+    qDebug()<<"[Sever:]New Oran7MediaClient write from:"<<socket->peerAddress();
 
     m_buffers[socket].append(socket->readAll());
 
@@ -182,7 +182,7 @@ void Sever::onDisconnected()
     QTcpSocket *socket=qobject_cast<QTcpSocket*>(sender());
     if(socket)
     {
-        qDebug()<<"[Sever:]Client disconnected:"<<socket->peerAddress().toString();
+        qDebug()<<"[Sever:]Oran7MediaClient disconnected:"<<socket->peerAddress().toString();
         socket->deleteLater();
     }
 }

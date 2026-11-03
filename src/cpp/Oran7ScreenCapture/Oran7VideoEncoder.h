@@ -10,7 +10,7 @@
 #include <queue>
 #include <atomic>
 
-#include "GlobalHelper.h"
+#include "Oran7GlobalHelper.h"
 
 extern "C"{
 #include <libavcodec/avcodec.h>
@@ -42,6 +42,7 @@ public:
 
         // 直接传入 AVBufferRef*（DDAGrab 的 m_hwdev），走硬编路径
         AVBufferRef* hwDevice = nullptr;
+        bool liveStreaming = false; // WHIP 保持原低延迟场景；本地录制优先画质与硬编。
     };
 
     bool configure(const EncoderConfig& cfg,ErrorCallback onError);
@@ -79,7 +80,7 @@ public:
     /**
      * @brief 调试
      */
-    int64_t sentFrameCount() const { return _frameIndex; }
+    int64_t sentFrameCount() const { return _frameIndex.load(); }
     int queuedPktCount() const {
         std::lock_guard<std::mutex> lock(_pkt_mtx);
         return (int)_pktQueue.size();
@@ -107,13 +108,15 @@ private:
     AVCodecContext *_avctx = nullptr;
     EncoderConfig _cfg;               // configure 暂存，start() 在线程内打开
     bool _configured = false;
+    bool _softwareMfFallback = false;
 
     //编码线程
     std::thread _encode_thread;
     std::atomic<bool> _running{false};
     std::atomic<bool> _opened{false};
     std::atomic<bool> _forceKeyframe{false};
-    int64_t _frameIndex = 0;
+    std::atomic<int64_t> _frameIndex{0};
+    std::atomic<int64_t> _droppedFrames{0};
 
     //回调函数
     ErrorCallback _onError;

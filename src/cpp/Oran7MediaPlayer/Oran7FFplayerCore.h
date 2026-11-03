@@ -4,6 +4,7 @@
 #include "FFMsgQueue.h"
 #include "FFPlay_Def.h"
 #include "Oran7FFmpegDecoderCore.h"        // Oran7FFmpegDecoderCore 已独立成文件
+#include "Oran7SdlAudioDevice.h"
 
 #include <thread>
 #include <functional>
@@ -192,7 +193,7 @@ private:
     sonicStreamStruct *audio_speed_convert = nullptr;
 
 
-    SDL_AudioDeviceID audio_dev;          //音频设备ID
+    Oran7SdlAudioDevice m_audioDevice; // 独占设备，暂停/关闭串行；未打开时无效，销毁自动关闭。
     struct AudioParams audio_src;           // 音频解码后的frame参数
     struct AudioParams audio_tgt;           // SDL支持的音频参数，重采样转换：audio_src->audio_tgt
     struct SwrContext *swr_ctx  = NULL;  // 音频重采样context

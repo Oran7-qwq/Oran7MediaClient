@@ -27,6 +27,7 @@
 #include "Oran7RadiusGenerator.h"
 
 #include <QtGui/QFontDatabase>
+#include <QQmlEngine>
 
 Oran7ThemeFunctions::Oran7ThemeFunctions(QObject *parent)
     : QObject{parent}
@@ -42,7 +43,10 @@ Oran7ThemeFunctions& Oran7ThemeFunctions::instance()
 
 Oran7ThemeFunctions *Oran7ThemeFunctions::create(QQmlEngine *, QJSEngine *)
 {
-    return &instance();
+    auto* functions = &instance();
+    // 静态实例由 C++ 析构，不能由 QML 引擎再次 delete。
+    QQmlEngine::setObjectOwnership(functions, QQmlEngine::CppOwnership);
+    return functions;
 }
 
 QList<QColor> Oran7ThemeFunctions::genColor(int preset, bool light, const QColor &background)

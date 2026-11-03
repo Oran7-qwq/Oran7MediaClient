@@ -13,7 +13,7 @@
 /**
  * @brief 最小信令客户端 — 登录 → 创建房间 → 通知推流
  *
- * 流程: WebSocket 连上 → login(user3,123456) → create_room("demo")
+ * 流程: WebSocket 连上 → 使用配置登录 → 查询/创建配置中的房间
  *       → 服务器返回 room_created(含真实 room_id)
  *       → 外部调用 notifyStreamPublished → stream_published 广播给房间内所有人
  *
@@ -30,7 +30,8 @@ public:
     /** 启动: 连接 → login → create_room 一气呵成 */
     void start(const std::string& wsUrl,
                const std::string& username,
-               const std::string& roomName);
+               const std::string& roomName,
+               const std::string& password);
 
     /** WHIP 成功拿到 stream_id 后调用，发送 stream_published */
     void notifyStreamPublished(const std::string& streamId);
@@ -58,6 +59,7 @@ private:
 
     QWebSocket   _ws;
     QTimer       _connectTimer;
+    std::string  _password;
     std::string  _username;
     std::string  _roomName;   // 要创建的房间名
     std::string  _roomId;     // 服务器分配的真实 room_id
@@ -66,6 +68,7 @@ private:
     bool         _inRoom   = false;
     bool         _pendingPublish = false;
     bool         _joinRetry = false;
+    bool         _stopping = false;
 };
 
 #endif // ORAN7SIGNALINGCLIENT_H

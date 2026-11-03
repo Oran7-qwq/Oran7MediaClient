@@ -3,21 +3,19 @@
 
 #include <QObject>
 #include <QString>
+#include <memory>
 
 class CookieStore;
 class CurlHttpClient;
-class HttpClient;
-class NcmAuthApi;
 class NcmPlaylistApi;
 class NcmSongApi;
 class NcmUserApi;
-class QrLoginController;
 class WebLoginController;
 
 /**
  * @brief 网易云会话门面（单例）
  *
- * 统一持有 HttpClient / CookieStore / NcmAuthApi / NcmUserApi / QrLoginController。
+ * 统一独占 CookieStore、curl 传输、账号/歌曲/写操作 API 和现行浏览器登录控制器。
  * 对 QML 暴露 isLoggedIn / userName / logout，对 C++ 暴露 cookieString / ffmpegCookieString。
  *
  * 使用方式：
@@ -45,7 +43,6 @@ public:
     QString ffmpegCookieString() const;
 
     CookieStore* cookieStore() const;
-    QrLoginController* qrController() const;
     WebLoginController* webLoginController() const;
     NcmUserApi* userApi() const;
     NcmSongApi* songApi() const;
@@ -57,7 +54,7 @@ public:
     /// 校验登录 Cookie 是否仍有效（网络监测器周期调用；结果见 verifyResult 信号）
     Q_INVOKABLE void verifyLogin();
 
-    // 供 QrLoginController 登录链路调用
+    // 供浏览器登录链路调用
     void setLoggedIn(bool v);
     void setUserName(const QString& n);
     void setCsrf(const QString& c);
@@ -74,15 +71,14 @@ private:
     NcmSession(const NcmSession&) = delete;
     NcmSession& operator=(const NcmSession&) = delete;
 
-    HttpClient* m_httpClient = nullptr;
-    CurlHttpClient* m_curlClient = nullptr;
-    CookieStore* m_cookieStore = nullptr;
-    NcmAuthApi* m_authApi = nullptr;
-    NcmUserApi* m_userApi = nullptr;
-    NcmSongApi* m_songApi = nullptr;
-    NcmPlaylistApi* m_playlistApi = nullptr;
-    QrLoginController* m_qrController = nullptr;
-    WebLoginController* m_webLoginController = nullptr;
+    // 被依赖对象先声明，控制器/API 在传输和 CookieStore 之前析构。
+    std::unique_ptr<CookieStore> m_cookieStore;
+    std::unique_ptr<CurlHttpClient> m_curlClient;
+    std::unique_ptr<NcmUserApi> m_userApi;
+    std::unique_ptr<NcmSongApi> m_songApi;
+    std::unique_ptr<NcmPlaylistApi> m_playlistApi;
+    std::unique_ptr<WebLoginController> m_webLoginController;
+    quint64 m_verifyRequestId = 0;
 };
 
 #endif // NCMSESSION_H

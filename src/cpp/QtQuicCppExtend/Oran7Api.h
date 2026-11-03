@@ -23,6 +23,7 @@ public:
     Q_INVOKABLE void setAlwaysOnTop(QWindow *window, bool alwaysOnTop);
 
     Q_INVOKABLE int getWindowState(QWindow *window) const;
+    Q_INVOKABLE void setWindowMaskRect(QWindow *window, const QRectF& rect);
 
 private:
     explicit Oran7Api(QObject *parent = nullptr);

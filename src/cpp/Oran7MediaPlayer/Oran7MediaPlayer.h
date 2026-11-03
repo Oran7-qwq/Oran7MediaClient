@@ -5,6 +5,7 @@
 #include <thread>
 #include <functional>
 #include <atomic>      // destroying_
+#include <string>
 
 #include "FFPlay_Def.h"   // Frame / AVFrame（AddVideoRefreshCallback 形参）
 #include "FFMsgQueue.h"   // AVMessage（oran7mp_get_msg 形参）
@@ -112,6 +113,8 @@ public:
 
     /*! @note 设置要播放的url */
     int oran7mp_set_data_source(const char *url);
+    // 返回副本；调用者须与设置数据源/销毁串行，不暴露内部缓冲区。
+    std::string dataSource() const { return data_source_ ? data_source_ : ""; }
 
     /*! @note 准备播放 */
     int oran7mp_prepare_async();
@@ -197,15 +200,15 @@ private:
     std::mutex mutex_;                    // 线程同步互斥量
     Oran7FFplayerCore *ffplayer_ = NULL;       //内核播放器Core-ffplay模块
     std::function<int(void *)> msg_loop_ = NULL; //函数指针, 指向创建的message_loop，即内部消息循环函数 ->ui处理消息的循环
-    std::thread *msg_thread_;         // 消息循环机制线程,执行msg_loop
-    char *data_source_;                   //播放资源文件路径或url链接
-    int mp_state_;                            //播放器状态，例如prepared,resumed,error,completed等
+    std::thread *msg_thread_ = nullptr; // 消息循环机制线程,执行msg_loop
+    char *data_source_ = nullptr;       // 播放资源文件路径或url链接
+    std::atomic<int> mp_state_{MP_STATE_IDLE}; // 消息线程写、GUI 线程读
 
     /*! @note Player percent_volume*/
-    int percent_volume;
+    int percent_volume = 25;
 
    /*! @note isPlaying*/
-    bool isPlaying=false;
+    std::atomic_bool isPlaying{false};
 
     /*! @note req_seeking*/
     int seek_req = 0;

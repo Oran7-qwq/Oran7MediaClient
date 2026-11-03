@@ -127,7 +127,7 @@ QByteArray LoginHandler::handlePacket(const QByteArray& packet)
     //发送给客户端
     qDebug()<<"[Sever]:validateResult is sended to Client.";
     qDebug() << "[Sever:]response size:" << response.size();
-    qDebug() << "[Sever:]response:" <<response.toHex(' ');
+    qDebug() << "[LegacyServer] 登录响应字节数=" << response.size();
     // socket->write(response);
     // socket->flush();
 

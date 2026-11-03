@@ -3,7 +3,7 @@ import QtQuick.Dialogs
 import Qt5Compat.GraphicalEffects
 
 import "../../Settings/GlobalSettings"
-import "../"
+import "../Oran7GlobalComponents"
 
 import Oran7UI.Impl
 

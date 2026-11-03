@@ -67,7 +67,7 @@ private slots:
     void onWsDisconnected();
     void pollCookies();
     void onProbeReply(QNetworkReply* reply);
-    void onAccountFetched(const QString& nickname);
+    void onAccountFetched(quint64 requestId, const QString& nickname);
 
 private:
     static QString findBrowserExecutable();
@@ -97,6 +97,7 @@ private:
     int m_cookieCmdId = 0;
     QString m_wsUrl;
     QString m_tempProfileDir;
+    quint64 m_accountRequestId = 0;
     bool m_captured = false;
     bool m_verified = false;
     bool m_cleaningUp = false;

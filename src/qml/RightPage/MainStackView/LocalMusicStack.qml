@@ -4,7 +4,7 @@ import QtCore
 import QtQuick.Dialogs
 import Qt5Compat.GraphicalEffects
 import "../../Basic"
-import "../../Components"
+import "../../Components/Oran7GlobalComponents"
 import Client 1.0
 
 Item {
@@ -35,7 +35,7 @@ Item {
         if (StackView.view) {
             _myStackView = StackView.view;
         } else {
-            var parent = container.parent;
+            var parent = root.parent;
             var depth = 0;
             while (parent && depth < 20) {
                 if (typeof parent.push === "function" && typeof parent.pop === "function") {
@@ -107,14 +107,9 @@ Item {
         enableListBlurEffect: false
         blurSource: root.mainWindow ? root.mainWindow.__Oran7WindowBackGround__ : null
 
-        // 播放归属列表/索引（网络歌自动切歌、解析失败推进用，避免依赖当前页签的 filepath 匹配）
-        property var _ownerModel: null
-        property int _ownerIndex: -1
-        // 网络歌解析失败连续计数（防无限切歌；达到列表数量即暂停）
-        property int _networkFailCount: 0
 
         //初始化属性
-        titleModel: ["我整合的音乐","本地音乐","下载中歌曲"]
+        titleModel: [qsTranslate("Oran7Ui", "我整合的音乐"),qsTranslate("Oran7Ui", "本地音乐"),qsTranslate("Oran7Ui", "下载中歌曲")]
         // 页签↔模型：0=我喜欢的音乐, 1=本地音乐, 2=下载中歌曲(暂未使用)
         pageListModels: [BasicConfig.myIntegratedMusicListModel, BasicConfig.localMusicListModel, null]
         // 「+」添加本地文件按钮只在本地音乐页签显示
@@ -126,12 +121,14 @@ Item {
         // ------------- innder signals -------------
         onItemDoubleClicked: function (index) {
             //console.log("double clicked:",index)
-            localMusciStack_playlistView.dealClicked(index);
+            Client.musicQueue.activate(listModel, index);
+            syncIndicesToCurrentMedia();
         }
 
         onItemClicked: function (index) {
             // console.log("clicked:",index)
-            localMusciStack_playlistView.dealClicked(index);
+            Client.musicQueue.activate(listModel, index);
+            syncIndicesToCurrentMedia();
         }
 
         // ---- 整合按钮：加入/移出"我整合的音乐"合集（原喜欢图标的控制链路，现统一为整合操作）----
@@ -157,91 +154,6 @@ Item {
 
         // ------------- functions -------------
 
-        function dealClicked(index) {
-            //标记本列表为播放来源，自动切歌只在本列表内推进
-            BasicConfig.currentPlaylistOwner = "local";
-            // 记录播放归属列表/索引（自动切歌、解析失败推进用）
-            _ownerModel = listModel;
-            _ownerIndex = index;
-            // 新一轮播放尝试，重置网络歌解析失败计数
-            _networkFailCount = 0;
-            //async globalPlayingFocus
-            if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex) {
-                BasicConfig.isPlaying = false;
-                BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_MusicPlayerIndex;
-            }
-
-            var item = listModel.get(index);
-            // 播放源：优先 url（收藏的网络歌），不可用则用 filepath（本地歌）
-            var playPath = (item.url && item.url.length > 0) ? item.url : item.filepath;
-            // 注入当前歌曲 songId / isVip（会员歌拉歌词、最近播放记录用）
-            Client.setCurrentMediaSongId(item.songId || 0);
-            Client.setCurrentMediaIsVip(item.isVip === true);
-            // 网络歌持久化元数据，供下次启动恢复上次播放
-            // 用 songId>0 判定网络歌：VIP 收藏歌 url/filepath 可能为空，仅靠 playPath 无法识别，
-            // 漏存会导致退出后 last_media_* 与 last_used_file 错配
-            if (item.songId > 0 || playPath.indexOf("http://") === 0 || playPath.indexOf("https://") === 0) {
-                Client.rememberLastMedia(item.music_name, item.music_artist, item.music_album,
-                                         item.icon, item.timesize, item.songId || 0, item.isVip === true);
-            }
-
-            if (BasicConfig.isPlaying === false && curSelectingIndex === -1) {
-                //--->first begain to play
-                Client.playNetworkSong(item.songId || 0, playPath, item.isVip === true);
-                BasicConfig.isPlaying = true;
-                curPlayingIndex = index;
-
-                //async bottom page info
-                BasicConfig.currentMediaName = item.music_name;
-                BasicConfig.currentMediaArtistAuthor = item.music_artist;
-                BasicConfig.currentMediaFilePath = playPath;
-                BasicConfig.currentMediaCoverFilePath = item.icon;//touch bottom page update
-                BasicConfig.currentMediaAlbum = item.music_album;
-                BasicConfig.currentMediaTimesize = item.timesize;
-            } else if (BasicConfig.isPlaying === false && curSelectingIndex === index) {
-                //-->pause statue,and the same file
-                Client.playNetworkSong(item.songId || 0, playPath, item.isVip === true);
-                BasicConfig.isPlaying = true;
-                curPlayingIndex = index;
-            } else if (BasicConfig.isPlaying === false && curSelectingIndex !== index) {
-                //-->pause statue,and request to change file
-                Client.playNetworkSong(item.songId || 0, playPath, item.isVip === true);
-                BasicConfig.isPlaying = true;
-                curPlayingIndex = index;
-
-                //change file,async bottom page info
-                BasicConfig.currentMediaName = item.music_name;
-                BasicConfig.currentMediaArtistAuthor = item.music_artist;
-                BasicConfig.currentMediaFilePath = playPath;
-                BasicConfig.currentMediaCoverFilePath = item.icon;//touch bottom page update
-                BasicConfig.currentMediaAlbum = item.music_album;
-                BasicConfig.currentMediaTimesize = item.timesize;
-            } else if (BasicConfig.isPlaying === true && curSelectingIndex !== index) {
-                //--->is playing while change file
-                Client.playNetworkSong(item.songId || 0, playPath, item.isVip === true);
-                BasicConfig.isPlaying = true; //keep playing
-                curPlayingIndex = index;
-
-                //change file,async bottom page info
-                BasicConfig.currentMediaName = item.music_name;
-                BasicConfig.currentMediaArtistAuthor = item.music_artist;
-                BasicConfig.currentMediaFilePath = playPath;
-                BasicConfig.currentMediaCoverFilePath = item.icon;//touch bottom page update
-                BasicConfig.currentMediaAlbum = item.music_album;
-                BasicConfig.currentMediaTimesize = item.timesize;
-            } else if (BasicConfig.isPlaying === true && curSelectingIndex === index) {
-                //--->is playing ,the same of file for request to pause
-                Client.playNetworkSong(item.songId || 0, playPath, item.isVip === true);
-                BasicConfig.isPlaying = false;
-                curPlayingIndex = -1;
-                curSelectingIndex = -1;   // 取消当前播放/选中：selected 索引也重置为 -1
-                return;                    // 不再被下方 curSelectingIndex = index 覆盖
-            }
-
-            //updata now selectingIndex
-            curSelectingIndex = index;
-        }
-
         function deal_outClickplayReponse_asyncUiStatue(index) {
             if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
                 return;
@@ -255,130 +167,7 @@ Item {
             curSelectingIndex = index;
         }
 
-        // ---- 播放归属模型辅助：自动切歌应基于"当前播放歌曲真正所属的列表"，而不是当前页签 ----
-        // 解决：在"我喜欢的音乐"播放时切到"本地音乐"页签，curPlayingIndex 被重置为 -1 导致无法自动切歌。
-
-        function playingPathOf(item) {
-            return (item.url && item.url.length > 0) ? item.url : item.filepath;
-        }
-
-        // 在所有页签模型中查找当前播放文件所属的模型（找不到返回 null）
-        function modelForPlayingPath(path) {
-            var models = pageListModels;
-            if (!models) return null;
-            for (var i = 0; i < models.length; i++) {
-                var m = models[i];
-                if (!m) continue;
-                for (var j = 0; j < m.count; j++) {
-                    if (String(playingPathOf(m.get(j))) === String(path))
-                        return m;
-                }
-            }
-            return null;
-        }
-
-        // 在指定模型中查找文件路径的索引，找不到返回 -1
-        function indexInModel(model, path) {
-            if (!model) return -1;
-            for (var j = 0; j < model.count; j++) {
-                if (String(playingPathOf(model.get(j))) === String(path))
-                    return j;
-            }
-            return -1;
-        }
-
-        // 播放指定模型中的某首歌并刷新全局状态（自动切歌用，不走 dealClicked 的暂停分支）
-        function playFromModel(model, index) {
-            _ownerModel = model;
-            _ownerIndex = index;
-            var item = model.get(index);
-            var playPath = playingPathOf(item);
-            Client.setCurrentMediaSongId(item.songId || 0);
-            Client.setCurrentMediaIsVip(item.isVip === true);
-            // 网络歌持久化元数据，供下次启动恢复上次播放
-            // 用 songId>0 判定网络歌：VIP 收藏歌 url/filepath 可能为空，仅靠 playPath 无法识别，
-            // 漏存会导致退出后 last_media_* 与 last_used_file 错配
-            if (item.songId > 0 || playPath.indexOf("http://") === 0 || playPath.indexOf("https://") === 0) {
-                Client.rememberLastMedia(item.music_name, item.music_artist, item.music_album,
-                                         item.icon, item.timesize, item.songId || 0, item.isVip === true);
-            }
-            Client.playNetworkSong(item.songId || 0, playPath, item.isVip === true);
-            BasicConfig.isPlaying = true;
-            BasicConfig.currentMediaName = item.music_name;
-            BasicConfig.currentMediaArtistAuthor = item.music_artist;
-            BasicConfig.currentMediaFilePath = playPath;
-            BasicConfig.currentMediaCoverFilePath = item.icon;
-            BasicConfig.currentMediaAlbum = item.music_album;
-            BasicConfig.currentMediaTimesize = item.timesize;
-
-            // 高亮：归属模型即当前页签模型则聚焦 index，否则当前页签无此歌 → -1
-            curPlayingIndex = (_ownerModel === listModel) ? index : -1;
-            curSelectingIndex = curPlayingIndex;
-        }
-
-        // 自动切到下一首/上一首（基于播放归属模型，跨页签也能正确推进）
-        function autoAdvance(direction) {
-            if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex)
-                return;
-            if (BasicConfig.currentPlaylistOwner !== "local")
-                return;
-            // 新一轮正常切歌，重置解析失败计数
-            _networkFailCount = 0;
-
-            var playModel = _ownerModel;
-            if (!playModel || playModel.count === 0)
-                return;
-            var curIdx = _ownerIndex;
-            if (curIdx < 0 || curIdx >= playModel.count)
-                return;
-
-            // 单曲循环：重播当前歌（EOF 后播放器已销毁，需走完整播放流程重新播放）
-            if (BasicConfig.playMode === 1) {
-                playFromModel(playModel, curIdx);
-                return;
-            }
-            // 按播放模式（顺序/随机）计算目标索引
-            var newIndex = BasicConfig.nextPlayIndex(curIdx, playModel.count, direction);
-            playFromModel(playModel, newIndex);
-        }
-
-        // 网络歌解析失败（未登录/无会员/链接失效）：自动尝试播放归属列表下一首；单首或整轮失败则暂停
-        function handleNetworkPlayFailed() {
-            var playModel = _ownerModel;
-            if (!playModel || playModel.count <= 0) {
-                pausePlayback();
-                return;
-            }
-            _networkFailCount++;
-            if (playModel.count <= 1 || _networkFailCount >= playModel.count) {
-                _networkFailCount = 0;
-                pausePlayback();
-                return;
-            }
-            var newIndex = (_ownerIndex + 1) % playModel.count;
-            playFromModel(playModel, newIndex);
-        }
-
-        function pausePlayback() {
-            BasicConfig.isPlaying = false;
-            curPlayingIndex = -1;
-            curSelectingIndex = -1;
-        }
-
         // -------------  Connections  -------------
-        //<---signal from BasicConfig
-        Connections {
-            target: BasicConfig
-            //<--signal from BasicConfig ,the player core playing statue is changed, now async the playlist Ui Of statues
-            function onIsPlayingChanged() {
-                if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_MusicPlayerIndex) {
-                    localMusciStack_playlistView.curPlayingIndex = -1;
-                    return;
-                }
-
-                localMusciStack_playlistView.ask_dir_of_item_index(BasicConfig.currentMediaFilePath);
-            }
-        }
         //<--- signal from this Oran7MusicPlaylistView inner
         Connections {
             target: localMusciStack_playlistView
@@ -389,19 +178,11 @@ Item {
 
             // 以下均为本地音乐专属的 Client 操作，只在「本地音乐」页签(索引1)生效，
             // 避免在「我整合的音乐」页签误改本地数据
-            function onReorderCompleted(newOrder){
-                if (localMusciStack_playlistView.currentPageIndex === 1) {
-                    Client.localMusicListReordered(newOrder);
-                } else if (localMusciStack_playlistView.currentPageIndex === 0) {
-                    // 整合页签：重排已在模型内 move 完成，直接把当前顺序持久化到 config.json
-                    BasicConfig.persistIntegratedMusic();
-                }
-            }
-
+            // 模型顺序由 C++ 直接同步到曲库/配置，不再通过路径数组回传。
             function onAddNewItemOfFiles(filesArray) {
                 if (localMusciStack_playlistView.currentPageIndex === 1) {
                     var focusedItem = localMusciStack_playlistView.getfocusItem();
-                    Client.addNewLocalMusic(filesArray);
+                    Client.importLocalMusic(filesArray);
                     localMusciStack_playlistView.refocusItem(focusedItem)
                 }
             }
@@ -412,7 +193,7 @@ Item {
                     var paths = [];
                     for (var i = 0; i < itemsArray.length; i++)
                         paths.push(typeof itemsArray[i] === 'object' ? itemsArray[i].filepath : itemsArray[i]);
-                    Client.deleteLocalMusicFiles(paths);
+                    Client.removeLocalMusic(paths);
                 } else if (localMusciStack_playlistView.currentPageIndex === 0) {
                     // 整合页签：模型项已移除，按 songId 精确持久化（VIP 歌 filepath 为空，不能按路径匹配）
                     for (var i = 0; i < itemsArray.length; i++) {
@@ -420,29 +201,16 @@ Item {
                         if (typeof it === 'object' && it.songId && it.songId > 0)
                             BasicConfig.removeIntegratedMusic(it.songId, "", "");
                         else
-                            BasicConfig.removeIntegratedMusic(0, it.filepath || it, it.filepath || it);
+                            BasicConfig.removeIntegratedMusic(0, it.url || "", it.filepath || (typeof it === "string" ? it : ""));
                     }
                 }
             }
 
             function onUpdateCurGlobalFocusMediaFile(filepath){
                 if (localMusciStack_playlistView.currentPageIndex === 1)
-                    Client.updateFocusCurMediaFile(filepath);
+                    Client.focusLocalMusic(filepath);
             }
         }
-        //-->signal from Client Of request to play next or last
-        Connections {
-            target: Client
-            function onPlayNextTriggered() {
-                localMusciStack_playlistView.autoAdvance(1);
-            }
-            function onPlayPreviousTriggered() {
-                localMusciStack_playlistView.autoAdvance(-1);
-            }
-            // 网络歌解析失败（未登录/无会员/链接失效）：自动播下一首；单首则暂停
-            function onNetworkPlayResolveFailed(songId) {
-                localMusciStack_playlistView.handleNetworkPlayFailed();
-            }
-        }
+
     }
 }

@@ -3,131 +3,27 @@ import QtQuick.Controls 2.15
 import Qt5Compat.GraphicalEffects
 
 import "../GlobalSettings"
-import "../../Components"
+import "../../Components/Oran7GlobalComponents"
 import "../../Components/Oran7SettingUiWindowItems"
 
 import Oran7UI.Impl
+import Client 1.0
 
-Item {
+Oran7SettingsPanel {
     id: root
-    visible: false
     width: Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth
-    height: 0
-    opacity: 0
     x: root.savedNormalX
-    y: 0
 
     property int  winIndex : 3
 
     property real savedNormalX: 80 + Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth * root.winIndex
-    property real savedNormalY: 40
-    property real savedNormalHeight: 600
+    savedNormalY: 40
+    savedNormalHeight: 600
 
     property point clickPos: Qt.point(0, 0)
     property bool mouseIsPressed: false
-    property bool isAnimating: false
 
-    function prepareForOpen() {
-        window_closeAnimation.stop();
-        root.isAnimating = true;
-        root.opacity = 0;
-        root.y = 0;
-        root.visible = true;
-        root.savedNormalHeight = Math.max(contene_column.implicitHeight + topDragRect.height + 50, 200);
-        //root.height = root.savedNormalHeight;
-        root.height = 0;
-    }
-
-    function startOpenAnimation() {
-        window_openAnimation.restart();
-    }
-
-    function startCloseAnimation() {
-        window_openAnimation.stop();
-        root.isAnimating = true;
-        window_closeAnimation.restart();
-    }
-
-    ParallelAnimation {
-        id: window_openAnimation
-        property real aniDuration: Oran7MainUiSetting.toggleOpenAniDuration
-
-        PropertyAnimation {
-            target: root
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "y"
-            from: 0
-            to: root.savedNormalY
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "height"
-            from: 0
-            to: root.savedNormalHeight
-            duration: window_openAnimation.aniDuration
-            easing.type: Easing.OutCubic
-        }
-
-        onFinished: {
-            root.isAnimating = false;
-            root.height = Qt.binding(function() { return root.savedNormalHeight; });
-            Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = false
-        }
-    }
-
-    ParallelAnimation {
-        id: window_closeAnimation
-        property real aniDuration: Oran7MainUiSetting.toggleOpenAniDuration
-
-        PropertyAnimation {
-            target: root
-            property: "opacity"
-            from: 1
-            to: 0
-            duration: window_closeAnimation.aniDuration
-            easing.type: Easing.InExpo
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "y"
-            from: root.savedNormalY
-            to: 0
-            duration: window_closeAnimation.aniDuration
-            easing.type: Easing.InExpo
-        }
-
-        PropertyAnimation {
-            target: root
-            property: "height"
-            from: root.savedNormalHeight
-            to: 0
-            duration: window_closeAnimation.aniDuration
-            easing.type: Easing.InExpo
-        }
-
-        onFinished: {
-            root.visible = false;
-            root.opacity = 0
-            root.y = 0;
-            root.height = 0;
-            root.isAnimating = false;
-
-            //the last index of settingWindow
-            Oran7MainUiSetting.settingWindow_isOpening_Or_isClosing = false
-        }
-    }
+    animationDuration: Oran7MainUiSetting.toggleOpenAniDuration
 
     Rectangle {
         id: ui_root
@@ -158,7 +54,7 @@ Item {
 
             Oran7SetingTitleItem{
                 id:topDragRect
-                title:"MusicPlayerSettings"
+                title:qsTranslate("Oran7Ui", "音乐播放器设置")
                 anchors.top: parent.top
                 anchors.margins: 2
             }
@@ -176,8 +72,9 @@ Item {
                 // ~~~~~ MusicListView Settings ~~~~~
                 Oran7SettingItem{
                     id:musicListViewSettings
+                    objectName: "musicListViewSettings"
                     index: 0
-                    text:"MusicListViewSettings"
+                    text:qsTranslate("Oran7Ui", "音乐列表设置")
                     fontBold:true
                     gradientMaskEnabled: true
 
@@ -191,24 +88,73 @@ Item {
                 Oran7ExpandItem{
                     expand: musicListViewSettings.expand
                     Column{
+                        Oran7ColorSettingGroup {
+                            objectName: "playlistBackgroundSettings"
+                            title: qsTranslate("Oran7Ui", "列表背景颜色")
+                            checkedColor: Oran7Theme.Oran7MusicPlaylistView.rowBackgroundColor
+                            componentName: "Oran7MusicPlaylistView"
+                            colorToken: "rowBackgroundColor"
+                            pickerLabel: qsTranslate("Oran7Ui", "取色板")
+                            presetColors: ["#ede7db"]
+                            presetNames: [qsTranslate("Oran7Ui", "米白色")]
+                            onEnterOfTextFiled: function(text) {
+                                Oran7Theme.saveComponentToken(componentName, colorToken, text)
+                            }
+                            onColorReady: function(color) {
+                                Oran7Theme.saveComponentToken(componentName, colorToken, String(color))
+                            }
+                        }
                         // --- textColor ---
                         Oran7ColorSettingGroup{
-                            title:"ListViewTextColor:"
-                            checkedColor: Oran7Theme.Oran7MusicPlaylistView[colorToken +"-6"]
+                            id: playlistTextSettings
+                            objectName: "playlistTextSettings"
+                            title:qsTranslate("Oran7Ui", "列表文字颜色")
+                            readonly property color listBackground: Oran7Theme.Oran7MusicPlaylistView.rowBackgroundColor
+                            readonly property string colorMode: (listBackground.r * 0.2126
+                                + listBackground.g * 0.7152 + listBackground.b * 0.0722) > 0.58 ? "Light" : "Dark"
+                            readonly property color originalTextColor: Oran7Theme.Oran7MusicPlaylistView["rowText" + colorMode]
+                            checkedColor: Oran7Theme.Oran7MusicPlaylistView.rowTextColor || originalTextColor
                             componentName: "Oran7MusicPlaylistView"
-                            colorToken:"textColorBase"
+                            colorToken: "rowTextColor"
+                            presetColors: [originalTextColor, "#A78BFA", "#60A5FA", "#818CF8", "#22D3EE", "#34D399",
+                                           "#A3E635", "#FBBF24", "#FB923C", "#FB7185", "#F472B6"]
+                            presetNames: [qsTranslate("Oran7Ui", "原版列表配色"),
+                                qsTranslate("Oran7Ui", "鸢尾紫"), qsTranslate("Oran7Ui", "晴空蓝"),
+                                qsTranslate("Oran7Ui", "靛青蓝"), qsTranslate("Oran7Ui", "冰川青"),
+                                qsTranslate("Oran7Ui", "薄荷绿"), qsTranslate("Oran7Ui", "青柠绿"),
+                                qsTranslate("Oran7Ui", "琥珀金"), qsTranslate("Oran7Ui", "落日橙"),
+                                qsTranslate("Oran7Ui", "珊瑚红"), qsTranslate("Oran7Ui", "樱花粉")]
+                            function saveTextColor(color) {
+                                // 原版选项恢复整套主次颜色，而不是旧设置中的生成色色阶。
+                                Oran7Theme.saveComponentToken(componentName, colorToken,
+                                    Qt.colorEqual(color, originalTextColor) ? "" : String(color))
+                            }
                             onEnterOfTextFiled: function(text){
-                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${text})`)
+                                saveTextColor(text)
                             }
                             onColorReady: function(seletedColor){
-                                Oran7Theme.saveComponentToken(componentName,colorToken,`$genColor(${seletedColor})`)
+                                saveTextColor(seletedColor)
+                            }
+                        }
+
+                        Oran7ColorSettingGroup {
+                            objectName: "playlistAccentSettings"
+                            title: qsTranslate("Oran7Ui", "列表强调色")
+                            checkedColor: Oran7Theme.Oran7MusicPlaylistView.rowAccentColor
+                            componentName: "Oran7MusicPlaylistView"
+                            colorToken: "rowAccentColor"
+                            onEnterOfTextFiled: function(text) {
+                                Oran7Theme.saveComponentToken(componentName, colorToken, text)
+                            }
+                            onColorReady: function(color) {
+                                Oran7Theme.saveComponentToken(componentName, colorToken, String(color))
                             }
                         }
 
                         // --- textFontPixelSize ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicPlaylistView.listViewFontPixelSize
-                            title: "ListViewTextPixelSize"
+                            title: qsTranslate("Oran7Ui", "列表文字大小")
                             property string componentName: "Oran7MusicPlaylistView"
                             property string tokenName: "listViewFontPixelSize"
                             sliderValueFrom: 7
@@ -223,7 +169,7 @@ Item {
                 Oran7SettingItem{
                     id:musicPlayControlsBar
                     index: 1
-                    text:"MusicPlayControlsBar"
+                    text:qsTranslate("Oran7Ui", "播放控制栏")
                     fontBold:true
                     gradientMaskEnabled: true
 
@@ -239,7 +185,7 @@ Item {
                     Column{
                         // --- textColor ---
                         Oran7ColorSettingGroup{
-                            title:"textColor:"
+                            title:qsTranslate("Oran7Ui", "文字颜色")
                             checkedColor: Oran7Theme.Oran7MusicPlayControls[colorToken +"-6"]
                             componentName: "Oran7MusicPlayControls"
                             colorToken:"textColorBase"
@@ -253,7 +199,7 @@ Item {
 
                         // --- iconColor ---
                         Oran7ColorSettingGroup{
-                            title:"iconColor:"
+                            title:qsTranslate("Oran7Ui", "图标颜色")
                             checkedColor: Oran7Theme.Oran7MusicPlayControls[colorToken +"-6"]
                             componentName: "Oran7MusicPlayControls"
                             colorToken:"iconColorBase"
@@ -268,7 +214,7 @@ Item {
                         //---progressVisibleBar_ColorIndex ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicPlayControls.progressVisibleBar_ColorIndex
-                            title: "ProgressColor-index:"
+                            title: qsTranslate("Oran7Ui", "进度条颜色序号")
                             property string componentName: "Oran7MusicPlayControls"
                             property string tokenName: "progressVisibleBar_ColorIndex"
                             sliderValueFrom: 0
@@ -299,7 +245,7 @@ Item {
                         }
                         // --- progressVisibleBar_dynamicGradientEnabled ---
                         Oran7SettingItem {
-                            text: "DynamicGradient:"
+                            text: qsTranslate("Oran7Ui", "动态渐变")
                             // 开关按钮
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MusicPlayControls.progressVisibleBar_dynamicGradientEnabled
@@ -311,10 +257,10 @@ Item {
                             }
                         }
                         //<<---Oran7MusicPlayControls-Background
-                        Oran7SettingItem{text:"Background：";fontBold:true;showTag:false}
+                        Oran7SettingItem{text:qsTranslate("Oran7Ui", "背景");fontBold:true;showTag:false}
                         // --- Oran7MusicPlayControls-BlurEnabled ---
                         Oran7SettingItem {
-                            text: "BlurEnabled:"
+                            text: qsTranslate("Oran7Ui", "启用模糊")
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MusicPlayControls.blurEffectEnabled
                                 onSwitchToggleChanged: function (checked) {
@@ -325,7 +271,7 @@ Item {
                         // --- Oran7MusicPlayControls-BlurEffect-saturation ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicPlayControls.saturation
-                            title: "BlurEffect-Saturation:"
+                            title: qsTranslate("Oran7Ui", "模糊饱和度")
                             property string componentName: "Oran7MusicPlayControls"
                             property string tokenName: "saturation"
                             sliderValueFrom: -1.0
@@ -339,7 +285,7 @@ Item {
                         // --- Oran7MusicPlayControls-BlurEffect-brightness ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicPlayControls.brightness
-                            title: "BlurEffect-Brightness:"
+                            title: qsTranslate("Oran7Ui", "模糊亮度")
                             property string componentName: "Oran7MusicPlayControls"
                             property string tokenName: "brightness"
                             sliderValueFrom: -1.0
@@ -353,7 +299,7 @@ Item {
                         // --- Oran7MusicPlayControls-Effect-contrast ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicPlayControls.contrast
-                            title: "BlurEffect-Contrast:"
+                            title: qsTranslate("Oran7Ui", "模糊对比度")
                             property string componentName: "Oran7MusicPlayControls"
                             property string tokenName: "contrast"
                             sliderValueFrom: -1.0
@@ -370,7 +316,7 @@ Item {
                 Oran7SettingItem{
                     id:musicLyricsWindow
                     index: 2
-                    text:"MusicLyricsWindow"
+                    text:qsTranslate("Oran7Ui", "歌词窗口")
                     fontBold:true
                     gradientMaskEnabled: true
 
@@ -385,10 +331,10 @@ Item {
                     expand: musicLyricsWindow.expand
                     Column{
                         //<<---Lyrics
-                        Oran7SettingItem{text:"Lyrics：";fontBold:true;showTag:false}
+                        Oran7SettingItem{text:qsTranslate("Oran7Ui", "歌词");fontBold:true;showTag:false}
                         // --- LyricsWin_Lyrics-TextColor ---
                         Oran7ColorSettingGroup{
-                            title:"Lyrics-TextColor:"
+                            title:qsTranslate("Oran7Ui", "歌词颜色")
                             checkedColor: Oran7Theme.Oran7MusicLyricsWindow[colorToken+"-6"]
                             componentName: "Oran7MusicLyricsWindow"
                             colorToken: "textColorBase"
@@ -402,7 +348,7 @@ Item {
                         // --- LyricsWin_Lyrics-TextFontSize ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicLyricsWindow[tokenName+"-2"]
-                            title: "Lyrics-TextSize:"
+                            title: qsTranslate("Oran7Ui", "歌词字号")
                             property string componentName: "Oran7MusicLyricsWindow"
                             property string tokenName: "textSizeBase"
                             sliderValueFrom: 12
@@ -415,10 +361,10 @@ Item {
                         }
 
                         //<<---Background
-                        Oran7SettingItem{text:"Background：";fontBold: true;showTag: false}
+                        Oran7SettingItem{text:qsTranslate("Oran7Ui", "背景");fontBold: true;showTag: false}
                         // --- LyricsWin_Background-BlurEnabled ---
                         Oran7SettingItem {
-                            text: "BlurEnabled:"
+                            text: qsTranslate("Oran7Ui", "启用模糊")
                             showTag: false
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MusicLyricsWindow.blurEffectEnabled
@@ -430,7 +376,7 @@ Item {
                         // --- LyricsWin_Background-BlurEffect-saturation ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicLyricsWindow.saturation
-                            title: "BlurEffect-Saturation:"
+                            title: qsTranslate("Oran7Ui", "模糊饱和度")
                             property string componentName: "Oran7MusicLyricsWindow"
                             property string tokenName: "saturation"
                             sliderValueFrom: -1.0
@@ -444,7 +390,7 @@ Item {
                         // --- LyricsWin_Background-BlurEffect-brightness ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicLyricsWindow.brightness
-                            title: "BlurEffect-Brightness:"
+                            title: qsTranslate("Oran7Ui", "模糊亮度")
                             property string componentName: "Oran7MusicLyricsWindow"
                             property string tokenName: "brightness"
                             sliderValueFrom: -1.0
@@ -458,7 +404,7 @@ Item {
                         // --- LyricsWin_Background-BlurEffect-contrast ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicLyricsWindow.contrast
-                            title: "BlurEffect-Contrast:"
+                            title: qsTranslate("Oran7Ui", "模糊对比度")
                             property string componentName: "Oran7MusicLyricsWindow"
                             property string tokenName: "contrast"
                             sliderValueFrom: -1.0
@@ -476,7 +422,7 @@ Item {
                 Oran7SettingItem{
                     id:musicLyricsIsland
                     index: 3
-                    text:"MusicLyricsIsland"
+                    text:qsTranslate("Oran7Ui", "歌词灵动岛")
                     fontBold:true
                     gradientMaskEnabled: true
 
@@ -493,7 +439,7 @@ Item {
                         // --- LyricsIsland_Lyrics-TextFontSize ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicLyricsIsland[tokenName]
-                            title: "Lyrics-TextSize:"
+                            title: qsTranslate("Oran7Ui", "歌词字号")
                             property string componentName: "Oran7MusicLyricsIsland"
                             property string tokenName: "lyricsFontSize"
                             sliderValueFrom: 12
@@ -506,7 +452,7 @@ Item {
                         }
                         // --- LyricsIsland_BackdropColor（背景图关闭时的胶囊底色） ---
                         Oran7ColorSettingGroup{
-                            title:"Backdrop Color:"
+                            title:qsTranslate("Oran7Ui", "背景颜色")
                             checkedColor: Oran7Theme.Oran7MusicLyricsIsland[colorToken+"-6"]
                             componentName: "Oran7MusicLyricsIsland"
                             colorToken: "floatingBackdropColor"
@@ -519,7 +465,7 @@ Item {
                         }
                         // --- LyricsIsland_BackgroundImageEnabled ---
                         Oran7SettingItem {
-                            text: "Background Image:"
+                            text: qsTranslate("Oran7Ui", "背景图片")
                             showTag: false
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MusicLyricsIsland.backgroundImageEnabled
@@ -530,13 +476,13 @@ Item {
                         }
                         // --- item: backgroundImage ---
                         Oran7SettingItem {
-                            text: "background Image Path:"
+                            text: qsTranslate("Oran7Ui", "背景图片路径")
                             showTag: false
                         }
                         Oran7TextFieldItem {
                             id: background_image_textField
                             tempText: Oran7Theme.Oran7MusicLyricsIsland[tokenName]
-                            placeholderText: "please input image path."
+                            placeholderText: qsTranslate("Oran7Ui", "请输入图片路径")
                             property string componentName: "Oran7MusicLyricsIsland"
                             property string tokenName: "backgroundImage_url"
                             detectEnable: true
@@ -559,10 +505,10 @@ Item {
                             }
                         }
                         //<<--- 悬浮歌词窗（桌面歌词）
-                        Oran7SettingItem{text:"Floating：";fontBold:true;showTag:false}
+                        Oran7SettingItem{text:qsTranslate("Oran7Ui", "悬浮");fontBold:true;showTag:false}
                         // --- Floating-Enabled ---
                         Oran7SettingItem {
-                            text: "Enabled:"
+                            text: qsTranslate("Oran7Ui", "启用")
                             showTag: false
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MusicLyricsIsland.floatingEnabled
@@ -573,7 +519,7 @@ Item {
                         }
                         // --- Floating-Locked ---
                         Oran7SettingItem {
-                            text: "Locked:"
+                            text: qsTranslate("Oran7Ui", "锁定")
                             showTag: false
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MusicLyricsIsland.floatingLocked
@@ -584,7 +530,7 @@ Item {
                         }
                         // --- Floating-ClickThrough ---
                         Oran7SettingItem {
-                            text: "ClickThrough:"
+                            text: qsTranslate("Oran7Ui", "鼠标穿透")
                             showTag: false
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MusicLyricsIsland.floatingClickThrough
@@ -595,7 +541,7 @@ Item {
                         }
                         // --- Floating-AlwaysOnTop ---
                         Oran7SettingItem {
-                            text: "AlwaysOnTop:"
+                            text: qsTranslate("Oran7Ui", "窗口置顶")
                             showTag: false
                             Oran7SwitchToggleItem {
                                 checked: Oran7Theme.Oran7MusicLyricsIsland.floatingAlwaysOnTop
@@ -607,7 +553,7 @@ Item {
                         // --- Floating-Opacity ---
                         Oran7NumSettingGroup{
                             value:Oran7Theme.Oran7MusicLyricsIsland.floatingOpacity
-                            title: "Opacity:"
+                            title: qsTranslate("Oran7Ui", "不透明度")
                             property string componentName: "Oran7MusicLyricsIsland"
                             property string tokenName: "floatingOpacity"
                             sliderValueFrom: 0.0
@@ -624,8 +570,9 @@ Item {
                 // ~~~~~ NeteasePlayerSetting ~~~~~
                 Oran7SettingItem{
                     id:neteasePlayerSetting
+                    objectName: "neteaseRoamSettingsGroup"
                     index: 3
-                    text:"NeteasePlayerSetting"
+                    text:qsTranslate("Oran7Ui", "网易云播放设置")
                     fontBold:true
                     gradientMaskEnabled: true
 
@@ -639,14 +586,21 @@ Item {
                 Oran7ExpandItem{
                     expand: neteasePlayerSetting.expand
                     Column{
-                        // --- Floating-Locked ---
                         Oran7SettingItem {
-                            text: "Filter NeteaseWander Of Like"
+                            text: qsTranslate("Oran7Ui", "漫游过滤已喜欢歌曲")
                             showTag: false
                             Oran7SwitchToggleItem {
-                                checked: Oran7Theme.Oran7MusicLyricsIsland.floatingLocked
+                                id: roamFilterLikedToggle
+                                objectName: "roamFilterLikedSwitch"
+                                checked: Client.musicQueue.roamFilterLiked
                                 onSwitchToggleChanged: function (checked) {
-                                    Oran7Theme.saveComponentToken("Oran7MusicLyricsIsland","floatingLocked",checked)
+                                    Client.musicQueue.roamFilterLiked = checked
+                                }
+                                Connections {
+                                    target: Client.musicQueue
+                                    function onRoamFilterLikedChanged() {
+                                        roamFilterLikedToggle.checked = Client.musicQueue.roamFilterLiked
+                                    }
                                 }
                             }
                         }

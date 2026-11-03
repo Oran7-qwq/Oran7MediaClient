@@ -9,7 +9,7 @@ import "./src/qml/LeftPage"
 import "./src/qml/RightPage"
 import "./src/qml/BottomPage"
 import "./src/qml/Basic"
-import "./src/qml/Components"
+import "./src/qml/Components/Oran7GlobalComponents"
 import "./src/qml/Settings/SettingWindows"
 
 import Client 1.0
@@ -21,13 +21,40 @@ import Oran7Async 1.0
 ApplicationWindow {
     id: mainWindow
     objectName: "__Oran7Window__"
-    width: 990 //miniSize default
-    height: 564 //miniSize default
-    visible: true
+    width: 990
+    height: 564
+    visible: !startupManaged
     color: "transparent"
     title: "Oran7MediaClient"
     minimumWidth: 990
     minimumHeight: 564
+
+    readonly property bool startupManaged: typeof Oran7Startup !== "undefined" && Oran7Startup !== null
+    readonly property bool startupReleased: !startupManaged || Oran7Startup.finished
+    readonly property bool startupPageReady: rightRectangle.initialPageReady
+        && mainWindowBackground.ready && width > 0 && height > 0
+    readonly property alias normalWindowGeometry: windowGeometry.normalGeometry
+    function prepareStartupGeometry() { windowGeometry.initialize() }
+    function captureNormalGeometry() { windowGeometry.capture() }
+    Oran7WindowGeometryState {
+        id: windowGeometry
+        targetWindow: mainWindow
+        active: mainWindow.startupReleased
+    }
+    property bool backgroundStyleInitialized: false
+    property bool backgroundNativeReady: false
+    property bool backgroundDwmApplied: false
+    readonly property bool backgroundDwmRequested: Oran7Theme.Oran7MainGUI.DWMBlurEffectEnabled === true
+    // 直接观察开关值，不依赖主题大写分组信号的 Connections 名称匹配。
+    onBackgroundDwmRequestedChanged: applyBackgroundWindowStyle()
+    function applyBackgroundWindowStyle() {
+        if (!backgroundStyleInitialized) return
+        backgroundNativeReady = false
+        var requested = backgroundDwmRequested
+        var applied = __windowAgent.setWindowAttribute("dwm-blur", requested)
+        backgroundDwmApplied = requested && applied
+        backgroundNativeReady = true
+    }
 
     property alias __Oran7WindowBackGround__: mainWindowBackground
 
@@ -36,34 +63,26 @@ ApplicationWindow {
 
     // 主窗口关闭 = 整体退出：桌面歌词悬浮窗是独立的顶层窗口（transientParent=null），
     // 主窗口关了它仍可见，会让 quitOnLastWindowClosed 失效 → 进程/控制台卡住不退出。
-    onClosing: Qt.quit()
-    // 防抖保存窗口尺寸/位置：停止缩放 200ms 后才落盘。
+    onClosing: { captureNormalGeometry(); Qt.quit() }
+    // 停止缩放 200ms 后恢复背景播放；窗口几何由 windowGeometry 统一维护。
     // 之前用 Qt.callLater 在 onWidthChanged/onHeightChanged 里排队，拉伸时会刷
     // "QQmlExpression: Attempted to evaluate an expression in an invalid context"。
     Timer {
         id: windowResizeSaveTimer
         interval: 200
         onTriggered: {
+            if (!mainWindow.startupReleased) return
             _windowResizing = false
-            backgroundPlayer.play()   // 缩放结束恢复播放
-            if (mainWindow.visibility === Window.Windowed) {
-                Oran7MainUiSetting.savedNormalWidth = mainWindow.width
-                Oran7MainUiSetting.savedNormalHeight = mainWindow.height
-                Oran7MainUiSetting.savedNormalX = mainWindow.x
-                Oran7MainUiSetting.savedNormalY = mainWindow.y
-            }
+            mainWindowBackground.play()   // 缩放结束恢复播放
         }
     }
     // 缩放/最大化期间暂停背景视频（画面定格上一帧）
-    onWidthChanged: { _windowResizing = true; backgroundPlayer.pause(); windowResizeSaveTimer.restart() }
-    onHeightChanged: { _windowResizing = true; backgroundPlayer.pause(); windowResizeSaveTimer.restart() }
-    onXChanged: { windowResizeSaveTimer.restart() }
-    onYChanged: { windowResizeSaveTimer.restart() }
+    onWidthChanged: { if (!startupReleased) return;  _windowResizing = true; mainWindowBackground.pause(); windowResizeSaveTimer.restart() }
+    onHeightChanged: { if (!startupReleased) return;  _windowResizing = true; mainWindowBackground.pause(); windowResizeSaveTimer.restart() }
+    onXChanged: { if (!startupReleased) return;  windowResizeSaveTimer.restart() }
+    onYChanged: { if (!startupReleased) return;  windowResizeSaveTimer.restart() }
     Component.onCompleted: {
-        Oran7MainUiSetting.savedNormalWidth = mainWindow.width;
-        Oran7MainUiSetting.savedNormalHeight = mainWindow.height;
-        Oran7MainUiSetting.savedNormalX = mainWindow.x;
-        Oran7MainUiSetting.savedNormalY = mainWindow.y;
+        if (!startupManaged) prepareStartupGeometry()
 
         // 设置全局mainWindow引用
         BasicConfig.mainWindow = mainWindow;
@@ -79,49 +98,21 @@ ApplicationWindow {
         });
     }
 
-    // 背景元素 - 作为直接子元素，可以被alias引用；循环播放 mp4 动图，视频不可用时自动回退到静态背景图
-    Item {
+    // 最终背景在启动遮罩内准备，真实首帧/图片终态是交接条件。
+    Oran7MainWindowBackground {
         id: mainWindowBackground
-        anchors.fill: parent
-
-        // 循环播放的 mp4 背景
-        // 循环播放的 mp4 背景
-        // Video 是 QtMultimedia 的便捷类型（内部 = MediaPlayer + VideoOutput + AudioOutput 一体），
-        // 完整暴露 muted/loops/hasVideo 等，且带 play()/pause() 方法。
-        // 窗口缩放/最大化时用 pause() 暂停背景视频、定格上一帧，避免 sink 重建表面闪成透明露出 DWM
-        Video {
-            id: backgroundPlayer
-            anchors.fill: parent
-            // backgroundMode: "Video" 时播放循环视频；"Image" 或 DWM 模糊时 source 置空，不做无谓解码
-            source: (Oran7Theme.Oran7MainGUI.DWMBlurEffectEnabled || Oran7Theme.Oran7MainGUI.backgroundMode !== "Video") ? "" :
-                    filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundVideo) ?
-                        "file:///" + Oran7Theme.Oran7MainGUI.backgroundVideo : "qrc:/image/background.mp4"
-            loops: MediaPlayer.Infinite
-            autoPlay: true
-            muted: true // 背景动图静音
-            fillMode: VideoOutput.PreserveAspectCrop
-            opacity: 1.0   // 不透明，避免 alpha 合成闪烁
-            visible: backgroundPlayer.hasVideo && !Oran7Theme.Oran7MainGUI.DWMBlurEffectEnabled
-                     && Oran7Theme.Oran7MainGUI.backgroundMode === "Video"
-        }
-
-        // 视频不可用时的静态背景图回退
-        Image {
-            anchors.fill: parent
-            sourceSize.width: Math.min(Screen.width * Screen.devicePixelRatio, 1920)
-            sourceSize.height: Math.min(Screen.height * Screen.devicePixelRatio, 1080)
-            source: Oran7Theme.Oran7MainGUI.DWMBlurEffectEnabled ? "" : filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage) ?
-                       "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/default_background.jpeg"
-            opacity: 1.0   // 与视频一致：完全不透明，避免 alpha 合成闪烁
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            mipmap: false
-            smooth: false
-            cache: false
-            transformOrigin: Item.Center
-            visible: !backgroundPlayer.hasVideo || Oran7Theme.Oran7MainGUI.DWMBlurEffectEnabled
-                     || Oran7Theme.Oran7MainGUI.backgroundMode !== "Video"
-        }
+        width: mainWindow.width; height: mainWindow.height
+        mode: Oran7Theme.Oran7MainGUI.backgroundMode
+        dwmEnabled: mainWindow.backgroundDwmApplied
+        nativeReady: mainWindow.backgroundNativeReady
+        prepareActive: !mainWindow.startupManaged || Oran7Startup.preparingMain
+        baseColor: Oran7Theme.isDark ? "#171a22" : "#e9ebef"
+        videoUrl: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundVideo)
+            ? "file:///" + Oran7Theme.Oran7MainGUI.backgroundVideo : "qrc:/image/background.mp4"
+        imageUrl: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage)
+            ? "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/default_background.jpeg"
+        imageWidth: Math.min(Screen.width * Screen.devicePixelRatio, 1920)
+        imageHeight: Math.min(Screen.height * Screen.devicePixelRatio, 1080)
     }
 
     // 设置background属性引用mainWindowBackground
@@ -146,7 +137,7 @@ ApplicationWindow {
         // 由 Oran7NetworkMonitor.latencyMsChanged / onlineChanged 驱动绑定刷新
         text: Oran7NetworkMonitor.online
               ? ("NET: " + (Oran7NetworkMonitor.latencyMs < 0 ? "--" : Oran7NetworkMonitor.latencyMs) + "ms")
-              : "无网络"
+              : qsTranslate("Oran7Ui", "无网络")
     }
 
     Text {
@@ -206,13 +197,9 @@ ApplicationWindow {
     Oran7WindowAgent{
         id:__windowAgent
         Component.onCompleted: {
-              // 启用 DWM 模糊（Windows 系统级透明+模糊）。
-              // 注意：窗口缩放/最大化期间会在 resize 处理器里临时关闭、结束后恢复，
-              // 避免 acrylic 重新应用导致窗口层高频闪烁
-              __windowAgent.setWindowAttribute('dwm-blur', true)
-              // 可选：深色模式标题栏
-              //__windowAgent.setWindowAttribute('dark-mode', true)
-          }
+            mainWindow.backgroundStyleInitialized = true
+            mainWindow.applyBackgroundWindowStyle()
+        }
     }
 
     Oran7CaptionBar{
@@ -306,11 +293,14 @@ ApplicationWindow {
         // -- 主体右部 --
         RightPage {
             id: rightRectangle
+            captionExpanded: openCaptionBtn.openIngState
 
             anchors.left: leftRectangle.right
             anchors.leftMargin: openCaptionBtn.openIngState ? 7 : 0
             anchors.top: parent.top
-            anchors.bottom: bottomRectangle.top
+            anchors.bottom: rightRectangle.musicPageActive
+                    ? bottomRectangle.top
+                    : mainRectangle.bottom
             //anchors.bottomMargin: openCaptionBtn.openIngState ? 7 : 0
             anchors.right: parent.right
 
@@ -326,7 +316,7 @@ ApplicationWindow {
             anchors.top: parent.top
             anchors.topMargin: 14
             anchors.horizontalCenter: rightRectangle.horizontalCenter
-            islandVisible: true
+            islandVisible: false
             lyricGradientColorIndex: 12
 
             // 点击底部播放栏的“灵动岛”按钮切换显示/隐藏
@@ -344,6 +334,7 @@ ApplicationWindow {
         // 状态/位置由 Oran7MusicLyricsWindow 主题持久化，启动时自动回读。
         Oran7LyricsFloatingWindow {
             id: lyricsFloatingWindow
+            displayAllowed: mainWindow.startupReleased
             Connections {
                 target: bottomPage
                 function onFloatingLyricsClicked() {
@@ -372,7 +363,7 @@ ApplicationWindow {
             z: leftRectangle.z > rightRectangle.z ? leftRectangle.z + 1 : rightRectangle.z + 1
 
             //initilization
-            height: 0
+            height: rightRectangle.musicPageActive ? 80 : 0
             visible: true
             themeColor: "#04FFFFFF"
             blurSource: mainWindowBackground
@@ -381,7 +372,7 @@ ApplicationWindow {
             brightness:Oran7Theme.Oran7MusicPlayControls.brightness
             contrast:Oran7Theme.Oran7MusicPlayControls.contrast
 
-            property real visibleOpacity: 0.0
+            readonly property real visibleOpacity: rightRectangle.musicPageActive ? 1.0 : 0.0
 
             BottomPage {
                 id: bottomPage
@@ -673,101 +664,6 @@ ApplicationWindow {
         //<-- MianUi Rectangle Container End -->
     }
 
-    // 原生窗口控制按钮组件
-    component WindowControlButton: Rectangle {
-        id: button
-        color: buttonColor
-        radius: 4
-
-        property color buttonColor: "transparent"
-        property color hoverColor: "#c42b1c"
-        property string iconText: "✕"
-
-        property int buttonTextPixelSize: 15
-
-        signal clicked
-
-        // 颜色过渡动画
-        Behavior on color {
-            ColorAnimation {
-                duration: 150  // 增加动画持续时间，更平滑
-                easing.type: Easing.InOutCubic  // 更平滑的缓动函数
-            }
-        }
-
-        // 透明度过渡动画
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 150
-                easing.type: Easing.InOutCubic
-            }
-        }
-
-        // 按下效果
-        scale: mouseArea.pressed ? 0.95 : 1.0
-
-        Behavior on scale {
-            NumberAnimation {
-                duration: 100
-                easing.type: Easing.OutBack
-            }
-        }
-
-        Text {
-            id: buttonText
-            anchors.centerIn: parent
-            text: iconText
-            color: "#ffffff"
-            font.pixelSize: button.buttonTextPixelSize
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            opacity: 0.8
-
-            // 文字透明度过渡
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 150
-                    easing.type: Easing.InOutCubic
-                }
-            }
-        }
-
-        MouseArea {
-            id: mouseArea
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            propagateComposedEvents: true  // 传递未处理的事件给底层窗口
-
-            onEntered: {
-                button.color = hoverColor;
-                buttonText.opacity = 1.0;
-            }
-
-            onExited: {
-                button.color = button.buttonColor;  // 修复：重置为初始的buttonColor
-                buttonText.opacity = 0.8;
-            }
-
-            onClicked: {
-                button.clicked();
-            }
-
-            onPressed: {
-                button.scale = 0.95;
-            }
-
-            onReleased: {
-                button.scale = 1.0;
-            }
-
-            onCanceled: {
-                button.scale = 1.0;
-            }
-        }
-    }
-
     // --- Tools ---
     Oran7FileHelper{
         id:filehepler
@@ -775,6 +671,7 @@ ApplicationWindow {
 
     // --- Setting windows ---
     Oran7SettingsContainerWindow {
+        displayAllowed: mainWindow.startupReleased
         id: settingsContainer
 
         // 监听设置窗口请求恢复焦点的信号
@@ -783,6 +680,17 @@ ApplicationWindow {
         }
     }
 
-    // 云端"我喜欢的音乐"歌单填充统一收口在 BasicConfig.applyNeteaseLikedFetchResult：
-    // 启动预拉取 / 页签进入 / 登录 / 排序重试的结果都经它落盘（取代此处的 onLikedSongReady 连接）
+    // 云端收藏加载与缓存统一由 Client.cloudMusic 管理。
+    FocusScope {
+        id: startupCover
+        objectName: "oran7StartupCover"
+        width: mainWindow.width; height: mainWindow.height
+        z: 1000000
+        visible: mainWindow.startupManaged && !Oran7Startup.revealMain
+        onVisibleChanged: if (visible) forceActiveFocus()
+        Keys.onEscapePressed: Oran7Startup.cancel()
+        Rectangle { anchors.fill: parent; color: "#171a22" }
+        MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
+    }
+
 }

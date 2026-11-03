@@ -9,6 +9,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <condition_variable>
 
 // 前向声明 - 编码器
 class Oran7VideoEncoder;
@@ -84,15 +85,16 @@ public:
     struct Config {
         /** 媒体服务器地址，如 "http://192.168.80.132:8090" */
         std::string serverUrl;
+        std::string bearerToken;
 
         /** 房间 ID / 流 ID */
-        std::string roomId = "demo";
+        std::string roomId;
 
         /** 发布者 ID */
-        std::string publisherId = "pub1";
+        std::string publisherId;
 
         /** STUN 服务器地址，如 "stun:192.168.80.132:3478" */
-        std::string stunUrl = "stun:192.168.80.132:3478";
+        std::string stunUrl;
 
         /** TURN 服务器（可选） */
         std::string turnUrl;
@@ -127,7 +129,7 @@ public:
     /**
      * @brief 打开推流会话
      *
-     * 调用线程：主线程（Qt 事件循环运行中）
+     * 调用线程：录制任务线程；HTTP 使用该线程的局部 Qt 事件循环，禁止在 GUI 调用。
      * 阻塞直到 WHIP SDP 协商完成，然后启动后台推流线程。
      *
      * @param cfg        推流配置
@@ -167,6 +169,8 @@ public:
 
     /** WHIP 会话创建后，返回服务器分配的资源路径中的 stream_id */
     std::string streamId() const;
+    std::string connectionState() const;
+    std::string iceState() const;
 
 private:
     // ======================== 推流主循环 ========================
@@ -196,6 +200,16 @@ private:
 
     // 配置
     Config _cfg;
+    struct Oran7Events {
+        std::mutex mutex;
+        std::condition_variable gathered;
+        std::string connection = "new", ice = "new";
+        bool gatheringDone = false;
+        std::vector<std::pair<std::string, std::string>> candidates;
+        std::atomic<bool> videoOpen{false}, audioOpen{false}, forceKeyframe{true};
+        std::atomic<int64_t> lastPliUs{0};
+    };
+    std::shared_ptr<Oran7Events> _events = std::make_shared<Oran7Events>();
     bool _inited = false;
 
     // 编码器引用
@@ -211,6 +225,8 @@ private:
 
     // ICE 候选回调（内部桥接使用，dryRun 时无操作）
     IceCandidateCallback _onIceCandidate;
+    std::string _whipResourcePath;
+    std::string _whipEtag;
 
 #ifdef SPARK_MEDIA_PUBLISHER_WITH_LIBDATACHANNEL
     // ---- libdatachannel 核心对象 ----
@@ -218,22 +234,10 @@ private:
     std::shared_ptr<::rtc::Track> _videoTrack;
     std::shared_ptr<::rtc::Track> _audioTrack;
 
-    // 轨道状态
-    std::atomic<bool> _videoTrackOpen{false};
-    std::atomic<bool> _audioTrackOpen{false};
-
-    // PLI 限速
-    std::atomic<int64_t> _lastPliUs{0};
-    std::atomic<bool> _forceKeyframe{true};
-
     // SSRC
     uint32_t _videoSsrc = 0;
     uint32_t _audioSsrc = 0;
     std::string _cname;
-
-    // WHIP 会话资源（服务器 Location 返回的 URL 路径 + ETag）
-    std::string _whipResourcePath;
-    std::string _whipEtag;
 
     // RTP 时间戳基准
     std::atomic<int64_t> _videoTsBaseUs{-1};

@@ -22,6 +22,7 @@ NcmRequest NcmProtocol::prepareWeapi(const QString& path, const QJsonObject& pay
 
     NcmRequest req;
     req.url = QUrl(kBaseUrl + path);
+    req.tag = req.url.path();
     req.body = encrypted.toFormBody();
     req.isPost = true;
     req.disableHttp2 = true; // 网易云部分端点对 HTTP/2 返回空响应，强制 1.1

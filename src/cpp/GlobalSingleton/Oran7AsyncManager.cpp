@@ -4,17 +4,14 @@
 #include "Oran7Async.h"
 
 #include <QFile>
-#include <QFutureWatcher>
 #include <QJSEngine>
 #include <QQmlEngine>
 #include <QThread>
-#include <QtConcurrent/QtConcurrentRun>
 
 Oran7AsyncManager::Oran7AsyncManager(QObject* parent)
     : QObject(parent)
 {
     s_instance = this;
-    m_pool.setMaxThreadCount(QThread::idealThreadCount());
 
     // 示例/工具处理器
     registerHandler(QStringLiteral("test"),
@@ -52,73 +49,70 @@ Oran7AsyncManager::~Oran7AsyncManager()
 {
     if (s_instance == this)
         s_instance = nullptr;
-    m_pool.waitForDone();
+    cancelAll();
 }
 
 void Oran7AsyncManager::beginShutdown()
 {
     if (Oran7AsyncManager* inst = s_instance)
-        inst->m_pool.waitForDone();
+        inst->cancelAll();
+}
+
+bool Oran7AsyncManager::cancel(int taskId)
+{
+    auto it = m_tasks.find(taskId);
+    if (it == m_tasks.end()) return false;
+    it.value().cancel();
+    m_tasks.erase(it);
+    return true;
+}
+
+void Oran7AsyncManager::cancelAll()
+{
+    for (const auto& task : std::as_const(m_tasks)) task.cancel();
+    m_tasks.clear();
 }
 
 int Oran7AsyncManager::run(const QString& operation, const QVariantMap& arguments,
                            QJSValue completed, QJSValue failed)
 {
+    if (Oran7Async::isShuttingDown()) return -1;
     const auto it = m_handlers.constFind(operation);
     if (it == m_handlers.constEnd()) {
-        if (failed.isCallable()) {
-            failed.call({ QJSValue(QStringLiteral("Unknown operation: %1").arg(operation)) });
-        }
+        if (failed.isCallable())
+            failed.call({ QJSValue(QStringLiteral("未知后台操作：%1").arg(operation)) });
         return -1;
     }
-
-    // 退出流程：不再接受新任务，避免在退出阶段往线程池投递工作
-    if (Oran7Async::isShuttingDown())
-        return -1;
-
     const int taskId = m_nextTaskId++;
-    Handler handler = it.value();
-
-    auto* watcher = new QFutureWatcher<QVariantMap>(this);
-    // completed / failed 是 QJSValue，只在 GUI 线程的 finished lambda 里使用，绝不 capture 进 worker
-    connect(watcher, &QFutureWatcher<QVariantMap>::finished, this,
-        [this, watcher, completed = std::move(completed), failed = std::move(failed)]() mutable {
-            const QVariantMap reply = watcher->result();
-            watcher->deleteLater();
-
-            QJSEngine* engine = qjsEngine(this);
-            if (!engine)
-                return;
-
-            const bool success = reply.value(QStringLiteral("success")).toBool();
-            if (success) {
-                if (completed.isCallable()) {
-                    const QJSValue result = engine->toScriptValue(reply.value(QStringLiteral("result")));
-                    completed.call({ result });
-                }
-            } else {
-                if (failed.isCallable()) {
-                    failed.call({ QJSValue(reply.value(QStringLiteral("error")).toString()) });
-                }
-            }
-        });
-
-    watcher->setFuture(QtConcurrent::run(&m_pool,
-        [handler = std::move(handler), arguments]() -> QVariantMap {
+    const bool network = operation == QLatin1String("musicSearch")
+        || operation == QLatin1String("fetchLikedSongs") || operation == QLatin1String("roamSongs");
+    auto task = Oran7Async::run(this,
+        [handler = it.value(), arguments]() -> QVariantMap {
             QVariantMap reply;
             try {
-                QVariant result = handler(arguments);
+                reply[QStringLiteral("result")] = handler(arguments);
                 reply[QStringLiteral("success")] = true;
-                reply[QStringLiteral("result")] = std::move(result);
-            } catch (const std::exception& e) {
+            } catch (const std::exception& error) {
                 reply[QStringLiteral("success")] = false;
-                reply[QStringLiteral("error")] = QString::fromUtf8(e.what());
+                reply[QStringLiteral("error")] = QString::fromUtf8(error.what());
             } catch (...) {
                 reply[QStringLiteral("success")] = false;
-                reply[QStringLiteral("error")] = QStringLiteral("Unknown exception");
+                reply[QStringLiteral("error")] = QStringLiteral("未知后台异常");
             }
             return reply;
-        }));
-
+        },
+        [this, taskId, completed = std::move(completed), failed = std::move(failed)](QVariantMap reply) mutable {
+            m_tasks.remove(taskId);
+            QJSEngine* engine = qjsEngine(this);
+            if (!engine) return;
+            if (reply.value(QStringLiteral("success")).toBool()) {
+                if (completed.isCallable())
+                    completed.call({ engine->toScriptValue(reply.value(QStringLiteral("result"))) });
+            } else if (failed.isCallable()) {
+                failed.call({ QJSValue(reply.value(QStringLiteral("error")).toString()) });
+            }
+        }, network ? Oran7Async::Group::Network : Oran7Async::Group::General);
+    if (!task.isValid()) return -1;
+    m_tasks.insert(taskId, task);
     return taskId;
 }

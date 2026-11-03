@@ -1,6 +1,6 @@
 #include "BilibliLiveRoomAddressCatch.h"
-#include "GlobalHelper.h"
-#include "BilibiliAuthManager.h"
+#include "Oran7GlobalHelper.h"
+#include "Oran7BilibiliAuthManager.h"
 
 QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
 {
@@ -25,7 +25,7 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
     request.setRawHeader("Origin", "https://live.bilibili.com");
 
     // 注入B站认证Cookie，未登录时只能获取qn=250（高清限免）
-    QString cookies = BilibiliAuthManager::instance().cookieString();
+    QString cookies = Oran7BilibiliAuthManager::instance().cookieString();
     if (!cookies.isEmpty()) {
         request.setRawHeader("Cookie", cookies.toUtf8());
         NETWORK_LOG << "Using authenticated session for stream request";
@@ -33,7 +33,7 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
         NETWORK_LOG << "No Bilibili auth cookies - will get limited quality (qn=250)";
     }
 
-    NETWORK_LOG << QString("Request URL:") << (url.toString()).toStdString();
+    NETWORK_LOG << "BilibiliLive: 请求直播地址";
 
     QNetworkReply *reply = manager->get(request);
 
@@ -41,7 +41,7 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
         if (reply->error() == QNetworkReply::NoError)
         {
             QByteArray data = reply->readAll();
-            NETWORK_LOG << QString("Origin Response:") << data.left(500).toStdString() << "...";
+            NETWORK_LOG << "BilibiliLive: 响应字节数=" << data.size();
 
             QJsonDocument doc = QJsonDocument::fromJson(data);
             if (!doc.isNull()) {
@@ -205,7 +205,7 @@ QVariant BilibiliRoomAddressCatch::getAvailableStreams(const QJsonObject &data_o
                 bool isMiniStream = base_url.contains("mini", Qt::CaseInsensitive);
                 if (isMiniStream)
                 {
-                    NETWORK_LOG << "    [SKIP] minihevc low-bitrate stream (" << base_url.toStdString() << ")";
+                    NETWORK_LOG << "    [SKIP] minihevc low-bitrate stream";
                     continue;
                 }
 

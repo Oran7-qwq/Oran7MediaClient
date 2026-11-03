@@ -7,13 +7,19 @@
 #include <QVariantMap>
 
 #include "Oran7Definitions.h"
-#include "GlobalHelper.h"
+#include "Oran7GlobalHelper.h"
 
 QT_FORWARD_DECLARE_CLASS(Oran7ThemeProfileManager)
 
 QT_FORWARD_DECLARE_CLASS(Oran7ThemePrivate)
 
-class Oran7Theme : public QObject
+#ifdef ORAN7_UI_IMPL_LIBRARY
+#define ORAN7_THEME_EXPORT Q_DECL_EXPORT
+#else
+#define ORAN7_THEME_EXPORT Q_DECL_IMPORT
+#endif
+
+class ORAN7_THEME_EXPORT Oran7Theme : public QObject
 {
     Q_OBJECT
     QML_SINGLETON
@@ -35,7 +41,7 @@ class Oran7Theme : public QObject
     /**
      * @brief 注册组件时：
      * 1.Add in Oran7Theme.h：ORAN7_PROPERTY_READONLY(QVariantMap,ComponentName)
-     * 2.Add in Oran7Theme.cpp Oran7ThemePrivate::initializeComponentPropertyHash()：ADD_COMPONENT_PROPERTY(ComponentName)
+     * 2. 在 Oran7ThemePrivate::initializeComponentPropertyHash 中登记 GROUP(ComponentName)
      * 3.Add in Index.json '__component__'："ComponentName":"<Component.jons of Path>"
      * 4.Add link in cmake for <Component.jons of Path>
      */
@@ -54,13 +60,7 @@ public:
 
     static Oran7Theme& instance();
     static Oran7Theme *create(QQmlEngine *, QJSEngine *);
-    static void cleanup(){
-        if(s_instance){
-            delete s_instance;
-            s_instance = nullptr;
-            INFO_LOG << "[DTOR] Oran7Theme::ins cleanup finished.";
-        }
-    }
+    static void cleanup();
 
     enum DarkMode{
         Light = 0,
@@ -111,17 +111,6 @@ public:
     Q_INVOKABLE void resetToDefaultTheme();
 
 public:
-    /**
-     * @brief Registers
-     * @param themeObject ：ThemeObject pointer.
-     * @param component : Component of name.
-     * @param themeMap : Component theme of map.
-     * @param  themePath : Component theme json path.
-     *
-     * @note Dicard 2026/5/26
-     */
-    void registerCustomComponentTheme(QObject *themeObject,const QString& component,QVariantMap* themeMap,const QString &themePath);
-
     /**
      * @brief Reloade globalTheme property (Recalculate)
      */

@@ -6,11 +6,10 @@
 #include <QVariantMap>
 
 #include <memory>
+class Oran7AppConfigManager;
 
 /**
- * @brief Cookie 持久化后端抽象：v1 = AppConfigManager(JSON 明文)
- *
- * 为后续 DPAPI/Keychain 等安全存储预留替换接口。
+ * @brief Cookie 持久化后端抽象；默认后端经配置管理器使用当前 Windows 用户 DPAPI。
  */
 class CookiePersistence
 {
@@ -19,15 +18,22 @@ public:
     virtual QVariantMap load() = 0;  // {MUSIC_U, __csrf, nickname}
     virtual void save(const QVariantMap& data) = 0;
     virtual void clear() = 0;
+    virtual QString lastError() const { return {}; }
 };
 
-/// 基于 AppConfigManager 的 JSON 明文持久化（键前缀 "netease_auth"，与存量 config.json 一致）
-class AppJsonCookiePersistence : public CookiePersistence
+/// 配置管理器协调加密文件与普通配置引用的提交，解密结果只留在内存快照。
+class Oran7DpapiCookiePersistence : public CookiePersistence
 {
 public:
+    Oran7DpapiCookiePersistence();
+    explicit Oran7DpapiCookiePersistence(Oran7AppConfigManager& config);
     QVariantMap load() override;
     void save(const QVariantMap& data) override;
     void clear() override;
+    QString lastError() const override { return m_lastError; }
+private:
+    Oran7AppConfigManager& m_config; // 借用：宿主配置管理器覆盖此适配器生命周期。
+    QString m_lastError;
 };
 
 /**
@@ -42,6 +48,7 @@ class CookieStore : public QNetworkCookieJar
 
 public:
     explicit CookieStore(QObject* parent = nullptr);
+    explicit CookieStore(std::unique_ptr<CookiePersistence> persistence, QObject* parent = nullptr);
 
     void setPersistence(std::unique_ptr<CookiePersistence> p);
 
@@ -60,6 +67,7 @@ public:
     bool load();
     bool save();
     void clear();
+    QString persistenceError() const { return m_persistence ? m_persistence->lastError() : QStringLiteral("未设置凭据存储"); }
 
 signals:
     void cookiesChanged();

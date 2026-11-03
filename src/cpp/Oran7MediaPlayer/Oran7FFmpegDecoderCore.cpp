@@ -1,7 +1,7 @@
 #include "Oran7FFmpegDecoderCore.h"
 
 #include "Oran7FFplayerCore.h"       // audio_thread/video_thread 访问 Oran7FFplayerCore 内部状态，需完整类型
-#include "GlobalHelper.h"   // INFO_LOG
+#include "Oran7GlobalHelper.h"   // INFO_LOG
 #include <stdio.h>          // printf（原依赖 Oran7FFplayerCore.cpp 传递引入，此处显式补齐）
 
 /* ====== Oran7FFmpegDecoderCore 静态成员定义（唯一定义点） ====== */
@@ -113,7 +113,7 @@ int Oran7FFmpegDecoderCore::decode_packet_to_frame(AVFrame *frame)
                     {
                         if(frame->pts == AV_NOPTS_VALUE)
                         {
-                            printf("Warning:--->Video decode of avcodec_receive_frame return frame->pts is AV_NOPTS_VALUE!!\n\n");
+                            WARNING_LOG << "[Decoder] 解码帧缺少 PTS";
                         }
                         if (decoder_reorder_pts == -1)
                             frame->pts = frame->best_effort_timestamp;
@@ -122,7 +122,7 @@ int Oran7FFmpegDecoderCore::decode_packet_to_frame(AVFrame *frame)
 
                         if(frame->pts == AV_NOPTS_VALUE)
                         {
-                            printf("Warning:--->Return frame->pts is AV_NOPTS_VALUE!!\n\n");
+                            WARNING_LOG << "[Decoder] 重排后帧仍缺少 PTS";
                         }
                     }
                     else

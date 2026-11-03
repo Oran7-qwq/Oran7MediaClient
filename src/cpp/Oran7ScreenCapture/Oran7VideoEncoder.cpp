@@ -1,5 +1,5 @@
 #include "Oran7VideoEncoder.h"
-// #include "GlobalHelper.h"
+// #include "Oran7GlobalHelper.h"
 
 #ifdef _WIN32
 #include <combaseapi.h>
@@ -57,11 +57,16 @@ bool Oran7VideoEncoder::configure(const EncoderConfig& cfg,ErrorCallback onError
     _avctx->bit_rate  = (int64_t)cfg.bitrateKbps * 1000;
 
     // 4. 路径分流：只设路径相关的参数
-    if (cfg.hwDevice) {
+    if (cfg.codecName == "h264_mf") {
         // ---- 硬编 h264_mf（输入 CPU NV12，MF 内部走 GPU 管线）----
         _avctx->pix_fmt        = AV_PIX_FMT_NV12;
         _avctx->gop_size        = cfg.gopSize;
         _avctx->max_b_frames    = 0;
+        if (!cfg.liveStreaming) _avctx->profile = FF_PROFILE_H264_HIGH;
+        _avctx->color_range     = AVCOL_RANGE_MPEG;
+        _avctx->colorspace      = AVCOL_SPC_BT709;
+        _avctx->color_primaries = AVCOL_PRI_BT709;
+        _avctx->color_trc       = AVCOL_TRC_BT709;
         _avctx->rc_max_rate     = _avctx->bit_rate;
         _avctx->rc_buffer_size  = _avctx->bit_rate / 2;  // 0.5 秒 VBV，够 IDR 不延时
 
@@ -70,7 +75,9 @@ bool Oran7VideoEncoder::configure(const EncoderConfig& cfg,ErrorCallback onError
             if (r < 0) WARNING_LOG << "[h264_mf] opt rejected: " << k << "=" << v;
         };
         setOpt(_avctx, "rate_control", "cbr");
-        setOpt(_avctx, "scenario", "live_streaming");
+        setOpt(_avctx, "scenario", cfg.liveStreaming ? "live_streaming" : "camera_record");
+        // 持有 D3D11 AVBufferRef 并不会自动让 MF 选择硬编，必须显式请求。
+        setOpt(_avctx, "hw_encoding", cfg.liveStreaming || _softwareMfFallback ? "0" : "1");
     } else {
         // ---- 软编 libx264 ----
         _avctx->pix_fmt     = AV_PIX_FMT_YUV420P;
@@ -94,20 +101,22 @@ bool Oran7VideoEncoder::start()
         return true;
 
     if (!_configured || !_avctx) {
+        _running.store(false);
         if (_onError)
             _onError("Oran7VideoEncoder::start(): not configured.");
         return false;
     }
 
     _frameIndex    = 0;
+    _droppedFrames = 0;
+    _opened.store(false);
     _encode_thread = std::thread(&Oran7VideoEncoder::encodeLoop, this);
     return true;
 }
 
 bool Oran7VideoEncoder::stop()
 {
-    if (!_running.exchange(false))
-        return false;              // 已经停了
+    _running.store(false);
 
     // 唤醒 encodeLoop 使其退出
     _cond.notify_all();
@@ -117,6 +126,9 @@ bool Oran7VideoEncoder::stop()
     if (_encode_thread.joinable())
         _encode_thread.join();
 
+    const auto dropped = _droppedFrames.exchange(0);
+    if (dropped > 0) WARNING_LOG << "[RecordingEncoder] encoder queue overflow, dropped frames:" << dropped;
+
     return true;
 }
 
@@ -124,11 +136,13 @@ void Oran7VideoEncoder::pushFrame(AVFrame *frame)
 {
     if(!frame) return;
     std::lock_guard<std::mutex> lock(_frame_mtx);
+    if (!_running.load()) { av_frame_free(&frame); return; }
     if(_frameQueue.size() >= _kMaxQueued)
     {
         auto* drop = _frameQueue.front();
         _frameQueue.pop();
         av_frame_free(&drop);//丢弃旧帧
+        ++_droppedFrames;
     }
     //INFO_LOG<<"pushFrame:"<<"frame->pts:"<<frame->pts<<" frameFormat"<<frame->format;
     _frameQueue.push(frame);
@@ -164,10 +178,7 @@ bool Oran7VideoEncoder::enqueuePacket(AVPacket* pkt)
     _pktSpaceCond.wait(lock, [this]() {
         return _pktQueue.size() < _kMaxPktQueued || !_running.load();
     });
-    if (!_running.load()) {
-        av_packet_free(&pkt);
-        return false;
-    }
+    // 停止时仍保留已接受帧及 flush 产生的包；排空最多为有界输入队列和编码器缓冲。
     _pktQueue.push(pkt);
     lock.unlock();
     _pktCond.notify_one();
@@ -188,12 +199,20 @@ void Oran7VideoEncoder::encodeLoop()
     // h264_mf 要求 COM MTA 模式，Qt 主线程是 STA
     // 编码线程独立初始化 COM
     bool comInited = false;
-    if (_cfg.hwDevice) {
+    if (_cfg.codecName == "h264_mf") {
         HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         comInited = SUCCEEDED(hr);
     }
 
     int ret = avcodec_open2(_avctx, _codec, nullptr);
+    if (ret < 0 && _cfg.codecName == "h264_mf" && !_cfg.liveStreaming && !_softwareMfFallback) {
+        WARNING_LOG << "[h264_mf] hardware open failed, retrying software MF:" << ret;
+        const auto config = _cfg;
+        const auto callback = _onError;
+        avcodec_free_context(&_avctx);
+        _softwareMfFallback = true;
+        ret = configure(config, callback) ? avcodec_open2(_avctx, _codec, nullptr) : AVERROR_EXTERNAL;
+    }
     if (ret < 0) {
         char errbuf[256];
         av_strerror(ret, errbuf, sizeof(errbuf));
@@ -204,8 +223,12 @@ void Oran7VideoEncoder::encodeLoop()
         return;
     }
     _opened.store(true);
+    INFO_LOG << "[RecordingEncoder] codec=" << QString::fromStdString(_cfg.codecName)
+             << "size=" << _cfg.width << "x" << _cfg.height << "fps=" << _cfg.fps
+             << "target_kbps=" << _cfg.bitrateKbps << "profile=" << _avctx->profile
+             << "hardware_mf=" << (_cfg.codecName == "h264_mf" && !_cfg.liveStreaming && !_softwareMfFallback);
 
-    while (_running.load())
+    while (true)
     {
         //INFO_LOG<<"VideoEncode Loop...";
         AVFrame *frame = nullptr;
@@ -217,8 +240,7 @@ void Oran7VideoEncoder::encodeLoop()
             _cond.wait(lock,[this](){
                 return !_frameQueue.empty() || !_running.load(); 
             });
-            if(!_running.load()) break;
-            if(_frameQueue.empty()) continue;
+            if(_frameQueue.empty()) break;
             frame = _frameQueue.front();
             _frameQueue.pop();
         }
@@ -241,58 +263,71 @@ void Oran7VideoEncoder::encodeLoop()
  */
 void Oran7VideoEncoder::processFrame(AVFrame *frame)
 {
+    if (frame->duration <= 0 && _cfg.fps > 0)
+        frame->duration = av_rescale_q(1, AVRational{1, _cfg.fps}, _avctx->time_base);
     // 响应 PLI 请求：强制编码器产 IDR
     if (_forceKeyframe.exchange(false)) {
         frame->pict_type = AV_PICTURE_TYPE_I;
         frame->key_frame = 1;
     }
     /*! @brief Begining avcodec send frame*/
-    int ret = avcodec_send_frame(_avctx, frame);
-    //INFO_LOG<<"avcodec_send_frame->ret:"<<ret;
-    if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
-        if (_onError)
-            _onError("avcodec_send_frame failed: " +std::to_string(ret));
-        return;
-    }
-
-    while (true)
-    {
-        AVPacket* pkt = av_packet_alloc();
-        if (!pkt) {
+    bool retryInput;
+    do {
+        int ret = avcodec_send_frame(_avctx, frame);
+        retryInput = ret == AVERROR(EAGAIN);
+        bool receivedPacket = false;
+        //INFO_LOG<<"avcodec_send_frame->ret:"<<ret;
+        if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
             if (_onError)
-                _onError("Oran7VideoEncoder::processFrame av_packet_alloc() failed.");
+                _onError("avcodec_send_frame failed: " +std::to_string(ret));
             return;
         }
 
-        ret = avcodec_receive_packet(_avctx, pkt);
-        //INFO_LOG<<"avcodec_receive_packet->ret:"<<ret;
-        if (ret == 0)
+        while (true)
         {
-            // 拿包——阻塞入队，绝不丢弃编码后的 H264
-            if (!enqueuePacket(pkt))
-                break;  // 编码器已停
-            continue;
-        }
+            AVPacket* pkt = av_packet_alloc();
+            if (!pkt) {
+                if (_onError)
+                    _onError("Oran7VideoEncoder::processFrame av_packet_alloc() failed.");
+                return;
+            }
 
-        if (ret == AVERROR(EAGAIN))
-        {
-            // 编码器需要更多输入帧，本轮结束
+            ret = avcodec_receive_packet(_avctx, pkt);
+            //INFO_LOG<<"avcodec_receive_packet->ret:"<<ret;
+            if (ret == 0)
+            {
+                receivedPacket = true;
+                // 拿包——阻塞入队，绝不丢弃编码后的 H264
+                if (!enqueuePacket(pkt))
+                    break;  // 编码器已停
+                continue;
+            }
+
+            if (ret == AVERROR(EAGAIN))
+            {
+                // 编码器需要更多输入帧，本轮结束
+                av_packet_free(&pkt);
+                break;
+            }
+
+            if (ret == AVERROR_EOF)
+            {
+                // 编码器已刷空
+                av_packet_free(&pkt);
+                break;
+            }
+
+            // ret < 0 通用错误
             av_packet_free(&pkt);
+            if (_onError)_onError("avcodec_receive_packet error: " +std::to_string(ret));
             break;
         }
-
-        if (ret == AVERROR_EOF)
-        {
-            // 编码器已刷空
-            av_packet_free(&pkt);
-            break;
+        // send_frame 的 EAGAIN 表示本帧尚未接收，取走输出后必须重送，不能丢掉该帧。
+        if (retryInput && !receivedPacket) {
+            if (_onError) _onError("encoder returned EAGAIN without an available output packet");
+            return;
         }
-
-        // ret < 0 通用错误
-        av_packet_free(&pkt);
-        if (_onError)_onError("avcodec_receive_packet error: " +std::to_string(ret));
-        break;
-    }
+    } while (retryInput);
 }
 
 void Oran7VideoEncoder::flushFrames()

@@ -1,6 +1,6 @@
 #include "BilibiliDanmakuClient.h"
-#include "GlobalHelper.h"
-#include "BilibiliAuthManager.h"
+#include "Oran7GlobalHelper.h"
+#include "Oran7BilibiliAuthManager.h"
 
 #include <zlib.h>
 
@@ -257,7 +257,7 @@ void BilibiliDanmakuClient::start(const QString &roomId)
     m_danmuLastEmitted = 0;
     // 登录态优先用真实 uid 拉全量弹幕；失败会回退匿名
     m_realUidFailed = false;
-    m_useRealUid = !BilibiliAuthManager::instance().dedeUserId().isEmpty();
+    m_useRealUid = !Oran7BilibiliAuthManager::instance().dedeUserId().isEmpty();
     m_heartbeatTimer->stop();
     m_watchdogTimer->stop();
     m_reconnectTimer->stop();
@@ -334,7 +334,7 @@ QString BilibiliDanmakuClient::cookieHeaderFor(const QUrl &url) const
             parts << QString::fromLatin1(ck.name()) + "=" + QString::fromUtf8(ck.value());
         }
     }
-    const QString auth = BilibiliAuthManager::instance().cookieString();
+    const QString auth = Oran7BilibiliAuthManager::instance().cookieString();
     if (!auth.isEmpty()) parts << auth;
     return parts.join("; ");
 }
@@ -539,7 +539,7 @@ void BilibiliDanmakuClient::sendAuth()
     // 登录态用真实 uid（全量弹幕）；匿名(0) 会被服务器抽样，只发极少弹幕。
     // 若真实 uid 被掐断，onSocketDisconnected 会回退匿名重连。
     if (m_useRealUid) {
-        const QString uid = BilibiliAuthManager::instance().dedeUserId();
+        const QString uid = Oran7BilibiliAuthManager::instance().dedeUserId();
         auth["uid"] = uid.toLongLong();
     } else {
         auth["uid"] = 0;

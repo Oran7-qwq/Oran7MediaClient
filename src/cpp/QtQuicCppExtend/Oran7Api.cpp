@@ -2,6 +2,10 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QWindow>
 #include <QDebug>
+#include <QQmlEngine>
+#include <QRegion>
+#include <QThread>
+#include <cmath>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -19,7 +23,10 @@ Oran7Api *Oran7Api::instance()
 
 Oran7Api *Oran7Api::create(QQmlEngine *, QJSEngine *)
 {
-    return instance();
+    auto* api = instance();
+    // 跨引擎复用的应用级实例不交给某一个 QML 引擎回收。
+    QQmlEngine::setObjectOwnership(api, QQmlEngine::CppOwnership);
+    return api;
 }
 
 void Oran7Api::setWindowStaysOnTopHint(QWindow *window, bool hint)
@@ -82,4 +89,15 @@ int Oran7Api::getWindowState(QWindow *window) const
 Oran7Api::Oran7Api(QObject *parent)
     : QObject(parent)
 {
+}
+
+void Oran7Api::setWindowMaskRect(QWindow* window, const QRectF& rect)
+{
+    if (!window || window->thread() != QThread::currentThread()
+        || !std::isfinite(rect.x()) || !std::isfinite(rect.y())
+        || !std::isfinite(rect.width()) || !std::isfinite(rect.height())) return;
+    const auto bounds = rect.toAlignedRect().intersected(QRect(QPoint(), window->size()));
+    // 空 QRegion 表示取消遮罩；无有效范围时保留一个位于窗口外的空命中区域。
+    const QRegion mask(bounds.isEmpty() ? QRect(-2, -2, 1, 1) : bounds);
+    if (window->mask() != mask) window->setMask(mask);
 }

@@ -2,14 +2,12 @@
 
 #include "CookieStore.h"
 #include "CurlHttpClient.h"
-#include "GlobalHelper.h"
-#include "HttpClient.h"
-#include "NcmAuthApi.h"
+#include "Oran7GlobalHelper.h"
 #include "NcmPlaylistApi.h"
 #include "NcmSongApi.h"
 #include "NcmUserApi.h"
-#include "QrLoginController.h"
 #include "WebLoginController.h"
+#include <QQmlEngine>
 
 static NcmSession* s_instance = nullptr;
 
@@ -30,23 +28,17 @@ void NcmSession::cleanup()
 }
 
 NcmSession::NcmSession(QObject* parent)
-    : QObject(parent)
-    , m_httpClient(new HttpClient(this))
-    , m_curlClient(new CurlHttpClient(this))
-    , m_cookieStore(new CookieStore(this))
-    , m_authApi(new NcmAuthApi(m_curlClient, this))
-    , m_userApi(new NcmUserApi(m_curlClient, this))
-    , m_songApi(new NcmSongApi(m_curlClient, this))
-    , m_playlistApi(new NcmPlaylistApi(m_httpClient, m_curlClient, this))
-    , m_qrController(new QrLoginController(this, m_authApi, m_userApi, this))
-    , m_webLoginController(new WebLoginController(this, m_userApi, this))
+    : QObject(parent), m_cookieStore(std::make_unique<CookieStore>()),
+      m_curlClient(std::make_unique<CurlHttpClient>()),
+      m_userApi(std::make_unique<NcmUserApi>(m_curlClient.get())),
+      m_songApi(std::make_unique<NcmSongApi>(m_curlClient.get())),
+      m_playlistApi(std::make_unique<NcmPlaylistApi>(m_curlClient.get())),
+      m_webLoginController(std::make_unique<WebLoginController>(this, m_userApi.get()))
 {
-    // 鉴权请求显式注入 Cookie；扫码请求不注入。
-    // song/url 必须带 os=pc + appver，否则返回的 CDN 地址会被热链保护(403 origin failed)；
-    // 且 song/url 必须走 curl 通道（QNAM 对 VIP 歌返回 code:-110）。
-    m_httpClient->setCookieProvider([this]() {
-        return m_cookieStore->cookieString() + QStringLiteral("; os=pc; appver=8.10.35");
-    });
+    for (QObject* object : {static_cast<QObject*>(m_cookieStore.get()), static_cast<QObject*>(m_curlClient.get()),
+            static_cast<QObject*>(m_userApi.get()), static_cast<QObject*>(m_songApi.get()),
+            static_cast<QObject*>(m_playlistApi.get()), static_cast<QObject*>(m_webLoginController.get())})
+        QQmlEngine::setObjectOwnership(object, QQmlEngine::CppOwnership);
     m_userApi->setCookieProvider([this]() { return m_cookieStore->cookieString(); });
     m_userApi->setCsrfProvider([this]() { return m_cookieStore->csrf(); });
     m_songApi->setCookieProvider([this]() {
@@ -56,7 +48,9 @@ NcmSession::NcmSession(QObject* parent)
     m_playlistApi->setCsrfProvider([this]() { return m_cookieStore->csrf(); });
 
     // 转发 Cookie 校验结果，供网络监测器（Oran7NetworkMonitor）消费
-    connect(m_userApi, &NcmUserApi::verifyResult, this, &NcmSession::verifyResult);
+    connect(m_userApi.get(), &NcmUserApi::verifyResult, this, [this](quint64 requestId, int valid) {
+        if (requestId == m_verifyRequestId) emit verifyResult(valid);
+    });
 }
 
 NcmSession::~NcmSession() = default;
@@ -68,36 +62,37 @@ QString NcmSession::csrfToken() const { return m_cookieStore->csrf(); }
 QString NcmSession::cookieString() const { return m_cookieStore->cookieString(); }
 QString NcmSession::ffmpegCookieString() const { return m_cookieStore->ffmpegCookieString(); }
 
-CookieStore* NcmSession::cookieStore() const { return m_cookieStore; }
-QrLoginController* NcmSession::qrController() const { return m_qrController; }
-WebLoginController* NcmSession::webLoginController() const { return m_webLoginController; }
-NcmUserApi* NcmSession::userApi() const { return m_userApi; }
-NcmSongApi* NcmSession::songApi() const { return m_songApi; }
-NcmPlaylistApi* NcmSession::playlistApi() const { return m_playlistApi; }
+CookieStore* NcmSession::cookieStore() const { return m_cookieStore.get(); }
+WebLoginController* NcmSession::webLoginController() const { return m_webLoginController.get(); }
+NcmUserApi* NcmSession::userApi() const { return m_userApi.get(); }
+NcmSongApi* NcmSession::songApi() const { return m_songApi.get(); }
+NcmPlaylistApi* NcmSession::playlistApi() const { return m_playlistApi.get(); }
 
 void NcmSession::load()
 {
-    m_cookieStore->load();
+    if (!m_cookieStore->load()) WARNING_LOG << "NcmSession: 本地凭据未恢复，请重新登录";
     NETWORK_LOG << "NcmSession: load, isLoggedIn=" << isLoggedIn()
-                << " user=" << userName();
+                ;
     emit loginStatusChanged();
 }
 
 void NcmSession::save()
 {
-    m_cookieStore->save();
+    if (!m_cookieStore->save()) WARNING_LOG << "NcmSession: 凭据加密保存失败";
 }
 
 void NcmSession::logout()
 {
     m_cookieStore->clear();
+    if (!m_cookieStore->persistenceError().isEmpty()) WARNING_LOG << "NcmSession: 持久化退出登录失败，请重试";
     emit loginStatusChanged();
     NETWORK_LOG << "NcmSession: logout";
 }
 
 void NcmSession::verifyLogin()
 {
-    m_userApi->verifyLogin();
+    m_verifyRequestId = NcmRequest::nextId();
+    m_userApi->verifyLogin(m_verifyRequestId);
 }
 
 void NcmSession::setLoggedIn(bool v)

@@ -1,79 +1,88 @@
-#ifndef ORAN7ASYNC_H
-#define ORAN7ASYNC_H
+#pragma once
 
+#include "Oran7TaskHandle.h"
+#include <QDebug>
 #include <QFutureWatcher>
-#include <QThread>
+#include <QPromise>
 #include <QThreadPool>
-#include <QtConcurrent/QtConcurrentRun>
-
 #include <functional>
+#include <exception>
 #include <type_traits>
 #include <utility>
 
-/**
- * @brief 通用异步执行器（C++ 侧）：把 lambda 提交到线程池，完成后自动切回 context（GUI）线程调用 done。
- *
- * 用法：
- *   Oran7Async::run(this,
- *       []() -> Result {  后台线程：耗时工作  },
- *       [this](Result r) {  GUI 线程：更新 UI  });
- *
- * done 通过 QFutureWatcher 的 finished 信号跨线程自动调度到 context 所在线程执行，
- * 因此 done 里可以安全访问 QObject 成员、emit 信号、操作 QML。
- */
+// EXE、主题插件与 QML 共用 Oran7Core 内的一份线程池。
 class Oran7Async
 {
 public:
-    /// 线程池实例。实现位于 Oran7Async.cpp（Oran7Core 共享库内），
-    /// 保证跨 EXE / Oran7UI_Impl.dll 只有一个实例，避免各模块持有一份。
+    enum class Group { General, Network };
     static QThreadPool& pool();
-
-    /// 进入退出流程：之后 run/runDetached 不再向线程池投递新任务，
-    /// 避免退出/静态析构阶段 Logger 等仍在后台创建线程（拒绝访问）。
     static void beginShutdown();
-
     static bool isShuttingDown();
-
-    /// 等待线程池中所有已投递任务执行完毕（应在 beginShutdown 后调用）。
     static void waitForDone();
 
     template<typename Work, typename Done>
-    static void run(QObject* context, Work&& work, Done&& done)
+    static Oran7TaskHandle run(QObject* context, Work&& work, Done&& done,
+                              Group group = Group::General)
     {
-        if (isShuttingDown())
-            return;
-
+        if (!context || isShuttingDown()) return {};
         using Result = std::invoke_result_t<std::decay_t<Work>>;
-
+        auto canceled = std::make_shared<std::atomic_bool>(false);
+        auto promise = std::make_shared<QPromise<Result>>();
+        auto worker = std::make_shared<std::decay_t<Work>>(std::forward<Work>(work));
+        promise->start();
         auto* watcher = new QFutureWatcher<Result>(context);
+        QObject::connect(context, &QObject::destroyed, watcher,
+            [canceled] { canceled->store(true); }, Qt::DirectConnection);
         QObject::connect(watcher, &QFutureWatcher<Result>::finished, context,
-            [watcher, done = std::forward<Done>(done)]() mutable {
-                if constexpr (std::is_void_v<Result>) {
-                    // QFutureWatcher<void> 没有 result()；finished 信号已表示完成，直接回调
-                    watcher->deleteLater();
-                    std::invoke(done);
-                } else {
-                    Result result = watcher->result();
-                    watcher->deleteLater();
-                    std::invoke(done, std::move(result));
+            [watcher, canceled, done = std::forward<Done>(done)]() mutable {
+                watcher->deleteLater();
+                if (canceled->load() || isShuttingDown()) return;
+                try {
+                    if constexpr (std::is_void_v<Result>) {
+                        watcher->future().waitForFinished();
+                        std::invoke(done);
+                    } else {
+                        std::invoke(done, watcher->future().takeResult());
+                    }
+                } catch (const std::exception& error) {
+                    qWarning() << "后台任务异常：" << error.what();
+                } catch (...) {
+                    qWarning() << "后台任务发生未知异常";
                 }
             });
-        watcher->setFuture(QtConcurrent::run(&pool(), std::forward<Work>(work)));
+        watcher->setFuture(promise->future());
+        const bool accepted = submit([promise, canceled, worker]() mutable {
+            try {
+                if (!canceled->load()) {
+                    if constexpr (std::is_void_v<Result>) std::invoke(*worker);
+                    else promise->addResult(std::invoke(*worker));
+                }
+            } catch (...) {
+                promise->setException(std::current_exception());
+            }
+            promise->finish();
+        }, group);
+        if (!accepted) {
+            canceled->store(true);
+            promise->finish();
+            return {};
+        }
+        return Oran7TaskHandle(canceled);
     }
 
-    /**
-     * @brief 线程安全的 fire-and-forget：从任意线程提交到线程池执行，不创建 QFutureWatcher/QObject 父子关系。
-     *        适合日志输出等"后台执行、无需回主线程"的场景（避免跨线程父对象告警）。
-     * @note 返回的 QFuture 被丢弃，任务仍会在线程池执行；异常由任务自身负责。
-     */
     template<typename Work>
-    static void runDetached(Work&& work)
+    static Oran7TaskHandle runDetached(Work&& work)
     {
-        if (isShuttingDown())
-            return;
-        // 不需要 QFuture，用 QThreadPool::start 提交到后台线程执行（无 nodiscard 告警）
-        pool().start(std::forward<Work>(work));
+        if (isShuttingDown()) return {};
+        auto canceled = std::make_shared<std::atomic_bool>(false);
+        auto worker = std::make_shared<std::decay_t<Work>>(std::forward<Work>(work));
+        if (!submit([canceled, worker] {
+            if (!canceled->load()) std::invoke(*worker);
+        }, Group::General)) return {};
+        return Oran7TaskHandle(canceled);
     }
-};
 
-#endif // ORAN7ASYNC_H
+private:
+    // 已接受的 Network 工作最多并行两个，不占用线程等待信号量。
+    static bool submit(std::function<void()> work, Group group);
+};

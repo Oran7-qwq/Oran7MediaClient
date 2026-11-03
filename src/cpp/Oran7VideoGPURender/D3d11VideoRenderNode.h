@@ -1,63 +1,71 @@
-#ifndef D3D11VIDEORENDERNODE_H
-#define D3D11VIDEORENDERNODE_H
-
+#pragma once
+#include "Oran7VideoFrameMailbox.h"
 #include <QSGRenderNode>
 #include <QQuickWindow>
-#include <QFile>
-#include <QHash>
-// #include <QShader>
-
-#include <atomic>
-
-#include "GlobalHelper.h"
-
-extern "C" {
-#include <libavformat/avformat.h>
-#include <libswscale/swscale.h>
-#include <libavutil/pixdesc.h>
-}
-
-#ifdef WIN32
+#include <rhi/qrhi.h>
 #include <d3d11.h>
 #include <wrl/client.h>
-#include <rhi/qrhi.h>   // GuiPrivate
+#include <vector>
+extern "C"
+{
+#include <libswscale/swscale.h>
+}
 using Microsoft::WRL::ComPtr;
-#endif
 
+// 唯一帧消费点为 prepare()；render() 只提交已准备的 QRhi 绘制命令。
 class D3D11VideoRenderNode : public QSGRenderNode
 {
-public:
-    explicit D3D11VideoRenderNode(QQuickWindow *w);
-    ~D3D11VideoRenderNode() override = default;
-
-    void setFrame(AVFrame *f);
-    void setRect(const QRectF &rect);
-    void setContentRect(const QRectF &rect);
-    void setNeedBlack(bool on);
-
-    bool takePendingSourceSizeChanged(int &w, int &h);
-    bool takePendingDxgifromat(DXGI_FORMAT &fmt);
-
-    // 当前帧的实际信息（prepare() 后更新），供 VideoItem 每秒采集
-    DXGI_FORMAT currentDxgiFormat() const { return m_currentDxgiFormat; }
-    bool isHardwareFrame() const { return m_lastFrameIsD3D11; }
-    QString decodeDeviceName() const;
-
+  public:
+    D3D11VideoRenderNode(QQuickWindow* window, std::shared_ptr<Oran7VideoFrameMailbox> mailbox);
+    ~D3D11VideoRenderNode() override;
+    void setRect(const QRectF& rect);
+    void setContentRect(const QRectF& rect);
     void prepare() override;
-    void render(const RenderState *state) override;
+    void render(const RenderState* state) override;
     void releaseResources() override;
-
     RenderingFlags flags() const override;
     StateFlags changedStates() const override;
-    QRectF rect() const override;
+    QRectF rect() const override { return m_rect; }
 
-private:
-    QQuickWindow *m_window = nullptr;
-    QRectF m_rect;          // item 全区域（= videoHost），rect() 返回此值
-    QRectF m_contentRect;   // Fit/Fill 后真实视频绘制区域，顶点用此值
-    std::atomic<AVFrame *> m_latestFrame{nullptr};
-    std::atomic<bool> m_needBlack{false};
-
+  private:
+    struct Vertex
+    {
+        float x, y, u, v;
+    };
+    struct UbufData
+    {
+        float mvp[16] = {};
+        float opacity = 1;
+        float black = 0;
+        float pad[2] = {};
+    };
+    static_assert(offsetof(UbufData, opacity) == 64 && offsetof(UbufData, black) == 68 && sizeof(UbufData) == 80,
+                  "视频 uniform 必须匹配着色器 std140 布局");
+    struct Oran7RenderPass
+    {
+        QRhiRenderTarget* target = nullptr; // 只比较身份，不跨帧解引用。
+        int samples = 1;
+        std::unique_ptr<QRhiRenderPassDescriptor> descriptor;
+        std::unique_ptr<QRhiBuffer> uniform;
+        std::unique_ptr<QRhiShaderResourceBindings> bindings;
+        std::unique_ptr<QRhiGraphicsPipeline> pipeline;
+    };
+    bool initD3D11Resources();
+    bool ensureRgbaTarget(int w, int h, DXGI_FORMAT format);
+    bool ensureVideoProcessor(int w, int h);
+    bool blitNv12ToRgba(ID3D11Texture2D* source, int w, int h, int slice);
+    bool uploadCpuFrameToRgba(AVFrame* frame);
+    bool uploadHardwareFrame(AVFrame* frame);
+    void clearBlack();
+    void consumeFrame();
+    bool ensureImportedTexture();
+    Oran7RenderPass* preparePass();
+    void doReleaseResources();
+    QQuickWindow* m_window;
+    std::shared_ptr<Oran7VideoFrameMailbox> m_mailbox;
+    QMetaObject::Connection m_frameConnection;
+    quint64 m_frameSerial = 1, m_consumedSerial = 0;
+    QRectF m_rect, m_contentRect;
     ComPtr<ID3D11Device> m_dev;
     ComPtr<ID3D11DeviceContext> m_ctx;
     ComPtr<ID3D11VideoDevice> m_videoDev;
@@ -65,93 +73,18 @@ private:
     ComPtr<ID3D11Texture2D> m_rgbaTex;
     ComPtr<ID3D11VideoProcessor> m_vp;
     ComPtr<ID3D11VideoProcessorEnumerator> m_vpEnum;
-    QSize m_bgraSize;
-    DXGI_FORMAT m_targetFmt = DXGI_FORMAT_UNKNOWN;
-
-    // 软解 CPU 帧上载：swscale 上下文 + 缓存参数
-    SwsContext *m_swsCtx = nullptr;
+    QSize m_processorSize;
+    SwsContext* m_swsCtx = nullptr;
     AVPixelFormat m_lastSrcCpuFmt = AV_PIX_FMT_NONE;
-    int m_swsSrcW = 0;
-    int m_swsSrcH = 0;
-
-    int m_lastSrcW = 0;
-    int m_lastSrcH = 0;
-
-    bool m_hasPendingSizeChanged = false;
-    int m_pendingW = 0;
-    int m_pendingH = 0;
-    bool m_hasPendingDXGIFormatChanged = false;
-    DXGI_FORMAT m_pendingDxgiFmt = DXGI_FORMAT_UNKNOWN;
-
-    // 当前帧的实际格式信息（prepare() 后更新，供 VideoItem 采集）
+    int m_swsSrcW = 0, m_swsSrcH = 0;
     DXGI_FORMAT m_currentDxgiFormat = DXGI_FORMAT_UNKNOWN;
-    bool m_lastFrameIsD3D11 = false;     // 最近一帧是否来自 D3D11VA 硬解
-
-    bool initD3D11Resources();
-    bool ensureRgbaTarget(int w, int h, DXGI_FORMAT fmt);
-    bool ensureVideoProcessor(int w, int h);
-    bool blitNv12ToRgba(ID3D11Texture2D *srcTex, int w, int h, int slice);
-    bool uploadCpuFrameToRgba(AVFrame *cur);
-    void clearBlack();
-
-    //QRhi
-    bool m_rhiInited = false;
-    bool m_verticesDirty = true;
-
-    QRhi *m_rhi = nullptr;
+    bool m_verticesDirty = true, m_importDirty = true, m_blackFrame = false;
+    bool m_uploadFailureLogged = false;
+    bool m_sharedTextureBusy = false;
+    QRhi* m_rhi = nullptr; // Qt 拥有，只在渲染线程使用。
     std::unique_ptr<QRhiTexture> m_rhiTex;
     std::unique_ptr<QRhiSampler> m_sampler;
     std::unique_ptr<QRhiBuffer> m_vbuf;
-    std::unique_ptr<QRhiBuffer> m_ubuf;
-
-    std::unique_ptr<QRhiShaderResourceBindings> m_srb;
-    // 按 render pass descriptor 缓存 pipeline。
-    // 同一帧内 render() 会被调用两次（先 offscreen 后 main），
-    // 每个 render target 需要独立的 pipeline，不能在 offscreen→main 切换时销毁 offscreen pipeline。
-    QHash<QRhiRenderPassDescriptor *, QRhiGraphicsPipeline *> m_pipelineCache;
-
-    bool m_importDirty = true;   // 需要重新 createFrom
-    bool m_srbDirty = true;
-    DXGI_FORMAT m_lastDxgiFormat = DXGI_FORMAT_UNKNOWN;
-    ID3D11Texture2D *m_lastImportedTex = nullptr;
-
-    bool ensureImportedTexture();
-    void createSampler();
-    struct Vertex {
-        float x, y;
-        float u, v;
-    };
-    struct UbufData {
-        QMatrix4x4 mvp;
-        float opacity = 1.0f;
-        float pad[3] = {0, 0, 0}; // 16-byte 对齐
-    };
-
-    void createBuffers();
-    void uploadStaticVerticesIfNeeded();
-    QRhiGraphicsPipeline *createPipelineFor();
-    void updateUniforms(const RenderState *state);
-    void rebuildSrbAndPipelineIfNeeded();
-    void doReleaseResources();
-
-    bool createDebugGreenTexture();
+    std::vector<std::unique_ptr<Oran7RenderPass>> m_passes;
+    Oran7RenderPass* m_activePass = nullptr;
 };
-
-static QShader loadShader(const QString &name)
-{
-    QFile f(name);
-    if (!f.open(QIODevice::ReadOnly)) {
-        WARNING_LOG << "Failed to open shader:" << name.toStdString();
-        return {};
-    }
-
-    const QByteArray data = f.readAll();
-    QShader shader = QShader::fromSerialized(data);
-    if (!shader.isValid()) {
-        WARNING_LOG << "Invalid serialized shader:" << name.toStdString();
-    }
-    return shader;
-}
-
-
-#endif // D3D11VIDEORENDERNODE_H

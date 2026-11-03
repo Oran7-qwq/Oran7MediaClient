@@ -9,7 +9,7 @@
 #include <queue>
 #include <atomic>
 
-#include "GlobalHelper.h"
+#include "Oran7GlobalHelper.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>

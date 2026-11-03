@@ -74,6 +74,7 @@ bool Oran7AudioEncoder::start()
     if(_running.exchange(true)) return true;
 
     if (!_configured || !_avctx) {
+        _running.store(false);
         if (_onError)
             _onError("Oran7VideoEncoder::start(): not configured.");
         return false;
@@ -86,7 +87,7 @@ bool Oran7AudioEncoder::start()
 
 bool Oran7AudioEncoder::stop()
 {
-    if(!_running.exchange(false)) return true;
+    _running.store(false);
 
     _frameCond.notify_all();
     _pktCond.notify_all();
@@ -101,6 +102,7 @@ void Oran7AudioEncoder::pushFrame(AVFrame *frame)
 {
     if(!frame) return;
     std::lock_guard<std::mutex> lock(_frame_mtx);
+    if (!_running.load()) { av_frame_free(&frame); return; }
     if(_frameQueue.size() >= kMaxFrameQueue)
     {
         AVFrame *drop = _frameQueue.front();

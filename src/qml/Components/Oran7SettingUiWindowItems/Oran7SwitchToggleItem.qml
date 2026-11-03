@@ -20,11 +20,13 @@ Item {
     property color onColor: Oran7Theme.Oran7MainGUI.themeColor
     property color offColor: Oran7MainUiSetting.itemBackColor
     property color borderColor: Oran7MainUiSetting.isDarkMode ? root.onColor : root.offColor
+    property real controlHeight: Oran7MainUiSetting.itemHeight * 0.666
+    property color thumbColor: "white"
 
     // 信号定义
     signal switchToggleChanged(bool checked)
 
-    height: Oran7MainUiSetting.itemHeight * 0.666
+    height: root.controlHeight
     width: height * 2
 
     // 开关背景
@@ -44,10 +46,10 @@ Item {
     Rectangle {
         id: indicator
         anchors.verticalCenter: parent.verticalCenter
-        width: Oran7MainUiSetting.itemHeight * 0.6
+        width: root.height * 0.9
         height: width
         radius: height / 2
-        color: "white"
+        color: root.thumbColor
 
         // 切换动画
         Behavior on x {

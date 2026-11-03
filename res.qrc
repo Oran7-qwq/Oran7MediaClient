@@ -31,8 +31,6 @@
         <file>image/volume.png</file>
         <file>image/ep_select.png</file>
         <file>image/formkit_file.png</file>
-        <file>shaders/bgra2rgba_vs.hlsl</file>
-        <file>shaders/bgra2rgba_ps.hlsl</file>
         <file>shaders/video.vert</file>
         <file>shaders/video.frag</file>
         <file>image/hugeicons_ai-setting.png</file>
@@ -50,6 +48,7 @@
         <file>image/mynaui_panel-left-close-solid.png</file>
         <file>image/material-symbols_delete-outline-rounded.png</file>
         <file>image/mingcute_arrows-down-fill.png</file>
+        <file>image/oran7-scroll-chevron.svg</file>
         <file>sound/ExpandSound.wav</file>
         <file>image/mage_refresh-reverse.png</file>
         <file>image/background.mp4</file>
@@ -65,5 +64,6 @@
         <file>image/default_background.jpeg</file>
         <file>shaders/fractal.frag</file>
         <file>shaders/octgrams.frag</file>
+        <file>shaders/clouds.frag</file>
     </qresource>
 </RCC>

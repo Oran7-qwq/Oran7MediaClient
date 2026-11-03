@@ -8,7 +8,7 @@ layout(location = 0) out vec2 vUV;
 layout(std140, binding = 0) uniform buf {
     mat4 mvp;
     float opacity;
-    vec3 pad;
+    float black;
 } ubuf;
 
 void main()

@@ -3,7 +3,7 @@ import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
 import Client 1.0
 import "../Basic"
-import "../Components"
+import "../Components/Oran7GlobalComponents"
 import LyricsModel 1.0
 
 import Oran7UI.Impl
@@ -59,8 +59,8 @@ Rectangle{
         // 自身仍是独立副本，避免模糊源引用 mainWindow 本身导致关闭时闪烁
         ShaderEffectSource {
             id: lyricsWinBackground
-            width: mainWindow.width
-            height: mainWindow.height
+            width: root.Window.window ? root.Window.window.width : 0
+            height: root.Window.window ? root.Window.window.height : 0
             sourceItem: BasicConfig.backgroundVideoSource
             live: true
         }

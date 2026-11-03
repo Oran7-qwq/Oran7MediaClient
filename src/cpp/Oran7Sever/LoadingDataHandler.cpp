@@ -85,7 +85,7 @@ QByteArray LoadingDataHandler::handlePacket(const QByteArray &packet)
         out<<quint32(list[i][4].toInt());
     }
     qDebug() << "[Sever:]response size:" << response.size();
-    qDebug() << "[Sever:]response:" <<response.toHex(' ');
+    qDebug() << "[LegacyServer] 数据响应字节数=" << response.size();
     return response;
      // return 0x00;
 }

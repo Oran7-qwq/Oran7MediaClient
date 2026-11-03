@@ -1,1603 +1,821 @@
 #include "Oran7ScreenCapture.h"
+#include "Oran7DesktopCaptureWorker.h"
 #include "D3d11DeviceProvider.h"
+#include "Oran7AppConfigManager.h"
+#include "Oran7RecordingBackend.h"
+#include <QMetaEnum>
+#include <QHash>
 
 #include <dxgi.h>
 #include <libavutil/log.h>
 
+namespace
+{
+QString ffErrStr(int err)
+{
+    char buf[256];
+    av_strerror(err, buf, sizeof(buf));
+    return QString::fromUtf8(buf);
+}
+} // namespace
 
 // ================= Controller (lives in main/GUI thread) =================
-Oran7ScreenCaptureController::Oran7ScreenCaptureController(QObject *parent)
-    : QObject(parent)
+Oran7ScreenCaptureController::Oran7ScreenCaptureController(QObject* parent)
+    : QObject(parent), m_recording(std::make_unique<Oran7RecordingSession>())
 {
     av_log_set_level(AV_LOG_INFO);
+    m_recoveryTimer.setSingleShot(true);
+    m_recoveryTimer.setInterval(300);
+    m_recoveryTimer.setParent(this);
+    m_recoveryTimer.setObjectName(QStringLiteral("captureRecoveryDelay"));
+    connect(&m_recoveryTimer, &QTimer::timeout, this,
+            [this]
+            {
+                m_retryDelay = false;
+                schedulePreview();
+            });
+    m_reapTimer.setSingleShot(true);
+    m_reapTimer.setInterval(10);
+    connect(&m_reapTimer, &QTimer::timeout, this, &Oran7ScreenCaptureController::reapWorker);
+    m_startTimer.setParent(this);
+    m_startTimer.setObjectName(QStringLiteral("captureFirstFrameTimeout"));
+    m_startTimer.setSingleShot(true);
+    m_startTimer.setInterval(5000);
+    connect(&m_startTimer, &QTimer::timeout, this,
+            [this]
+            {
+                if (!m_previewRequested || m_previewState != Oran7PreviewState::Starting)
+                    return;
+                const auto reason = QStringLiteral("抓屏预览等待首帧超时");
+                if (m_pendingCapture)
+                    rollbackCaptureSettings(reason);
+                else
+                    recoverCapture(reason);
+            });
+    connect(m_recording.get(), &Oran7RecordingSession::changed, this,
+            [this]
+            {
+                emit recordingStateChanged();
+                if (!recordingBusy())
+                    schedulePreview();
+            });
+    connect(m_recording.get(), &Oran7RecordingSession::started, this,
+            [this](const QVariantMap& details)
+            {
+                m_recordingOutputPath = details.value("outputPath").toString();
+                const auto options = Oran7AppConfigManager::ins().snapshot().recording;
+                if (options.mode == 1 && !options.signalingUrl.isEmpty())
+                {
+                    m_signaling = std::make_unique<Oran7SignalingClient>();
+                    m_signaling->start(options.signalingUrl.toStdString(), options.signalingUser.toStdString(),
+                                       options.roomId.toStdString(), options.signalingPassword.toStdString());
+                    m_signaling->notifyStreamPublished(details.value("streamId").toString().toStdString());
+                }
+                emit recordingStateChanged();
+                emit recordingStarted();
+            });
+    connect(m_recording.get(), &Oran7RecordingSession::finished, this,
+            [this](bool ok, const QString& error)
+            {
+                if (m_signaling)
+                    m_signaling->stop();
+                if (!ok)
+                    emit errorOccurred(error);
+                emit recordingStopped();
+            });
 
 #ifdef _WIN32
     auto* p = D3D11DeviceProvider::instance();
 
-    connect(p, &D3D11DeviceProvider::deviceReady,
-            this, &Oran7ScreenCaptureController::onProviderReady,
+    connect(p, &D3D11DeviceProvider::deviceReady, this, &Oran7ScreenCaptureController::onProviderReady,
             Qt::UniqueConnection);
 
-    connect(p, &D3D11DeviceProvider::deviceLost,
-            this, &Oran7ScreenCaptureController::onProviderLost,
+    connect(p, &D3D11DeviceProvider::deviceLost, this, &Oran7ScreenCaptureController::onProviderLost,
             Qt::UniqueConnection);
 #endif
 }
 
 Oran7ScreenCaptureController::~Oran7ScreenCaptureController()
 {
-    stop();
+    shutdown();
 }
 
 void Oran7ScreenCaptureController::setVideoItem(QObject* item)
 {
-    auto* vi = qobject_cast<D3D11VideoItem*>(item);
-    if (!vi) {
-        emit errorOccurred("setVideoItem: object is not a D3D11VideoItem.");
+    auto* video = qobject_cast<D3D11VideoItem*>(item);
+    if (!video || m_shuttingDown)
         return;
-    }
-
-    if (m_item == vi) return;
-
+    if (m_item == video)
+        return;
     stop();
-    INFO_LOG<<"Oran7ScreenCaptureController Successed set videoItem.";
-    m_item = vi;
+    QObject::disconnect(m_itemDestroyed);
+    m_item = video;
+    m_itemDestroyed = connect(video, &QObject::destroyed, this,
+                              [this]
+                              {
+                                  if (!m_shuttingDown && (m_previewRequested || m_thread))
+                                      failCapture(QStringLiteral("预览渲染项已释放"));
+                              });
+    video->setDebugLog(m_debugLog);
 }
-
+QString Oran7ScreenCaptureController::previewStateName() const
+{
+    return QString::fromLatin1(QMetaEnum::fromType<Oran7PreviewState>().valueToKey(int(m_previewState)));
+}
+bool Oran7ScreenCaptureController::previewBusy() const
+{
+    return m_previewState == Oran7PreviewState::Starting || m_previewState == Oran7PreviewState::Stopping ||
+           m_previewState == Oran7PreviewState::Recovering;
+}
+void Oran7ScreenCaptureController::setPreviewState(Oran7PreviewState state)
+{
+    if (m_previewState == state)
+        return;
+    m_previewState = state;
+    emit previewStateChanged();
+}
 bool Oran7ScreenCaptureController::start()
 {
-    INFO_LOG<<"Oran7ScreenCaptureController request for start().";
-    if (m_running.exchange(true)) return true;
-
-    if (!m_item) {
-        m_running.store(false);
-        WARNING_LOG<<"start: video item not set.";
-        emit errorOccurred("start: video item not set.");
+    if (m_shuttingDown || !m_item)
         return false;
-    }
-
-// #ifdef _WIN32
-//     // 直接从 provider 拿 device [acquireDevice() 做AddRef]
-//     if (!m_d3dqtDev) {
-//         m_d3dqtDev.Attach(D3D11DeviceProvider::instance()->acquireDevice());
-//     }
-//     m_deviceReady = (m_d3dqtDev != nullptr);
-
-//     if (!m_deviceReady)
-//     {
-//         // provider 还没 ready-->保持 running=true，等 deviceReady 信号再启动
-//         // 一般不会进入这个分支
-//         WARNING_LOG << "Oran7ScreenCaptureController start: waiting for D3D11DeviceProvider::deviceReady...";
-//         return true;
-//     }
-// #endif
-
-    startWorkerIfPossible();
+    if (m_previewRequested)
+        return true;
+    m_previewRequested = true;
+    m_previewError.clear();
+    m_recoveryAttempts = 0;
+    setPreviewState(m_thread ? Oran7PreviewState::Stopping : Oran7PreviewState::Starting);
+    schedulePreview();
     return true;
+}
+bool Oran7ScreenCaptureController::restartPreview()
+{
+    if (m_shuttingDown || !m_item || recordingBusy())
+        return false;
+    m_previewRequested = true;
+    m_previewError.clear();
+    m_recoveryAttempts = 0;
+    m_recoveryTimer.stop();
+    m_retryDelay = false;
+    teardownWorker();
+    setPreviewState(m_thread ? Oran7PreviewState::Stopping : Oran7PreviewState::Starting);
+    schedulePreview();
+    return true;
+}
+void Oran7ScreenCaptureController::stop()
+{
+    if (m_shuttingDown)
+        return;
+    m_previewRequested = false;
+    m_previewError.clear();
+    m_restoreTarget.reset();
+    m_recoveryTimer.stop();
+    m_retryDelay = false;
+    m_recoveryAttempts = 0;
+    stopRecording();
+    teardownWorker();
+    cancelPending(QStringLiteral("预览已停止，参数应用已取消"));
+    schedulePreview();
+}
+void Oran7ScreenCaptureController::shutdown()
+{
+    if (m_shuttingDown)
+        return;
+    m_shuttingDown = true;
+    m_reapTimer.stop();
+    m_previewRequested = false;
+    m_recoveryTimer.stop();
+    m_startTimer.stop();
+    teardownWorker();
+    cancelPending(QStringLiteral("录屏服务已关闭"));
+    m_recording->shutdown();
+    // 唯一允许等待的入口：退出时必须保证设备/渲染依赖覆盖所有 worker。
+    if (m_thread)
+    {
+        m_thread->wait();
+        m_thread.reset();
+    }
+    m_control.reset();
+    m_feed.reset();
+    if (m_item)
+        m_item->renderBlackFrame();
+    setPreviewState(Oran7PreviewState::Idle);
 }
 
 /**
- * @brief Oran7ScreenCaptureController::stop
- * 调用此stop会把抓屏预览和编码线程全都停止运行
+ * @brief 枚举抓屏源（显示器）
+ *
+ * @note 必须从「抓屏 D3D11 设备所属 adapter」枚举：ddagrab 的 output_idx 就是它内部
+ *       那次 EnumOutputs(i) 的 i。用 QScreen / EnumAdapters 自己另起一套坐标系，
+ *       在多显卡机器上会和 ddagrab 实际看到的输出对不上。
+ * @note 这里创建的 hw device 与 Oran7DesktopCaptureWorker::initGraph() 同参（adapter 传 nullptr），
+ *       保证枚举的就是抓屏将要用的那块设备。
  */
-void Oran7ScreenCaptureController::stop()
+// 以 GDI 设备名关联 Windows 显示路径与 DXGI 输出，不能按两套枚举的顺序对齐。
+static QHash<QString, QString> captureMonitorNames()
 {
-    if (!m_running.exchange(false)) return;
-    teardownWorker();
-    teardownEncoder();
-    emit stopped();
+    QHash<QString, QString> names;
+#ifdef _WIN32
+    for (int attempt = 0; attempt < 3; ++attempt)
+    {
+        UINT32 pathCount = 0, modeCount = 0;
+        if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
+            break;
+        QVector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+        QVector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+        const LONG result =
+            QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr);
+        if (result == ERROR_INSUFFICIENT_BUFFER)
+            continue; // 查询期间插拔显示器，重新获取容量。
+        if (result != ERROR_SUCCESS)
+            break;
+        for (UINT32 i = 0; i < pathCount; ++i)
+        {
+            const auto& path = paths[i];
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+            source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            source.header.size = sizeof(source);
+            source.header.adapterId = path.sourceInfo.adapterId;
+            source.header.id = path.sourceInfo.id;
+            DISPLAYCONFIG_TARGET_DEVICE_NAME target{};
+            target.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+            target.header.size = sizeof(target);
+            target.header.adapterId = path.targetInfo.adapterId;
+            target.header.id = path.targetInfo.id;
+            if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS ||
+                DisplayConfigGetDeviceInfo(&target.header) != ERROR_SUCCESS)
+                continue;
+            const QString name = QString::fromWCharArray(target.monitorFriendlyDeviceName).trimmed();
+            if (name.isEmpty())
+                continue;
+            const QString key = QString::fromWCharArray(source.viewGdiDeviceName).toUpper();
+            // 镜像模式下一个采集源可能连接多个物理显示器，保留各个名称。
+            auto list = names.value(key).split(QStringLiteral(" / "), Qt::SkipEmptyParts);
+            if (!list.contains(name))
+                list.push_back(name);
+            names.insert(key, list.join(QStringLiteral(" / ")));
+        }
+        break;
+    }
+#endif
+    return names;
 }
 
-void Oran7ScreenCaptureController::setOutputIndex(int idx)
+static QVector<CaptureOutputInfo> enumerateCaptureOutputs(QString* err = nullptr)
 {
-    m_outputIndex = idx;
+    QVector<CaptureOutputInfo> list;
+#ifdef _WIN32
+    AVBufferRef* hwdev = nullptr;
+    const int ret = av_hwdevice_ctx_create(&hwdev, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0);
+    if (ret < 0)
+    {
+        if (err)
+            *err = "av_hwdevice_ctx_create failed: " + ffErrStr(ret);
+        return list;
+    }
+
+    auto* hw = reinterpret_cast<AVHWDeviceContext*>(hwdev->data);
+    auto* d3d11 = reinterpret_cast<AVD3D11VADeviceContext*>(hw->hwctx);
+
+    ComPtr<IDXGIDevice> dxgiDev;
+    ComPtr<IDXGIAdapter> adapter;
+    if (!d3d11->device || FAILED(d3d11->device->QueryInterface(IID_PPV_ARGS(&dxgiDev))) ||
+        FAILED(dxgiDev->GetAdapter(&adapter)))
+    {
+        if (err)
+            *err = "query IDXGIAdapter failed";
+        av_buffer_unref(&hwdev);
+        return list;
+    }
+
+    DXGI_ADAPTER_DESC adesc{};
+    const QString adapterName =
+        SUCCEEDED(adapter->GetDesc(&adesc)) ? QString::fromWCharArray(adesc.Description) : QString();
+
+    const auto monitorNames = captureMonitorNames();
+    for (UINT i = 0; i < 16; ++i)
+    {
+        ComPtr<IDXGIOutput> out;
+        if (FAILED(adapter->EnumOutputs(i, &out)))
+            break; // 序号不连续即到末尾
+
+        DXGI_OUTPUT_DESC odesc{};
+        if (FAILED(out->GetDesc(&odesc)))
+            continue;
+
+        CaptureOutputInfo info;
+        info.outputIndex = static_cast<int>(i); // 原始序号原样透传，不做任何压缩
+        info.attached = odesc.AttachedToDesktop;
+        info.deviceName = QString::fromWCharArray(odesc.DeviceName);
+        info.monitorName = monitorNames.value(info.deviceName.toUpper());
+        info.adapterName = adapterName;
+        const RECT& r = odesc.DesktopCoordinates;
+        info.width = r.right - r.left;
+        info.height = r.bottom - r.top;
+        info.primary = (r.left == 0 && r.top == 0);
+        list.push_back(info);
+    }
+
+    av_buffer_unref(&hwdev);
+#else
+    if (err)
+        *err = "screen capture is Windows only";
+#endif
+    return list;
 }
 
-void Oran7ScreenCaptureController::setDrawMouse(bool on)
+QVariantList Oran7ScreenCaptureController::monitors() const
 {
-    m_drawMouse = on;
+    QVariantList out;
+    QString err;
+    const auto list = enumerateCaptureOutputs(&err);
+    if (!err.isEmpty())
+        WARNING_LOG << "[CaptureDiag] enumerateCaptureOutputs: " << err;
+
+    for (const auto& m : list)
+    {
+        QVariantMap item;
+        item["outputIndex"] = m.outputIndex;
+        item["attached"] = m.attached;
+        item["primary"] = m.primary;
+        item["width"] = m.width;
+        item["height"] = m.height;
+        item["deviceName"] = m.deviceName;
+        item["monitorName"] = m.monitorName;
+        item["adapterName"] = m.adapterName;
+        out.push_back(item);
+    }
+    return out;
 }
 
-void Oran7ScreenCaptureController::setFps(int fps)
+QVariantMap Oran7ScreenCaptureController::captureSettings() const
 {
-    m_fps = fps;
+    return {{"outputIndex", m_capSettings.outputIndex},
+            {"fps", m_capSettings.fps},
+            {"drawMouse", m_capSettings.drawMouse},
+            {"debugLog", m_debugLog}};
 }
-
+bool Oran7ScreenCaptureController::recordingBusy() const
+{
+    return m_recording->busy();
+}
 void Oran7ScreenCaptureController::setDebugLog(bool on)
 {
-    m_debugLog.store(on, std::memory_order_release);
-    // 同步到正在运行的 worker
-    auto *worker = static_cast<DdaGrabWorker*>(m_workerObj);
-    if (worker)
-        worker->setDebugLog(on);
-    // 同步到 video item
+    m_debugLog = on;
+    if (m_control)
+        m_control->debugLog.store(on);
     if (m_item)
         m_item->setDebugLog(on);
 }
-
+Oran7ScreenCaptureController::Oran7CaptureTarget Oran7ScreenCaptureController::committedTarget() const
+{
+    return {m_capSettings, m_captureDeviceName, m_debugLog};
+}
+void Oran7ScreenCaptureController::loadCaptureSettings()
+{
+    if (m_shuttingDown || m_thread || m_pendingCapture)
+        return;
+    const auto saved = Oran7AppConfigManager::ins().snapshot().capture;
+    m_capSettings = {saved.outputIndex, saved.fps, saved.drawMouse};
+    m_captureDeviceName.clear();
+    m_lastUsableTarget.reset();
+    setDebugLog(saved.debugLog);
+    emit captureSettingsChanged();
+}
+bool Oran7ScreenCaptureController::refreshCaptureSource(Oran7CaptureTarget& target)
+{
+    QVariantMap selected, fallback;
+    for (const auto& value : monitors())
+    {
+        const auto output = value.toMap();
+        if (!output.value("attached").toBool())
+            continue;
+        if (fallback.isEmpty())
+            fallback = output;
+        const bool matches = target.deviceName.isEmpty()
+                                 ? output.value("outputIndex").toInt() == target.settings.outputIndex
+                                 : output.value("deviceName").toString() == target.deviceName;
+        if (matches)
+            selected = output;
+    }
+    if (selected.isEmpty())
+        selected = fallback;
+    if (selected.isEmpty())
+        return false;
+    target.settings.outputIndex = selected.value("outputIndex").toInt();
+    target.deviceName = selected.value("deviceName").toString();
+    return true;
+}
+bool Oran7ScreenCaptureController::saveCaptureSettings(const Oran7CaptureTarget& target, QString* error)
+{
+    auto& config = Oran7AppConfigManager::ins();
+    auto current = config.snapshot();
+    const auto previous = current.capture;
+    const auto& s = target.settings;
+    const bool changed = previous.outputIndex != s.outputIndex || previous.fps != s.fps ||
+                         previous.drawMouse != s.drawMouse || previous.debugLog != target.debugLog;
+    if (changed)
+    {
+        if (!config.isWritable())
+        {
+            *error = config.lastError();
+            return false;
+        }
+        current.capture = {s.outputIndex, s.fps, s.drawMouse, target.debugLog};
+        config.updateConfig(current);
+        if (!config.saveConfig())
+        {
+            *error = config.lastError();
+            // 仅恢复自己的分组；不写回异步操作开始前的整份快照。
+            auto latest = config.snapshot();
+            latest.capture = previous;
+            config.updateConfig(latest);
+            return false;
+        }
+    }
+    m_capSettings = s;
+    m_captureDeviceName = target.deviceName;
+    setDebugLog(target.debugLog);
+    return true;
+}
+QVariantMap Oran7ScreenCaptureController::applyCaptureSettings(int outputIndex, int fps, bool drawMouse, bool debugLog)
+{
+    const auto rejected = [](const QString& message) {
+        return QVariantMap{{"ok", false}, {"pending", false}, {"msg", message}};
+    };
+    if (m_shuttingDown)
+        return rejected(QStringLiteral("录屏服务已关闭"));
+    if (recordingBusy())
+        return rejected(QStringLiteral("录制中不可修改抓屏参数，请先停止录制"));
+    auto& config = Oran7AppConfigManager::ins();
+    if (!config.isWritable())
+        return rejected(config.lastError());
+    fps = qBound(kCaptureFpsMin, fps, kCaptureFpsMax);
+    if (fps < config.snapshot().recording.fps)
+        return rejected(QStringLiteral("采集帧率不能低于已保存的录制帧率，请先降低并保存录制帧率"));
+    Oran7CaptureTarget target{{outputIndex, fps, drawMouse}, {}, debugLog};
+    for (const auto& value : monitors())
+    {
+        const auto output = value.toMap();
+        if (output.value("outputIndex").toInt() == outputIndex && output.value("attached").toBool())
+        {
+            target.deviceName = output.value("deviceName").toString();
+            break;
+        }
+    }
+    if (target.deviceName.isEmpty())
+        return rejected(QStringLiteral("抓屏源已断开或不可用，请刷新显示器列表后重新选择"));
+    const quint64 id = ++m_requestCounter;
+    const bool unchanged = m_capSettings.outputIndex == outputIndex && m_capSettings.fps == fps &&
+                           m_capSettings.drawMouse == drawMouse && m_captureDeviceName == target.deviceName;
+    if (!m_item || (unchanged && m_previewState == Oran7PreviewState::Running && !m_pendingCapture))
+    {
+        QString error;
+        if (!saveCaptureSettings(target, &error))
+            return rejected(error);
+        if (m_previewState == Oran7PreviewState::Running)
+            m_lastUsableTarget = target; // 热更新日志参数也属于最新已提交配置。
+        cancelPending(QStringLiteral("参数已被较新的设置替代"), true);
+        emit captureSettingsChanged();
+        return {{"ok", true}, {"pending", false}, {"requestId", id}, {"msg", QStringLiteral("抓屏参数已保存")}};
+    }
+    const auto previous = m_pendingCapture;
+    m_pendingCapture = Oran7CaptureRequest{id, target};
+    m_restoreTarget.reset();
+    m_previewRequested = true;
+    m_previewError.clear();
+    m_recoveryAttempts = 0;
+    m_recoveryTimer.stop();
+    m_retryDelay = false;
+    teardownWorker();
+    setPreviewState(m_thread ? Oran7PreviewState::Stopping : Oran7PreviewState::Starting);
+    if (previous)
+        finishRequest(previous->id, false, QStringLiteral("参数已被较新的设置替代"), true);
+    schedulePreview();
+    return {{"ok", true}, {"pending", true}, {"requestId", id}, {"msg", QStringLiteral("正在应用…")}};
+}
+void Oran7ScreenCaptureController::finishRequest(quint64 id, bool ok, const QString& message, bool superseded)
+{
+    emit captureRequestFinished({{"requestId", id}, {"ok", ok}, {"msg", message}, {"superseded", superseded}});
+    // 兼容旧的单请求消费者；被替代请求只走带编号的终态，不结束新请求的等待。
+    if (!superseded && id == m_requestCounter)
+        emit captureApplyFinished(ok, message);
+}
+void Oran7ScreenCaptureController::cancelPending(const QString& message, bool superseded)
+{
+    const auto request = m_pendingCapture;
+    m_pendingCapture.reset();
+    if (request)
+        finishRequest(request->id, false, message, superseded);
+}
+void Oran7ScreenCaptureController::rollbackCaptureSettings(const QString& reason)
+{
+    const auto request = m_pendingCapture;
+    m_pendingCapture.reset();
+    m_previewError = reason;
+    m_restoreTarget = m_lastUsableTarget.value_or(committedTarget());
+    if (m_restoreTarget->settings.fps < Oran7AppConfigManager::ins().snapshot().recording.fps)
+        m_restoreTarget = committedTarget(); // 不能恢复到低于当前录制上限的历史采集值。
+    m_recoveryAttempts = 0;
+    m_retryDelay = false;
+    m_recoveryTimer.stop();
+    teardownWorker();
+    schedulePreview();
+    if (request)
+        finishRequest(request->id, false, QStringLiteral("参数应用失败，正在恢复上次设置"));
+    emit errorOccurred(reason);
+}
+void Oran7ScreenCaptureController::failCapture(const QString& reason)
+{
+    m_previewRequested = false;
+    m_restoreTarget.reset();
+    m_previewError = reason;
+    m_retryDelay = false;
+    m_recoveryTimer.stop();
+    teardownWorker();
+    cancelPending(reason);
+    emit previewStateChanged();
+    emit errorOccurred(reason);
+    schedulePreview();
+}
+void Oran7ScreenCaptureController::recoverCapture(const QString& reason)
+{
+    if (!m_previewRequested || m_shuttingDown)
+        return;
+    m_previewError = reason;
+    emit previewStateChanged();
+    if (recordingBusy())
+    {
+        stopRecording();
+        emit errorOccurred(QStringLiteral("显示模式变化，已停止录制并保存已有内容，正在恢复预览"));
+    }
+    teardownWorker();
+    if (++m_recoveryAttempts > 8)
+    {
+        if (m_pendingCapture)
+            rollbackCaptureSettings(reason);
+        else
+            failCapture(QStringLiteral("抓屏预览恢复失败，请重新开启预览：") + reason);
+        return;
+    }
+    m_retryDelay = true;
+    schedulePreview();
+}
 void Oran7ScreenCaptureController::onProviderReady()
 {
-    ID3D11Device* newDev = D3D11DeviceProvider::instance()->acquireDevice(); // AddRef
-    if (!newDev) {
-        m_deviceReady = false;
+    ComPtr<ID3D11Device> device;
+    device.Attach(D3D11DeviceProvider::instance()->acquireDevice());
+    if (!device)
         return;
-    }
-
-    //如果已经是同一个 device，就不要重复替换/重建
-    if (m_d3dqtDev.Get() == newDev) {
-        // newDev 是 acquireDevice AddRef 出来的，需要释放掉这一次多出来的引用
-        newDev->Release();
-
-        m_deviceReady = true;
-        if (m_running.load() && !m_thread) {
-            startWorkerIfPossible();
-        }
-        return;
-    }
-
-    //device 发生变化-->先停抓屏，再切换 device，再按需重启
-    teardownWorker();
-
-    m_d3dqtDev.Reset();
-    m_d3dqtDev.Attach(newDev); // 接管 newDev
-
-    m_deviceReady = true;
-    if (m_running.load()) {
-        startWorkerIfPossible();
-    }
+    const bool changed = m_d3dqtDev && m_d3dqtDev.Get() != device.Get();
+    m_d3dqtDev = std::move(device);
+    if (changed && m_previewRequested)
+        recoverCapture(QStringLiteral("预览宿主设备已变化"));
 }
-
-
 void Oran7ScreenCaptureController::onProviderLost()
 {
-    // device 丢失-->停抓屏，释放 device
-    HRESULT r = m_d3dqtDev ? m_d3dqtDev->GetDeviceRemovedReason() : S_OK;
-    INFO_LOG << QString("GetDeviceRemovedReason=0x%1").arg(uint32_t(r), 8, 16, QChar('0'));
-
-    teardownWorker();
     m_d3dqtDev.Reset();
-    m_deviceReady = false;
-    // -->renderBlackFrame
-    if (m_item) QMetaObject::invokeMethod(m_item, "renderBlackFrame", Qt::QueuedConnection);
+    if (m_previewRequested)
+        recoverCapture(QStringLiteral("预览宿主设备已丢失"));
 }
-
-void Oran7ScreenCaptureController::onSharedHandlesReady(int w, int h,const QVector<quintptr>& hs)
+void Oran7ScreenCaptureController::setD3D11Device(ID3D11Device* device)
 {
-    QMutexLocker locker(&m_texMutex);
-    m_texW = w; m_texH = h;
-    for (int i=0;i<kPool;i++) {
-        m_handle[i] = (i < hs.size()) ? hs[i] : 0;
-    }
-
-    ID3D11Device* qtDev = m_d3dqtDev.Get();
-    if (!qtDev) return;
-
-    for (int i=0;i<kPool;i++) {
-        m_qtTex[i].Reset();
-
-        HANDLE hh = reinterpret_cast<HANDLE>(m_handle[i]);
-        if (!hh) continue;
-
-        ComPtr<ID3D11Texture2D> tex;
-        HRESULT hr = qtDev->OpenSharedResource(hh, IID_PPV_ARGS(&tex));
-        if (FAILED(hr) || !tex) {
-             qWarning() << "OpenSharedResource failed idx="<<i<<" hr="<<QString::number(hr,16);
-            continue;
-        }
-        m_qtTex[i] = tex;
-    }
-}
-
-void Oran7ScreenCaptureController::onNewFrameIndex(int idx)
-{
-    if (!m_item) return;
-    if (idx < 0 || idx >= 3) return;
-
-    // DirectConnection → 在 worker 线程执行，加锁读共享纹理池
-    ComPtr<ID3D11Texture2D> tex;
-    int w = 0, h = 0;
-    {
-        QMutexLocker locker(&m_texMutex);
-        if (!m_qtTex[idx]) return;
-        tex = m_qtTex[idx];  // AddRef
-        w = m_texW;
-        h = m_texH;
-    }
-
-    AVFrame* frame = makeD3D11FrameFromTexture(tex.Get(), w, h);
-    if (!frame) return;
-
-    m_item->submitFrame(frame);
-}
-
-#ifdef _WIN32
-void Oran7ScreenCaptureController::setD3D11Device(ID3D11Device* dev)
-{
-    if (!dev) return;
-    m_d3dqtDev = dev;
-    m_deviceReady = true;
+    m_d3dqtDev = device;
 }
 
 bool Oran7ScreenCaptureController::startRecording()
 {
-    auto* worker = static_cast<DdaGrabWorker*>(m_workerObj);
-
-    // 等 grabLoop 首帧确定实际分辨率
-    while (worker->grabW() == 0 || worker->grabH() == 0) {
-        QThread::msleep(10);
-    }
-
-/** -----------------------------------------------
-* @brief VideoEncoder
-* -------------------------------------------------
-*/
-
-    Oran7VideoEncoder::EncoderConfig cfg;
-    if (m_recordMode == RecordMode::WhipPush) {
-        cfg.width       = 1280;
-        cfg.height      = 720;
-        cfg.fps         = 30;
-        cfg.bitrateKbps = 5000;   // 720p30 VBR 推流 5Mbps
-        cfg.gopSize     = 30;     // 1 秒 GOP
-    } else {
-        cfg.width       = worker->grabW();
-        cfg.height      = worker->grabH();
-        cfg.fps         = 60;
-        cfg.bitrateKbps = 40000;  // 录屏 40Mbps
-    }
-    cfg.codecName  = "h264_mf";
-    cfg.hwDevice   = worker->hwDeviceRef();
-
-    m_encoder = std::make_shared<Oran7VideoEncoder>();
-    ErrorCallback onError = [this](const std::string& msg) {
-        ERROR_LOG<<"Oran7ScreenCaptureController_ERROR_LOG:"<<msg;
-        QMetaObject::invokeMethod(this, [this, e =QString::fromStdString(msg)]() {
-            emit errorOccurred(e);
-        }, Qt::QueuedConnection);
-    };
-    m_encoder->configure(cfg, onError);
-    m_encoder->start();
-
-    // 等编码器在编码线程内 avcodec_open2 完成（h264_mf 需要 MTA COM）
-    for (int i = 0; i < 300; ++i) {  // 最多等 3 秒
-        if (m_encoder->isOpened()) break;
-        if (!m_encoder->isRuning()) break;  // 编码线程已退出 = 失败
-        QThread::msleep(10);
-    }
-    if (!m_encoder->isOpened()) {
-        ERROR_LOG << "Video encoder failed to open (timeout or avcodec_open2 error)";
-        m_encoder->stop();
-        m_encoder.reset();
+    if (m_shuttingDown || recordingBusy() || m_pendingCapture || previewBusy())
+        return false;
+    const auto options = Oran7AppConfigManager::ins().snapshot().recording;
+    if (options.fps > m_capSettings.fps)
+    {
+        emit errorOccurred(QStringLiteral("录制帧率不能超过采集帧率，请先应用更高的采集帧率或降低录制帧率"));
         return false;
     }
-
-/** -----------------------------------------------
-* @brief AudioEncoder + AudioCapture
-* -------------------------------------------------
-*/
-    Oran7AudioEncoder::EncoderConfig acfg;
-    acfg.codecName = m_recordMode==RecordMode::WhipPush ? "opus" : "libfdk_aac";// FFmpeg 原生 opus（libopus 未编入时用这个）
-    acfg.sampleRate = 48000;
-    acfg.channels   = 2;
-    acfg.bitrateBps = 128000;
-
-    m_audioEncoder = std::make_shared<Oran7AudioEncoder>();
-    m_audioEncoder->configure(acfg, onError);
-    m_audioEncoder->start();
-
-    for (int i = 0; i < 300; ++i) {  // 最多等 3 秒
-        if (m_audioEncoder->isOpened()) break;
-        if (!m_audioEncoder->isRunning()) break;
-        QThread::msleep(10);
-    }
-
-    WASAPIAudioWorker::WASAPIConfig wcfg;
-    wcfg.sampleRate = 48000;
-    wcfg.channels   = 2;
-    wcfg.frameMs    = 10;
-
-    m_audioWorker = std::make_unique<WASAPIAudioWorker>();
-    m_audioWorker->start(wcfg);
-
-    // 音频桥接线程：WASAPI PCM → AudioEncoder
-    m_audioBridgeRunning.store(true);
-    m_audioBridge = std::thread([this]() {
-        while (m_audioBridgeRunning.load()) {
-            AVFrame* frame = nullptr;
-            if (m_audioWorker->getPcmFrame(&frame, 50)) {
-                m_audioEncoder->pushFrame(frame);
-            }
-        }
-    });
-
-/** -----------------------------------------------
-* @brief 消费端：Muxer → MP4  或  WhipPublisher → 推流
-* -------------------------------------------------
-*/
-    if (m_recordMode == RecordMode::WhipPush) {
-        // ============================================================
-        // WHIP/WebRTC 推流路径
-        // ============================================================
-        Oran7WhipPublisher::Config whipCfg;
-        whipCfg.serverUrl       = "http://127.0.0.1:8090";
-        whipCfg.roomId          = "demo";
-        whipCfg.publisherId     = "pub2";
-        whipCfg.stunUrl         = "stun:127.0.0.1:3478";
-        whipCfg.videoBitrateKbps = 5000;  // 720p30 5Mbps
-
-        // 告诉 grabLoop 把 1440p 帧下采样到 720p 再喂编码器
-        worker->setStreamTargetRes(1280, 720);
-
-        m_whipPublisher = std::make_shared<Oran7WhipPublisher>();
-        m_whipPublisher->setErrorCallback(onError);
-
-        if (!m_whipPublisher->open(whipCfg, m_encoder, m_audioEncoder)) {
-            ERROR_LOG << "WhipPublisher::open() failed";
-            m_whipPublisher.reset();
-            m_audioBridgeRunning.store(false);
-            if (m_audioBridge.joinable()) m_audioBridge.join();
-            m_encoder->stop();
-            m_encoder.reset();
-            if (m_audioEncoder) { m_audioEncoder->stop(); m_audioEncoder.reset(); }
-            m_audioWorker->stop();
-            m_audioWorker.reset();
-            return false;
-        }
-
-        // WHIP 成功后 → 通知信令服务器，web 端才能发现这个流
-        m_signaling = std::make_unique<Oran7SignalingClient>();
-        m_signaling->start("ws://127.0.0.1:8080", "user3", "demo");
-        // 注：login + join_room 是异步的，stream_published 会在
-        //     room_joined 回调里自动发出（或者直接发，服务器会忽略非房间内的消息）
-        // 这里用 notifyStreamPublished，SignalingClient 内部处理时序
-        m_signaling->notifyStreamPublished(m_whipPublisher->streamId());
-
-    } else {
-        // ============================================================
-        // MP4 文件录制路径
-        // ============================================================
-        m_muxer = std::make_shared<Oran7Mp4Muxer>();
-        m_muxer->setErrorCallback(onError);
-
-        m_muxer->open("C:/Users/funny/Videos/test.mp4",
-                      cfg.width, cfg.height,
-                      AVRational{1, cfg.fps},
-                      m_encoder,
-                      m_audioEncoder);
-    }
-
-    /*! @note grabLoop开闸,从pushFrame分支流出 */
-    worker->setEncoder(m_encoder);
-    worker->m_recordingEnabled.store(true);
-
-    emit recordingStarted();
-    return true;
+    if (m_previewState != Oran7PreviewState::Running || !m_feed)
+        return false;
+    const auto feed = m_feed;
+    m_recordingOutputPath.clear();
+    return m_recording->start(
+        [options, feed](const std::atomic_bool& cancelled, const Oran7RecordingCallbacks& callbacks)
+        { return Oran7RecordingBackend::run(options, feed, cancelled, callbacks); });
 }
-
 void Oran7ScreenCaptureController::stopRecording()
 {
-    auto* worker = static_cast<DdaGrabWorker*>(m_workerObj);
-    if (worker)
-        worker->m_recordingEnabled.store(false);
-    // 不调 unRefEncoder——grabLoop 可能还在录制分支内，shared_ptr 保活防崩
-    teardownEncoder();
-    emit recordingStopped();
+    m_recording->stop();
 }
-
 bool Oran7ScreenCaptureController::isRecording() const
 {
-    return m_encoder && m_encoder->isRuning();
+    return m_recording->state() == Oran7RecordingSession::Oran7RecordingState::Recording;
 }
-#endif
-
-void Oran7ScreenCaptureController::startWorkerIfPossible()
+QString Oran7ScreenCaptureController::recordingStateName() const
 {
-#ifdef _WIN32
-    if (!m_item /*|| !m_d3dqtDev*/) {
-        emit errorOccurred("startWorker: item missing.");
+    return QString::fromLatin1(
+        QMetaEnum::fromType<Oran7RecordingSession::Oran7RecordingState>().valueToKey(int(m_recording->state())));
+}
+QVariantMap Oran7ScreenCaptureController::recordingSettings() const
+{
+    return Oran7RecordingBackend::settings(Oran7AppConfigManager::ins().snapshot().recording);
+}
+QVariantMap Oran7ScreenCaptureController::applyRecordingSettings(const QVariantMap& values)
+{
+    if (m_shuttingDown || recordingBusy() || previewBusy())
+        return {{"ok", false}, {"msg", QStringLiteral("预览切换或录制忙碌期间不可修改参数")}};
+    auto& config = Oran7AppConfigManager::ins();
+    if (!config.isWritable())
+        return {{"ok", false}, {"msg", config.lastError()}};
+    const auto previous = config.snapshot();
+    auto saved = previous;
+    const auto error = Oran7RecordingBackend::apply(values, &saved.recording);
+    if (!error.isEmpty())
+        return {{"ok", false}, {"msg", error}};
+    if (saved.recording.fps > m_capSettings.fps)
+        return {{"ok", false}, {"msg", QStringLiteral("录制帧率不能超过已应用的采集帧率，请先提高并应用采集帧率")}};
+    config.updateConfig(saved);
+    if (!config.saveConfig())
+    {
+        const auto failure = config.lastError();
+        config.updateConfig(previous);
+        return {{"ok", false}, {"msg", failure}};
+    }
+    emit recordingSettingsChanged();
+    return {{"ok", true}, {"msg", QStringLiteral("录制参数已保存")}};
+}
+void Oran7ScreenCaptureController::setRecordMode(RecordMode mode)
+{
+    applyRecordingSettings({{"mode", int(mode)}});
+}
+Oran7ScreenCaptureController::RecordMode Oran7ScreenCaptureController::recordMode() const
+{
+    return RecordMode(Oran7AppConfigManager::ins().snapshot().recording.mode);
+}
+
+void Oran7ScreenCaptureController::schedulePreview()
+{
+    if (m_shuttingDown || m_driveScheduled)
+        return;
+    m_driveScheduled = true;
+    QTimer::singleShot(0, this,
+                       [this]
+                       {
+                           m_driveScheduled = false;
+                           drivePreview();
+                       });
+}
+void Oran7ScreenCaptureController::drivePreview()
+{
+    if (m_shuttingDown || m_thread)
+        return;
+    if (!m_previewRequested)
+    {
+        if (m_item)
+            m_item->renderBlackFrame();
+        const bool wasActive = m_previewState != Oran7PreviewState::Idle && m_previewState != Oran7PreviewState::Error;
+        setPreviewState(m_previewError.isEmpty() ? Oran7PreviewState::Idle : Oran7PreviewState::Error);
+        if (wasActive)
+            emit stopped();
         return;
     }
-    else
-        INFO_LOG<<"Suuccessed get d3d11Dev and renderVideoItem.";
-#endif
-
-    if (m_thread) return; // already running
-
-    this->m_thread = new QThread();
-#ifdef _WIN32
-    DdaGrabWorker* worker = new DdaGrabWorker(m_item, m_outputIndex, m_drawMouse, m_fps);
-#else
-    auto* worker = nullptr;
-#endif
-    //worker->bind_DdaGrab_d3dqtDev(m_d3dqtDev.Get());
-    worker->setDebugLog(m_debugLog.load(std::memory_order_acquire));
-    m_workerObj = worker;
-    worker->moveToThread(m_thread);
-
-    connect(m_thread, &QThread::started, worker, &DdaGrabWorker::start);
-    connect(this, &Oran7ScreenCaptureController::stopped, worker, &DdaGrabWorker::stop);
-    connect(worker, &DdaGrabWorker::started, this, &Oran7ScreenCaptureController::started);//只做信号发送给外层，不做启动逻辑
-    connect(worker, &DdaGrabWorker::stopped,  this, [this]() {
-        // worker 自然结束时也清理
-        teardownWorker();
-        emit stopped();
-    });
-    connect(worker, &DdaGrabWorker::errorOccurred, this, [this](const QString& e){
-        emit errorOccurred(e);
-        stop();
-    });
-
-    connect(worker, &DdaGrabWorker::sharedHandlesReady,
-            this, &Oran7ScreenCaptureController::onSharedHandlesReady,
-            Qt::QueuedConnection);
-    connect(worker, &DdaGrabWorker::newFrameReady,
-            this, &Oran7ScreenCaptureController::onNewFrameIndex,
-            Qt::DirectConnection);  // 串行化：避免 GUI 线程批处理两个帧导致单槽覆盖
-
-    connect(m_thread, &QThread::finished, worker, &QObject::deleteLater);
-    connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
-
-    m_thread->start();
+    if (recordingBusy())
+    {
+        setPreviewState(Oran7PreviewState::Stopping);
+        return;
+    }
+    if (m_retryDelay)
+    {
+        setPreviewState(Oran7PreviewState::Recovering);
+        if (!m_recoveryTimer.isActive())
+            m_recoveryTimer.start();
+        return;
+    }
+    if (!m_item)
+    {
+        failCapture(QStringLiteral("预览渲染项已释放"));
+        return;
+    }
+    auto target = m_pendingCapture ? m_pendingCapture->target : m_restoreTarget.value_or(committedTarget());
+    if (!refreshCaptureSource(target))
+    {
+        recoverCapture(QStringLiteral("当前没有可用的显示输出，请连接显示器后重连预览"));
+        return;
+    }
+    startWorker(std::move(target));
 }
-
+void Oran7ScreenCaptureController::startWorker(Oran7CaptureTarget target)
+{
+    m_activeTarget = std::move(target);
+    m_activeRequest = m_pendingCapture ? m_pendingCapture->id : 0;
+    m_thread = std::make_unique<QThread>();
+    auto* worker = new Oran7DesktopCaptureWorker(m_item->frameSubmitter(), m_activeTarget.settings.outputIndex,
+                                                 m_activeTarget.settings.drawMouse, m_activeTarget.settings.fps);
+    worker->setDebugLog(m_activeTarget.debugLog);
+    m_control = worker->control();
+    m_feed = worker->recordingFeed();
+    worker->moveToThread(m_thread.get());
+    const quint64 gen = ++m_workerGen;
+    auto* thread = m_thread.get();
+    connect(thread, &QThread::started, worker, &Oran7DesktopCaptureWorker::start);
+    // start 是阻塞抓取循环；不能把取消请求排到该循环后面的事件队列。
+    // worker 退出/错误均让线程结束，GUI 只在 finished 后释放其句柄并驱动下一轮。
+    connect(worker, &Oran7DesktopCaptureWorker::stopped, thread, &QThread::quit, Qt::DirectConnection);
+    connect(worker, &Oran7DesktopCaptureWorker::errorOccurred, thread, &QThread::quit, Qt::DirectConnection);
+    connect(worker, &Oran7DesktopCaptureWorker::firstFrameReady, this, [this, gen] { confirmPreview(gen); });
+    connect(worker, &Oran7DesktopCaptureWorker::captureInvalidated, this,
+            [this, gen](const QString& reason)
+            {
+                if (gen == m_workerGen)
+                    recoverCapture(reason);
+            });
+    connect(worker, &Oran7DesktopCaptureWorker::errorOccurred, this,
+            [this, gen](const QString& reason)
+            {
+                if (gen != m_workerGen)
+                    return;
+                if (m_recoveryAttempts > 0)
+                    recoverCapture(reason);
+                else if (m_pendingCapture)
+                    rollbackCaptureSettings(reason);
+                else
+                    failCapture(reason);
+            });
+    connect(worker, &Oran7DesktopCaptureWorker::stopped, this,
+            [this, gen]
+            {
+                if (gen == m_workerGen && m_previewRequested)
+                    recoverCapture(QStringLiteral("抓屏预览意外结束"));
+            });
+    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(
+        thread, &QThread::finished, this,
+        [this, thread]
+        {
+            if (m_thread.get() != thread)
+                return;
+            m_startTimer.stop();
+            reapWorker();
+        },
+        Qt::QueuedConnection);
+    m_startTimer.start();
+    thread->start();
+    setPreviewState(Oran7PreviewState::Starting);
+}
+void Oran7ScreenCaptureController::reapWorker()
+{
+    if (m_shuttingDown || !m_thread)
+        return;
+    // finished 发出后，延迟删除/TLS 清理仍可能正在执行。
+    // wait(0) 是零超时探测，绝不等待；尚未结束则下个事件循环再检查。
+    if (!m_thread->wait(0))
+    {
+        m_reapTimer.start();
+        return;
+    }
+    m_thread.reset();
+    m_control.reset();
+    m_feed.reset();
+    schedulePreview();
+}
 void Oran7ScreenCaptureController::teardownWorker()
 {
-    if (!m_thread) return;
-
-    // 先请求 worker stop
-    DdaGrabWorker *worker  = static_cast<DdaGrabWorker*>(m_workerObj);
-    worker->stop();
-
+    ++m_workerGen; // 停止后旧 started/error/首帧均失效；finished 另按线程身份回收。
+    m_startTimer.stop();
+    if (!m_thread)
+        return;
+    if (m_feed)
+        m_feed->close();
+    if (m_control)
+        m_control->stopRequested.store(true);
     m_thread->quit();
-    m_thread->wait();
-
-    m_thread->deleteLater();
-
-    m_thread = nullptr;
-    m_workerObj = nullptr;
+    setPreviewState(Oran7PreviewState::Stopping);
 }
-
-void Oran7ScreenCaptureController::teardownEncoder()
+void Oran7ScreenCaptureController::confirmPreview(quint64 generation)
 {
-    // 1. 停止音频桥接线程
-    m_audioBridgeRunning.store(false);
-    if (m_audioBridge.joinable())
-        m_audioBridge.join();
-
-    // 2. 停止音频采集（不再产 PCM）
-    if (m_audioWorker) {
-        m_audioWorker->stop();
-        m_audioWorker.reset();
-    }
-
-    // 3. flush 音频编码器缓冲
-    if (m_audioEncoder) {
-        m_audioEncoder->stop();
-    }
-
-    // 4. flush 视频编码器缓冲
-    if (m_encoder) {
-        m_encoder->stop();
-    }
-
-    // 5. 关消费端（Muxer 或 WhipPublisher）+ 信令
-    if (m_signaling) {
-        m_signaling->stop();
-        m_signaling.reset();
-    }
-    if (m_muxer) {
-        m_muxer->close();
-        m_muxer.reset();
-    }
-    if (m_whipPublisher) {
-        m_whipPublisher->close();
-        m_whipPublisher.reset();
-    }
-
-    // 6. 销毁编码器
-    m_audioEncoder.reset();
-    m_encoder.reset();
-}
-
-/**
- * ======================================================
- * @note Windows桌面画面DDa抓取器 - DdaGrabWorker
- * ======================================================
- */
-
-void DdaGrabWorker::start()
-{
-    if (m_running.exchange(true)) return;
-
-    const QString err = initGraph();
-    INFO_LOG<<err;
-    if (!err.isEmpty()) {
-        m_running.store(false);
-        emit errorOccurred(err);
+    if (generation != m_workerGen || !m_previewRequested || m_previewState != Oran7PreviewState::Starting)
+        return;
+    m_startTimer.stop();
+    QString error;
+    const bool saved = saveCaptureSettings(m_activeTarget, &error);
+    if (generation != m_workerGen)
+        return;
+    if (!saved)
+    {
+        if (m_pendingCapture)
+            rollbackCaptureSettings(error);
+        else
+            failCapture(error);
         return;
     }
-    else
-        INFO_LOG<<"Successed ScreenCapture initGraph.";
-
-    emit started();
-    grabLoop();
-    cleanup();
-    emit stopped();
-}
-
-// 枚举所有 DXGI adapter，返回第一个输出 attached 到桌面的 adapter 索引。
-// 笔记本双显卡场景：默认 adapter 可能是独显，而显示器接在核显上，
-// 用独显设备做 DDA 会返回 DXGI_ERROR_UNSUPPORTED；必须选显示器实际所在的 GPU。
-int DdaGrabWorker::findDesktopAdapterIndex()
-{
-    ComPtr<IDXGIFactory1> factory;
-    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))
-        return -1;
-
-    for (UINT i = 0; i < 8; ++i) {
-        ComPtr<IDXGIAdapter1> adapter;
-        if (FAILED(factory->EnumAdapters1(i, &adapter)))
-            break;
-
-        DXGI_ADAPTER_DESC1 desc{};
-        if (FAILED(adapter->GetDesc1(&desc)))
-            continue;
-
-        // 软件适配器（Microsoft Basic Render Driver）跳过
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-            continue;
-
-        // 检查该 adapter 是否有输出 attached 到桌面
-        bool hasDesktop = false;
-        for (UINT o = 0; o < 16; ++o) {
-            ComPtr<IDXGIOutput> out;
-            if (FAILED(adapter->EnumOutputs(o, &out)))
-                break;
-            DXGI_OUTPUT_DESC odesc{};
-            if (SUCCEEDED(out->GetDesc(&odesc)) && odesc.AttachedToDesktop) {
-                hasDesktop = true;
-                break;
-            }
-        }
-
-        if (hasDesktop) {
-            INFO_LOG << "[CaptureDiag] selected adapter[" << i << "] for DDA: "
-                     << QString::fromWCharArray(desc.Description);
-            return (int)i;
-        }
-    }
-    return -1; // 未找到，回退到默认
-}
-
-QString DdaGrabWorker::initGraph()
-{
-    int ret  = 0;
-    if (!m_item) return "D3D11VideoItem is null.";
-
-    // 诊断：枚举 GPU/显示器（不改变设备创建方式）。
-    // 注意：显式传 adapter 索引给 av_hwdevice_ctx_create 会用 D3D_DRIVER_TYPE_UNKNOWN
-    // 创建设备，导致 DuplicateOutput1 返回 E_INVALIDARG；传 nullptr 让 FFmpeg 自动选
-    // 主 GPU（D3D_DRIVER_TYPE_HARDWARE），行为正确。故这里仍传 nullptr。
-    const int adapterIdx = findDesktopAdapterIndex();
-    INFO_LOG << "[CaptureDiag] findDesktopAdapterIndex=" << adapterIdx
-             << " (仅诊断，不影响设备创建)";
-
-    ret = av_hwdevice_ctx_create(&m_hwdev, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0);
-    if (ret < 0) return "av_hwdevice_ctx_create(D3D11VA) failed: " + ffErrStr(ret);
-
-    //m_hwdev = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D11VA);
-    if (!m_hwdev) return "av_hwdevice_ctx_alloc failed.";
-
-    // 从 hwdev 取出 capture device 指针（后续创建共享纹理、CopyResource 都用它）
-    AVHWDeviceContext* hw = reinterpret_cast<AVHWDeviceContext*>(m_hwdev->data);
-    AVD3D11VADeviceContext* d3d11 = reinterpret_cast<AVD3D11VADeviceContext*>(hw->hwctx);
-
-    // ---- 诊断：打印抓屏用 D3D11 设备对应的 GPU 与可用显示器输出 ----
-    {
-        IDXGIDevice* dxgiDev = nullptr;
-        if (d3d11->device && SUCCEEDED(d3d11->device->QueryInterface(IID_IDXGIDevice, (void**)&dxgiDev))) {
-            IDXGIAdapter* adapter = nullptr;
-            if (SUCCEEDED(dxgiDev->GetAdapter(&adapter))) {
-                DXGI_ADAPTER_DESC adesc{};
-                if (SUCCEEDED(adapter->GetDesc(&adesc)))
-                    INFO_LOG << "[CaptureDiag] D3D11 capture device GPU: "
-                             << QString::fromWCharArray(adesc.Description)
-                             << " (Vendor=0x" << QString::number(adesc.VendorId, 16)
-                             << " Device=0x" << QString::number(adesc.DeviceId, 16) << ")";
-                for (UINT i = 0; i < 16; ++i) {
-                    IDXGIOutput* out = nullptr;
-                    if (FAILED(adapter->EnumOutputs(i, &out))) break;
-                    DXGI_OUTPUT_DESC odesc{};
-                    if (SUCCEEDED(out->GetDesc(&odesc)))
-                        INFO_LOG << "[CaptureDiag]   output[" << i << "] attached="
-                                 << (odesc.AttachedToDesktop ? "true" : "false")
-                                 << " device=" << QString::fromWCharArray(odesc.DeviceName);
-                    out->Release();
-                }
-                adapter->Release();
-            }
-            dxgiDev->Release();
-        } else {
-            WARNING_LOG << "[CaptureDiag] Failed to query IDXGIDevice from capture hw ctx";
-        }
-    }
-
-    m_capDev = d3d11->device;
-    if (!m_capDev) return "capture d3d11 device is null";
-    //d3d11->device = m_capDev.Get();
-    d3d11->device->AddRef();
-
-    // ret  = av_hwdevice_ctx_init(m_hwdev);
-    // if(ret<0) return "av_hwdevice_ctx_init Failed.";
-
-    m_capDev->GetImmediateContext(&m_capCtx);
-    m_capDev->QueryInterface(IID_ID3D11VideoDevice, (void**)&m_capVideoDev);
-    m_capCtx->QueryInterface(IID_ID3D11VideoContext, (void**)&m_capVideoCtx);
-
-    // 2) Build filter graph: ddagrab -> buffersink（去掉 fps filter，源头直接设置帧率）
-    m_graph = avfilter_graph_alloc();
-    if (!m_graph) return "avfilter_graph_alloc failed.";
-
-    const AVFilter* f_src  = avfilter_get_by_name("ddagrab");
-    const AVFilter* f_sink = avfilter_get_by_name("buffersink");
-    if (!f_src || !f_sink) return "ddagrab/buffersink filter not found (check FFmpeg build).";
-
-    // ddagrab options: 显式指定 framerate，不依赖 fps filter 补帧
-    // output_fmt=bgra：DDA 输出 8bit BGRA（B8G8R8A8），与后续 BGRA→NV12 处理一致。
-    // allow_fallback=1：请求格式不可用时降级到默认 8bit，避免直接配置失败。
-    char srcArgs[256];
-    snprintf(srcArgs, sizeof(srcArgs),
-             "output_idx=%d:draw_mouse=%d:framerate=%d:output_fmt=bgra:allow_fallback=1",
-             m_outputIndex, m_drawMouse ? 1 : 0,
-             m_fps > 0 ? m_fps : 60);
-    INFO_LOG << "[CaptureDiag] ddagrab args: " << srcArgs;
-
-    ret = avfilter_graph_create_filter(&m_src, f_src, "src", srcArgs, nullptr, m_graph);
-    if (ret < 0) return "create ddagrab failed: " + ffErrStr(ret);
-    INFO_LOG << "[CaptureDiag] ddagrab filter created, output_idx=" << m_outputIndex;
-
-    //m_src绑定 hwdevice
-    m_src->hw_device_ctx = av_buffer_ref(m_hwdev);
-
-    ret = avfilter_graph_create_filter(&m_sink, f_sink, "sink", nullptr, nullptr, m_graph);
-    if (ret < 0) return "create buffersink failed: " + ffErrStr(ret);
-    //m_sink 绑定 hwdevice
-    m_sink->hw_device_ctx = av_buffer_ref(m_hwdev);
-
-    // 直接 src -> sink，不用 fps filter 补帧
-    ret = avfilter_link(m_src, 0, m_sink, 0);
-    if (ret < 0) return "link src->sink failed: " + ffErrStr(ret);
-
-    // 诊断：配置前打开 FFmpeg 详细日志，便于捕获 ddagrab 内部失败原因
-    {
-        const int oldLevel = av_log_get_level();
-        av_log_set_level(AV_LOG_DEBUG);
-        INFO_LOG << "[CaptureDiag] --- avfilter_graph_config start (output_idx="
-                 << m_outputIndex << ") ---";
-        ret = avfilter_graph_config(m_graph, nullptr);
-        av_log_set_level(oldLevel);
-        if (ret < 0) {
-            WARNING_LOG << "[CaptureDiag] --- avfilter_graph_config FAILED ret="
-                        << ret << " ---";
-            return "avfilter_graph_config failed: " + ffErrStr(ret);
-        }
-        INFO_LOG << "[CaptureDiag] --- avfilter_graph_config OK ---";
-    }
-
-    return {};
-}
-
-bool DdaGrabWorker::ensureSharedPoolRGBA(int w, int h)
-{
-    if (m_poolW == w && m_poolH == h && m_sharedTex[0]) return true;
-
-    // 释放旧的
-    for (int i=0;i<kPool;i++) {
-        m_sharedHandle[i] = nullptr;
-        m_sharedTex[i].Reset();
-    }
-
-    m_poolW = w; m_poolH = h;
-
-    D3D11_TEXTURE2D_DESC desc{};
-    desc.Width = w;
-    desc.Height = h;
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;//<--
-    desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-    desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
-
-    for (int i=0;i<kPool;i++) {
-        HRESULT hr = m_capDev->CreateTexture2D(&desc, nullptr, &m_sharedTex[i]);
-        if (FAILED(hr) || !m_sharedTex[i]) return false;
-
-        ComPtr<IDXGIResource> res;
-        hr = m_sharedTex[i].As(&res);
-        if (FAILED(hr) || !res) return false;
-
-        HANDLE hShared = nullptr;
-        hr = res->GetSharedHandle(&hShared);
-        if (FAILED(hr) || !hShared) return false;
-
-        m_sharedHandle[i] = hShared;
-    }
-
-    QVector<quintptr> hs;
-    for (int i=0;i<kPool;i++) hs.push_back((quintptr)m_sharedHandle[i]);
-    hs.reserve(kPool);
-    emit sharedHandlesReady(m_poolW, m_poolH, hs);
-
-    return true;
-}
-
-void DdaGrabWorker::grabLoop()
-{
-    int idx = 0;
-    // pts 检测：确认源头是否真 60fps
-    static int64_t lastPts = AV_NOPTS_VALUE;
-    static int rawCount = 0;
-    static qint64 rawT0 = QDateTime::currentMSecsSinceEpoch();
-
-    while (m_running.load()) {
-        //主动请求上游产一帧（驱动 ddagrab）
-        int r = avfilter_graph_request_oldest(m_graph);
-        //INFO_LOG << "After avfilter_graph_request_oldest, ret=" << r;
-        //INFO_LOG<<"avfilter_graph_request_oldest of ret:"<<r;
-        if (r < 0 && r != AVERROR(EAGAIN))
-        {
-            if (m_running.load())
-                emit errorOccurred("request_oldest failed: " + ffErrStr(r));
-            return;
-        }
-
-        // 从 sink 非阻塞取出“已经到达”的帧（可能一次取多帧）
-        AVFrame* f = av_frame_alloc();
-        if (!f) {
-            emit errorOccurred("av_frame_alloc failed");
-            return;
-        }
-        while (m_running.load())
-        {
-            av_frame_unref(f);//unref old frame
-            if (!f) { emit errorOccurred("av_frame_alloc failed"); return; }
-
-            int ret = av_buffersink_get_frame_flags(m_sink, f, AV_BUFFERSINK_FLAG_NO_REQUEST);
-            //INFO_LOG<<"RUN av_buffersink_get_frame_flags of RET:"<<ret;
-            if (ret == AVERROR(EAGAIN)) {
-                av_frame_free(&f);
-                //INFO_LOG<<"av_buffersink_get_frame_flags(m_sink, f, AV_BUFFERSINK_FLAG_NO_REQUEST) of RET:EAGAIN.";
-                break; // 本轮没有帧可取，回到上面继续 request
-            }
-            if (ret < 0)
-            {
-                av_frame_free(&f);
-                if (m_running.load())
-                    emit errorOccurred("get_frame failed: " + ffErrStr(ret));
-                return;
-            }
-
-            // === Copy/VP 到 sharedTex===
-            auto* srcTex = reinterpret_cast<ID3D11Texture2D*>(f->data[0]);
-            if (srcTex)
-            {
-                //------- pts 检测：确认源头真帧率 -------//
-                if (m_debugLog.load(std::memory_order_relaxed) && false) {
-                    rawCount++;
-                    if (f->pts == lastPts && lastPts != AV_NOPTS_VALUE) {
-                        INFO_LOG << "DUP frame pts=" << f->pts << " rawCount=" << rawCount;
-                    }
-                    lastPts = f->pts;
-
-                    auto rawNow = QDateTime::currentMSecsSinceEpoch();
-                    if (rawNow - rawT0 >= 1000) {
-                        INFO_LOG << "sink raw fps=" << (rawCount * 1000 / (rawNow - rawT0))
-                                 << " pts=" << f->pts << " rawCount=" << rawCount <<",persecond.";
-                        rawCount = 0;
-                        rawT0 = rawNow;
-                    }
-                }
-                //------------------------------------------//
-
-                D3D11_TEXTURE2D_DESC sdesc{};
-                srcTex->GetDesc(&sdesc);
-                int w = (int)sdesc.Width;
-                int h = (int)sdesc.Height;
-
-                if (!ensureSharedPoolRGBA(w, h)) {
-                    av_frame_free(&f);
-                    WARNING_LOG<<"ensureSharedPoolRGBA failed";
-                    emit errorOccurred("ensureSharedPoolRGBA failed");
-                    return;
-                }
-
-                // 首帧/尺寸变化时同步可见尺寸（f->width/height），非 D3D 分配尺寸
-                int visW = f->width;
-                int visH = f->height;
-                if (m_grabW.load(std::memory_order_relaxed) != visW ||
-                    m_grabH.load(std::memory_order_relaxed) != visH) {
-                    m_grabW.store(visW, std::memory_order_release);
-                    m_grabH.store(visH, std::memory_order_release);
-                }
-
-                idx = (idx + 1) % kPool;
-                int slice = 0;
-                if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010)
-                    slice = (int)(intptr_t)f->data[1];
-
-                if (!blitToShared(idx, srcTex, sdesc, slice)) {
-                    av_frame_free(&f);
-                    WARNING_LOG<<"blitToShared failed";
-                    emit errorOccurred("blitToShared failed");
-                    return;
-                }
-                //INFO_LOG<<"newFrameReady -idx:"<<idx;
-                emit newFrameReady(idx);
-
-                // ---- 录制/推流路径 ----
-                bool recEnabled = m_recordingEnabled.load(std::memory_order_acquire);
-                if (recEnabled) {
-                    auto nowUs = std::chrono::duration_cast<std::chrono::microseconds>(
-                        std::chrono::steady_clock::now().time_since_epoch()).count();
-                    if (!m_lastRecEnabled) {
-                        m_recStartUs = nowUs;
-                        m_lastPts = AV_NOPTS_VALUE;
-                        m_lastRecEnabled = true;
-                    }
-                    int visW = f->width;
-                    int visH = f->height;
-                    int targetW = m_streamW.load(std::memory_order_acquire);
-                    int targetH = m_streamH.load(std::memory_order_acquire);
-                    int encW = (targetW > 0) ? targetW : visW;
-                    int encH = (targetH > 0) ? targetH : visH;
-
-                    // 用 av_hwframe_transfer_data 下载 D3D11 帧（正确处理 data[1] 子资源）
-                    // 一趟 BGRA → NV12 到编码器分辨率
-                    AVFrame* encFrame = downloadD3d11AndConvert(f, encW, encH);
-                    if (encFrame && m_encoder && m_encoder->isRuning()) {
-                        int64_t pts = (nowUs - m_recStartUs) * 90'000 / 1'000'000;
-                        if (pts < 0) pts = 0;
-                        if (m_lastPts != AV_NOPTS_VALUE && pts <= m_lastPts)
-                            pts = m_lastPts + 1;
-                        m_lastPts = pts;
-                        encFrame->pts = pts;
-                        if (pts == 1)
-                            encFrame->pict_type = AV_PICTURE_TYPE_I;
-
-                        // ---- 诊断：保存前 120 帧 NV12 到文件 ----
-                        {
-                            static FILE* fpNv12 = nullptr;
-                            static int nv12Cnt = 0;
-                            if (!fpNv12) {
-                                fpNv12 = fopen("C:/temp/pre_encode_1920x1080.nv12","wb");
-                            }
-                            if (fpNv12 && nv12Cnt < 120) {
-                                for (int y = 0; y < encFrame->height; ++y)
-                                    fwrite(encFrame->data[0] + y * encFrame->linesize[0],
-                                           1, encFrame->width, fpNv12);
-                                for (int y = 0; y < encFrame->height / 2; ++y)
-                                    fwrite(encFrame->data[1] + y * encFrame->linesize[1],
-                                           1, encFrame->width, fpNv12);
-                                nv12Cnt++;
-                                if (nv12Cnt == 120) {
-                                    fclose(fpNv12); fpNv12 = nullptr;
-                                    INFO_LOG << "NV12 dump done: C:/temp/pre_encode_1920x1080.nv12";
-                                }
-                            }
-                        }
-                        // ----
-
-                        m_encoder->pushFrame(encFrame);
-                    } else {
-                        av_frame_free(&encFrame);
-                    }
-                }
-            }
-        }
-        av_frame_free(&f);
-    }
-    INFO_LOG<<"Oran7ScreenCapture grabLopp thread leave.";
-}
-
-AVFrame* DdaGrabWorker::downloadD3d11AndConvert(const AVFrame* hwFrame,
-                                                 int dstW, int dstH)
-{
-    // hwFrame 来自 ddagrab → D3D11 硬件帧
-    // av_hwframe_transfer_data 正确处理 data[1] 子资源索引
-    if (!hwFrame || hwFrame->format != AV_PIX_FMT_D3D11) {
-        WARNING_LOG << "downloadD3d11: invalid hwFrame";
-        return nullptr;
-    }
-
-    AVFrame* bgra = av_frame_alloc();
-    if (!bgra) return nullptr;
-
-    int ret = av_hwframe_transfer_data(bgra, hwFrame, 0);
-    if (ret < 0) {
-        WARNING_LOG << "av_hwframe_transfer_data failed:" << ret;
-        av_frame_free(&bgra);
-        return nullptr;
-    }
-    av_frame_copy_props(bgra, hwFrame);
-
-    // 校验下载后的软件像素格式；ddagrab output_fmt=bgra + allow_fallback
-    // 正常情况下是 BGRA，个别 GPU/驱动可能降级为其他 8bit 格式，这里按实际格式转换
-    const AVPixelFormat srcFmt = AVPixelFormat(bgra->format);
-    if (srcFmt != AV_PIX_FMT_BGRA) {
-        const char* name = av_get_pix_fmt_name(srcFmt);
-        WARNING_LOG << "downloadD3d11: downloaded format:" << (name ? name : "?")
-                    << " (expected BGRA), using it directly";
-    }
-
-    int srcW = bgra->width;
-    int srcH = bgra->height;
-    int outW = (dstW > 0) ? dstW : srcW;
-    int outH = (dstH > 0) ? dstH : srcH;
-
-    static SwsContext* sws = nullptr;
-    static int sW, sH, dW, dH;
-    static AVPixelFormat sFmt = AV_PIX_FMT_NONE;
-    if (!sws || sW!=srcW || sH!=srcH || dW!=outW || dH!=outH || sFmt != srcFmt) {
-        if (sws) sws_freeContext(sws);
-        sws = sws_getContext(srcW, srcH, srcFmt,
-                             outW, outH, AV_PIX_FMT_NV12,
-                             SWS_BICUBIC, nullptr, nullptr, nullptr);
-        sW=srcW; sH=srcH; dW=outW; dH=outH;
-        sFmt = srcFmt;
-    }
-    if (!sws) { av_frame_free(&bgra); return nullptr; }
-
-    AVFrame* dst = av_frame_alloc();
-    dst->format = AV_PIX_FMT_NV12;
-    dst->width  = outW;
-    dst->height = outH;
-    if (av_frame_get_buffer(dst, 32) < 0) {
-        av_frame_free(&dst); av_frame_free(&bgra); return nullptr;
-    }
-    int rows = sws_scale(sws, bgra->data, bgra->linesize, 0, srcH,
-                          dst->data, dst->linesize);
-    av_frame_free(&bgra);
-    if (rows != outH) {
-        WARNING_LOG << "BGRA→NV12 incomplete:" << rows << "/" << outH;
-        av_frame_free(&dst);
-        return nullptr;
-    }
-    dst->pts = hwFrame->pts;
-    return dst;
-}
-
-void DdaGrabWorker::cleanup()
-{
-    m_vp.Reset();
-    m_vpEnum.Reset();
-    m_capVideoCtx.Reset();
-    m_capVideoDev.Reset();
-    m_capCtx.Reset();
-    m_capDev.Reset();
-
-    if (m_graph) avfilter_graph_free(&m_graph);
-    m_graph = nullptr;
-    m_src = nullptr;
-    m_sink = nullptr;
-
-    if (m_hwdev) av_buffer_unref(&m_hwdev);
-    m_hwdev = nullptr;
-}
-
-/*! @note Tools function*/
-
-bool DdaGrabWorker::ensureVideoProcessor(int w, int h)
-{
-    if (!m_capVideoDev || !m_capVideoCtx) return false;
-
-    if (m_vp && m_vpEnum && m_vpSize == QSize(w, h))
-        return true;
-
-    m_vp.Reset();
-    m_vpEnum.Reset();
-    m_vpSize = QSize(w, h);
-
-    D3D11_VIDEO_PROCESSOR_CONTENT_DESC c{};
-    c.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
-    c.InputWidth  = (UINT)w;
-    c.InputHeight = (UINT)h;
-    c.OutputWidth  = (UINT)w;
-    c.OutputHeight = (UINT)h;
-    c.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
-
-    HRESULT hr = m_capVideoDev->CreateVideoProcessorEnumerator(&c, &m_vpEnum);
-    if (FAILED(hr) || !m_vpEnum) return false;
-
-    hr = m_capVideoDev->CreateVideoProcessor(m_vpEnum.Get(), 0, &m_vp);
-    return SUCCEEDED(hr) && m_vp;
-}
-
-bool DdaGrabWorker::vpNv12ToRgbaShared(int idx,
-                                       ID3D11Texture2D* srcTex,
-                                       int w, int h,
-                                       int slice)
-{
-    if (!srcTex) return false;
-    if (idx < 0 || idx >= kPool) return false;
-    if (!m_sharedTex[idx]) return false;
-
-    if (!ensureVideoProcessor(w, h)) return false;
-    if (!m_vpEnum || !m_vp) return false;
-
-    // 1) Input view: srcTex (NV12/P010), may be array texture; slice indicates which slice
-    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inDesc{};
-    inDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
-    inDesc.Texture2D.ArraySlice = (UINT)slice;
-
-    ComPtr<ID3D11VideoProcessorInputView> inView;
-    HRESULT hr = m_capVideoDev->CreateVideoProcessorInputView(
-        srcTex, m_vpEnum.Get(), &inDesc, &inView);
-    if (FAILED(hr) || !inView) return false;
-
-    // 2) Output view: sharedTex[idx] (RGBA8)
-    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outDesc{};
-    outDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
-    outDesc.Texture2D.MipSlice = 0;
-
-    ComPtr<ID3D11VideoProcessorOutputView> outView;
-    hr = m_capVideoDev->CreateVideoProcessorOutputView(
-        m_sharedTex[idx].Get(), m_vpEnum.Get(), &outDesc, &outView);
-    if (FAILED(hr) || !outView) return false;
-
-    RECT srcRect{0, 0, w, h};
-    RECT dstRect{0, 0, w, h};
-
-    m_capVideoCtx->VideoProcessorSetStreamSourceRect(m_vp.Get(), 0, TRUE, &srcRect);
-    m_capVideoCtx->VideoProcessorSetStreamDestRect(m_vp.Get(), 0, TRUE, &dstRect);
-
-    // 可选：色彩空间/范围设置（先不碰，默认通常可用）
-    // m_capVideoCtx->VideoProcessorSetOutputColorSpace1(...)
-
-    D3D11_VIDEO_PROCESSOR_STREAM stream{};
-    stream.Enable = TRUE;
-    stream.pInputSurface = inView.Get();
-
-    hr = m_capVideoCtx->VideoProcessorBlt(m_vp.Get(), outView.Get(), 0, 1, &stream);
-    return SUCCEEDED(hr);
-}
-
-bool DdaGrabWorker::blitToShared(int idx,
-                                 ID3D11Texture2D* srcTex,
-                                 const D3D11_TEXTURE2D_DESC& sdesc,
-                                 int slice)
-{
-    if (!srcTex){
-        WARNING_LOG<<"blitToShared srcTex is nullptr.";
-        return false;
-    }
-    if (idx < 0 || idx >= kPool) {
-        WARNING_LOG<<"blitToShared idx is ERROR,idx:"<<idx;
-        return false;
-    }
-    if (!m_capCtx) {
-        WARNING_LOG<<"blitToShared m_capCtx is nullptr.";
-        return false;
-    }
-    if (!m_sharedTex[idx]) {
-        WARNING_LOG<<"blitToShared m_sharedTex[idx] is nullptr, idx:"<<idx;
-        return false;
-    }
-
-    //BGRA -> RGBA
-    // if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-    //     sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
-    // {
-    //     return blitBgraToRgbaShared(idx, srcTex, (int)sdesc.Width, (int)sdesc.Height);
-    // }
-
-    //BGRA -> BGRA  --- NOW
-    if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-        sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
-    {
-        m_capCtx->CopyResource(m_sharedTex[idx].Get(), srcTex);
-        return true;
-    }
-
-    //BGRA -> NV12
-    if (sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-        sdesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
-    {
-        return vpBgraToNv12Shared(idx,srcTex,(int)sdesc.Width,(int)sdesc.Height,slice);
-    }
-
-    //RGBA -> RGBA: 直接拷贝
-    if (sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
-        sdesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)
-    {
-        m_capCtx->CopyResource(m_sharedTex[idx].Get(), srcTex);
-        return true;
-    }
-
-    //NV12/P010 -> RGBA: 用 VideoProcessor
-    if (sdesc.Format == DXGI_FORMAT_NV12 || sdesc.Format == DXGI_FORMAT_P010)
-    {
-        return vpNv12ToRgbaShared(idx, srcTex, (int)sdesc.Width, (int)sdesc.Height, slice);
-    }
-
-    WARNING_LOG<<"blitToShared Other formt not support:"<<dxgiFormatName(sdesc.Format);
-    return false;
-}
-
-
-bool DdaGrabWorker::ensureTmpBgra(int w, int h)
-{
-    if (m_tmpBgra && m_tmpBgraSize == QSize(w,h)) return true;
-
-    m_tmpBgra.Reset();
-    m_tmpBgraSize = QSize(w,h);
-
-    D3D11_TEXTURE2D_DESC d{};
-    d.Width = w;
-    d.Height = h;
-    d.MipLevels = 1;
-    d.ArraySize = 1;
-    d.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    d.SampleDesc.Count = 1;
-    d.Usage = D3D11_USAGE_DEFAULT;
-    d.BindFlags = D3D11_BIND_SHADER_RESOURCE;//SRV
-    HRESULT hr = m_capDev->CreateTexture2D(&d, nullptr, &m_tmpBgra);
-    return SUCCEEDED(hr) && m_tmpBgra;
-}
-
-bool DdaGrabWorker::ensureSwizzlePipeline(QString* err)
-{
-    if (m_vs && m_psBgraToRgba && m_sampler && m_rs && m_dss && m_blendOff)
-        return true;
-
-    if (!m_capDev) { if (err) *err = "capture device is null"; return false; }
-
-    QByteArray vsSrc, psSrc;
-    QString e;
-
-    if (!readTextResource(":/shaders/bgra2rgba_vs.hlsl", vsSrc, &e)) {
-        if (err) *err = e; return false;
-    }
-    if (!readTextResource(":/shaders/bgra2rgba_ps.hlsl", psSrc, &e)) {
-        if (err) *err = e; return false;
-    }
-
-    ComPtr<ID3DBlob> vsBlob, psBlob;
-    if (!compileHlslFromMemory(vsSrc, "main", "vs_5_0", vsBlob.GetAddressOf(), &e)) {
-        if (err) *err = "Compile VS failed: " + e; return false;
-    }
-    if (!compileHlslFromMemory(psSrc, "main", "ps_5_0", psBlob.GetAddressOf(), &e)) {
-        if (err) *err = "Compile PS failed: " + e; return false;
-    }
-
-    HRESULT hr = m_capDev->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &m_vs);
-    if (FAILED(hr)) { if (err) *err = "CreateVertexShader failed"; return false; }
-
-    hr = m_capDev->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &m_psBgraToRgba);
-    if (FAILED(hr)) { if (err) *err = "CreatePixelShader failed"; return false; }
-
-    D3D11_SAMPLER_DESC sd{};
-    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-    sd.MaxLOD = D3D11_FLOAT32_MAX;
-    hr = m_capDev->CreateSamplerState(&sd, &m_sampler);
-    if (FAILED(hr)) { if (err) *err = "CreateSamplerState failed"; return false; }
-
-    D3D11_RASTERIZER_DESC rd{};
-    rd.FillMode = D3D11_FILL_SOLID;
-    rd.CullMode = D3D11_CULL_NONE;
-    rd.DepthClipEnable = TRUE;
-    hr = m_capDev->CreateRasterizerState(&rd, &m_rs);
-    if (FAILED(hr)) { if (err) *err = "CreateRasterizerState failed"; return false; }
-
-    D3D11_DEPTH_STENCIL_DESC dd{};
-    dd.DepthEnable = FALSE;
-    dd.StencilEnable = FALSE;
-    hr = m_capDev->CreateDepthStencilState(&dd, &m_dss);
-    if (FAILED(hr)) { if (err) *err = "CreateDepthStencilState failed"; return false; }
-
-    D3D11_BLEND_DESC bd{};
-    bd.RenderTarget[0].BlendEnable = FALSE;
-    bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-    hr = m_capDev->CreateBlendState(&bd, &m_blendOff);
-    if (FAILED(hr)) { if (err) *err = "CreateBlendState failed"; return false; }
-
-    return true;
-}
-
-bool DdaGrabWorker::blitBgraToRgbaShared(int idx, ID3D11Texture2D* srcTex, int w, int h)
-{
-    if (!ensureTmpBgra(w,h)) return false;
-
-    QString err;
-    if (!ensureSwizzlePipeline(&err)) {
-        WARNING_LOG << "ensureSwizzlePipeline failed: " << err;
-        return false;
-    }
-
-    // 1) copy src -> tmpBgra（保证可 SRV）
-    m_capCtx->CopyResource(m_tmpBgra.Get(), srcTex);
-
-    // 2) SRV for tmpBgra
-    ComPtr<ID3D11ShaderResourceView> srv;
-    HRESULT hr = m_capDev->CreateShaderResourceView(m_tmpBgra.Get(), nullptr, &srv);
-    if (FAILED(hr) || !srv) {
-        WARNING_LOG << "CreateShaderResourceView failed hr=" << QString::number(hr,16);
-        return false;
-    }
-
-    // 3) RTV for RGBA sharedTex[idx]
-    ComPtr<ID3D11RenderTargetView> rtv;
-    hr = m_capDev->CreateRenderTargetView(m_sharedTex[idx].Get(), nullptr, &rtv);
-    if (FAILED(hr) || !rtv) {
-        WARNING_LOG << "CreateRenderTargetView failed hr=" << QString::number(hr,16);
-        return false;
-    }
-
-    // 4) set states & draw
-    ID3D11RenderTargetView* rtvs[] = { rtv.Get() };
-    m_capCtx->OMSetRenderTargets(1, rtvs, nullptr);
-    m_capCtx->OMSetDepthStencilState(m_dss.Get(), 0);
-    float bf[4] = {};
-    m_capCtx->OMSetBlendState(m_blendOff.Get(), bf, 0xffffffff);
-    m_capCtx->RSSetState(m_rs.Get());
-
-    D3D11_VIEWPORT vp{};
-    vp.Width = (float)w;
-    vp.Height = (float)h;
-    vp.MinDepth = 0.f;
-    vp.MaxDepth = 1.f;
-    m_capCtx->RSSetViewports(1, &vp);
-
-    m_capCtx->VSSetShader(m_vs.Get(), nullptr, 0);
-    m_capCtx->PSSetShader(m_psBgraToRgba.Get(), nullptr, 0);
-
-    ID3D11ShaderResourceView* srvs[] = { srv.Get() };
-    m_capCtx->PSSetShaderResources(0, 1, srvs);
-    ID3D11SamplerState* samps[] = { m_sampler.Get() };
-    m_capCtx->PSSetSamplers(0, 1, samps);
-
-    m_capCtx->IASetInputLayout(nullptr);
-    m_capCtx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    m_capCtx->Draw(3, 0);
-
-    // 解绑 SRV，避免 D3D11 警告/冲突
-    ID3D11ShaderResourceView* nullSrv[] = { nullptr };
-    m_capCtx->PSSetShaderResources(0, 1, nullSrv);
-
-    return true;
-}
-
-bool DdaGrabWorker::vpBgraToNv12Shared(int idx, ID3D11Texture2D* srcTex,int w, int h, int slice,ID3D11Texture2D* dstTex)
-{
-    if (!srcTex) return false;
-    if (!m_capVideoDev || !m_capVideoCtx) return false;
-
-    ID3D11Texture2D* target = dstTex ? dstTex : m_sharedTex[idx].Get();
-    if (!target) return false;
-
-    if (!dstTex) {
-        if (idx < 0 || idx >= kPool) return false;
-    }
-
-    if (!ensureVideoProcessor(w, h)) return false;
-    if (!m_vp || !m_vpEnum) return false;
-
-    // input view
-    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inDesc{};
-    inDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
-    inDesc.Texture2D.ArraySlice = (UINT)slice;
-
-    ComPtr<ID3D11VideoProcessorInputView> inView;
-    HRESULT hr = m_capVideoDev->CreateVideoProcessorInputView(
-        srcTex, m_vpEnum.Get(), &inDesc, &inView);
-    if (FAILED(hr) || !inView) return false;
-
-    // output view → target
-    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outDesc{};
-    outDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
-    outDesc.Texture2D.MipSlice = 0;
-
-    ComPtr<ID3D11VideoProcessorOutputView> outView;
-    hr = m_capVideoDev->CreateVideoProcessorOutputView(
-        target, m_vpEnum.Get(), &outDesc, &outView);
-    if (FAILED(hr) || !outView) return false;
-
-    RECT srcRect{0, 0, w, h};
-    RECT dstRect{0, 0, w, h};
-
-    m_capVideoCtx->VideoProcessorSetStreamSourceRect(m_vp.Get(), 0, TRUE, &srcRect);
-    m_capVideoCtx->VideoProcessorSetStreamDestRect(m_vp.Get(), 0, TRUE, &dstRect);
-
-    D3D11_VIDEO_PROCESSOR_STREAM stream{};
-    stream.Enable = TRUE;
-    stream.pInputSurface = inView.Get();
-
-    hr = m_capVideoCtx->VideoProcessorBlt(m_vp.Get(), outView.Get(), 0, 1, &stream);
-    return SUCCEEDED(hr);
-}
-
-bool DdaGrabWorker::ensureEncodeNv12Tex(int w, int h)
-{
-    if (m_encodeNv12Tex) {
-        D3D11_TEXTURE2D_DESC d;
-        m_encodeNv12Tex->GetDesc(&d);
-        if (int(d.Width) == w && int(d.Height) == h)
-            return true;
-        m_encodeNv12Tex.Reset();
-    }
-    D3D11_TEXTURE2D_DESC desc{};
-    desc.Width = w; desc.Height = h;
-    desc.MipLevels = 1; desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_NV12;
-    desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-    return SUCCEEDED(m_capDev->CreateTexture2D(&desc, nullptr,&m_encodeNv12Tex));
-}
-
-/**
- * ======================================================
- * @note Windows桌面音频捕获器 - WASAPIAudioWorker
- * ======================================================
- */
-
-// WAVEFORMATEX wFormatTag → AVSampleFormat
-static AVSampleFormat waveToSampleFmt(const WAVEFORMATEX* wf)
-{
-    if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT)
-        return AV_SAMPLE_FMT_FLT;
-    if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
-        // WAVE_FORMAT_EXTENSIBLE：从 SubFormat GUID 判断
-        // MinGW 链接 GUID 有限，这里用 wBitsPerSample + cbSize 推断：
-        //   cbSize >= 22 且 wBitsPerSample == 32 → 大概率 float
-        //   否则 PCM，按位深走
-        if (wf->wBitsPerSample == 32 && wf->cbSize >= 22)
-            return AV_SAMPLE_FMT_FLT;
-        return wf->wBitsPerSample == 32 ? AV_SAMPLE_FMT_S32 : AV_SAMPLE_FMT_S16;
-    }
-    // 普通 PCM
-    return wf->wBitsPerSample == 32 ? AV_SAMPLE_FMT_S32 : AV_SAMPLE_FMT_S16;
-}
-
-// WAVEFORMATEX → AVChannelLayout
-static void waveToChannelLayout(const WAVEFORMATEX* wf,AVChannelLayout* out)
-{
-    av_channel_layout_default(out, wf->nChannels);
-}
-
-bool WASAPIAudioWorker::start(const WASAPIConfig &cfg)
-{
-    if(_running.exchange(true)) return true;
-    _cfg = cfg;
-    _thread = std::thread(&WASAPIAudioWorker::captureLoop,this);
-    return true;
-}
-
-void WASAPIAudioWorker::stop()
-{
-    if(!_running.exchange(false)) return;
-    _frameCond.notify_all();
-    if(_thread.joinable())
-        _thread.join();
-
-    //清空帧队列
-    while(!_frameQueue.empty()){
-        av_frame_free(&_frameQueue.front());
-        _frameQueue.pop();
-    }
-}
-
-bool WASAPIAudioWorker::isRunning() const
-{
-    return _running.load();
-}
-
-bool WASAPIAudioWorker::getPcmFrame(AVFrame **frame, int timeoutMs)
-{
-    std::unique_lock<std::mutex> lock(_frameQueue_mtx);
-    if(!_frameCond.wait_for(lock,std::chrono::milliseconds(timeoutMs),[this](){
-            return !_frameQueue.empty() || !_running.load();
-        }))
-    {
-        return false;
-    }
-    if (_frameQueue.empty()) return false;
-    *frame = _frameQueue.front();
-    _frameQueue.pop();
-    return true;
-}
-
-void WASAPIAudioWorker::captureLoop()
-{
-    CoInitializeEx(nullptr,COINIT_MULTITHREADED);  // WASAPI 要 MTA
-    if(!initWASAPI())
-    {
-        CoUninitialize();
-        return;
-    }
-    _audioClient->Start();
-
-    /*! @note 事件驱动采集（WASAPI loopback 不支持轮询 GetNextPacketSize）*/
-    _recStartUs = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
-
-    BYTE*    capBuf    = nullptr;
-    UINT32   capFrames = 0;
-    DWORD    capFlags  = 0;
-
-    while (_running.load()) {
-        DWORD waitRet = WaitForSingleObject(_hEvent, 100);  // 100ms 超时
-        if (waitRet == WAIT_TIMEOUT)
-            continue;
-        if (waitRet != WAIT_OBJECT_0)
-            break;
-
-        // 一次可能有多个包，循环取完
-        for (;;) {
-            HRESULT hr = _captureClient->GetBuffer(&capBuf, &capFrames, &capFlags,
-                                                    nullptr, nullptr);
-            if (FAILED(hr)) {
-                if (hr == AUDCLNT_S_BUFFER_EMPTY)
-                    break;
-                break;
-            }
-            if (capFrames == 0)
-                break;
-
-            bool silent = (capFlags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
-
-            AVFrame *f = av_frame_alloc();
-            f->format      = AV_SAMPLE_FMT_S16;
-            f->sample_rate = _cfg.sampleRate;
-            f->ch_layout   = AV_CHANNEL_LAYOUT_STEREO;
-            f->nb_samples  = av_rescale_rnd(capFrames, _cfg.sampleRate,
-                                            _deviceFormat->nSamplesPerSec, AV_ROUND_UP);
-            // PTS：wall clock 算到 48kHz 时间基，和视频同源
-            auto nowUs = std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::steady_clock::now().time_since_epoch()).count();
-            f->pts = (nowUs - _recStartUs) * _cfg.sampleRate / 1'000'000;
-            av_frame_get_buffer(f, 0);
-
-            if (silent) {
-                av_samples_set_silence(f->data, 0, f->nb_samples,
-                                       _cfg.channels, AV_SAMPLE_FMT_S16);
-            } else {
-                const uint8_t* src = capBuf;
-                int actual = swr_convert(_swr, f->data, f->nb_samples,
-                                         &src, capFrames);
-                if (actual >= 0)
-                    f->nb_samples = actual;
-            }
-
-            _captureClient->ReleaseBuffer(capFrames);
-            capFrames = 0;
-
-            // 入队
-            {
-                std::lock_guard<std::mutex> lock(_frameQueue_mtx);
-                if (_frameQueue.size() >= kMaxQueued) {
-                    av_frame_free(&_frameQueue.front());
-                    _frameQueue.pop();
-                }
-                _frameQueue.push(f);
-                _frameCond.notify_one();
-            }
-        }
-    }
-
-    //cleanup
-    _audioClient->Stop();
-    cleanupWASAPI();
-    CoUninitialize();
-}
-
-bool WASAPIAudioWorker::initWASAPI()
-{
-    IMMDeviceEnumerator* enumerator = nullptr;
-    IMMDevice* device = nullptr;
-    AVChannelLayout outChLayout, inChLayout;
-    bool layoutInited = false, layoutOutInited = false;
-
-    try {
-        HRESULT hr = CoCreateInstance(CLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL,
-                                      IID_IMMDeviceEnumerator, (void**)&enumerator);
-        if (FAILED(hr))
-            throw std::runtime_error("CoCreateInstance(MMDeviceEnumerator) failed");
-
-        hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
-        if (FAILED(hr))
-            throw std::runtime_error("GetDefaultAudioEndpoint failed");
-
-        hr = device->Activate(IID_IAudioClient, CLSCTX_ALL, nullptr, (void**)&_audioClient);
-        if (FAILED(hr))
-            throw std::runtime_error("Activate(IAudioClient) failed");
-
-        hr = _audioClient->GetMixFormat(&_deviceFormat);
-        if (FAILED(hr))
-            throw std::runtime_error("GetMixFormat failed");
-
-        REFERENCE_TIME hnsPeriod = _cfg.frameMs * 10000LL;  // 10ms → 100000ns
-        hr = _audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED,
-                                       AUDCLNT_STREAMFLAGS_LOOPBACK |
-                                       AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                                       hnsPeriod, 0, _deviceFormat, nullptr);
-        if (FAILED(hr))
-            throw std::runtime_error("IAudioClient::Initialize(LOOPBACK) failed");
-
-        hr = _audioClient->GetService(IID_IAudioCaptureClient, (void**)&_captureClient);
-        if (FAILED(hr))
-            throw std::runtime_error("GetService(IAudioCaptureClient) failed");
-
-        // loopback 必须用事件驱动，不能轮询 GetNextPacketSize
-        _hEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        if (!_hEvent)
-            throw std::runtime_error("CreateEvent failed");
-        hr = _audioClient->SetEventHandle(_hEvent);
-        if (FAILED(hr))
-            throw std::runtime_error("SetEventHandle failed");
-
-        // swr 上下文：设备格式 → S16/48kHz/stereo
-        av_channel_layout_default(&outChLayout, _cfg.channels);
-        layoutOutInited = true;
-
-        waveToChannelLayout(_deviceFormat, &inChLayout);
-        layoutInited = true;
-
-        AVSampleFormat inFmt = waveToSampleFmt(_deviceFormat);
-
-        int ret = swr_alloc_set_opts2(&_swr,
-                                      &outChLayout, AV_SAMPLE_FMT_S16, _cfg.sampleRate,
-                                      &inChLayout, inFmt, _deviceFormat->nSamplesPerSec,
-                                      0, nullptr);
-        if (ret < 0 || !_swr)
-            throw std::runtime_error("swr_alloc_set_opts2 failed");
-
-        ret = swr_init(_swr);
-        if (ret < 0)
-            throw std::runtime_error("swr_init failed");
-
-        // 成功——先清理本地资源，再返回
-        av_channel_layout_uninit(&outChLayout);
-        av_channel_layout_uninit(&inChLayout);
-        enumerator->Release();
-        device->Release();
-        return true;
-    }
-    catch (const std::exception& e) {
-        ERROR_LOG << "WASAPIAudioWorker::initWASAPI() : " << e.what();
-
-        // 释放已创建的部分资源（cleanupWASAPI 不碰本地变量）
-        cleanupWASAPI();
-        if (layoutOutInited) av_channel_layout_uninit(&outChLayout);
-        if (layoutInited)       av_channel_layout_uninit(&inChLayout);
-        if (enumerator)       enumerator->Release();
-        if (device)                device->Release();
-        return false;
-    }
-}
-
-void WASAPIAudioWorker::cleanupWASAPI()
-{
-    if (_captureClient) {
-        _captureClient->Release();
-        _captureClient = nullptr;
-    }
-    if (_audioClient) {
-        _audioClient->Release();
-        _audioClient = nullptr;
-    }
-    if (_deviceFormat) {
-        CoTaskMemFree(_deviceFormat);
-        _deviceFormat = nullptr;
-    }
-    if (_swr) {
-        swr_free(&_swr);
-        _swr = nullptr;
-    }
-    if (_hEvent) {
-        CloseHandle(_hEvent);
-        _hEvent = nullptr;
-    }
+    const auto request = m_pendingCapture;
+    if (request && request->id == m_activeRequest)
+        m_pendingCapture.reset();
+    m_lastUsableTarget = m_activeTarget;
+    m_restoreTarget.reset();
+    m_recoveryAttempts = 0; // 图创建/started 不代表恢复；只在实际产帧后清零。
+    m_previewError.clear();
+    setPreviewState(Oran7PreviewState::Running);
+    emit captureSettingsChanged();
+    if (request && request->id == m_activeRequest)
+        finishRequest(request->id, true, QStringLiteral("抓屏参数已应用"));
+    if (generation == m_workerGen)
+        emit started();
 }

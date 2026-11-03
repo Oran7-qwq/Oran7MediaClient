@@ -1,7 +1,7 @@
 #include "WebLoginController.h"
 
 #include "CookieStore.h"
-#include "GlobalHelper.h"
+#include "Oran7GlobalHelper.h"
 #include "NcmSession.h"
 #include "NcmUserApi.h"
 
@@ -322,8 +322,7 @@ void WebLoginController::handleCookies(const QJsonArray& cookies)
     // 关键：通知登录态变化，让 QML 的 NcmSession.isLoggedIn/userName 绑定刷新
     m_session->setLoggedIn(true);
 
-    NETWORK_LOG << "WebLoginController: captured MUSIC_U len=" << musicU.length()
-                << " csrf=" << csrf.length();
+    NETWORK_LOG << "WebLoginController: browser credentials captured";
 
     verifyAndFinish();
 }
@@ -333,13 +332,14 @@ void WebLoginController::verifyAndFinish()
     // account/get 验证并取昵称（尽力而为），超时由 verifyTimer 兜底
     connect(m_userApi, &NcmUserApi::accountFetched, this,
             &WebLoginController::onAccountFetched, Qt::UniqueConnection);
-    m_userApi->fetchAccount();
+    m_accountRequestId = NcmRequest::nextId();
     m_verifyTimer->start();
+    m_userApi->fetchAccount(m_accountRequestId);
 }
 
-void WebLoginController::onAccountFetched(const QString& nickname)
+void WebLoginController::onAccountFetched(quint64 requestId, const QString& nickname)
 {
-    if (m_verified)
+    if (requestId != m_accountRequestId || m_state != WebLoginState::Captured || m_verified)
         return;
     m_verified = true;
     m_verifyTimer->stop();
@@ -357,7 +357,7 @@ void WebLoginController::finish(bool success, const QString& nickname, const QSt
     if (success) {
         setState(WebLoginState::Success);
         setStatus(QStringLiteral("登录成功"));
-        NETWORK_LOG << "WebLoginController: login success, user=" << nickname;
+        NETWORK_LOG << "WebLoginController: login success";
         emit loginSucceeded(nickname.isEmpty() ? QStringLiteral("网易云用户") : nickname);
     } else {
         setState(WebLoginState::Error);
@@ -371,8 +371,7 @@ void WebLoginController::onWsError()
 {
     if (m_cleaningUp)
         return;
-    NETWORK_LOG << "WebLoginController: cdp websocket error="
-                << m_ws->errorString();
+    NETWORK_LOG << "WebLoginController: cdp websocket error, state=" << m_ws->state();
     m_cookieTimer->stop();
 
     // 连接失败时重试探测，而不是直接判死（可能只是首次握手抖动）
@@ -386,6 +385,7 @@ void WebLoginController::onWsError()
 void WebLoginController::cleanupBrowser()
 {
     m_cleaningUp = true;
+    m_accountRequestId = 0;
     m_probeTimer->stop();
     m_cookieTimer->stop();
     m_verifyTimer->stop();

@@ -1,5 +1,5 @@
 #include "Oran7SignalingClient.h"
-#include "GlobalHelper.h"
+#include "Oran7GlobalHelper.h"
 #include <QJsonArray>
 
 Oran7SignalingClient::Oran7SignalingClient(QObject* parent)
@@ -27,13 +27,15 @@ Oran7SignalingClient::~Oran7SignalingClient() { stop(); }
 
 void Oran7SignalingClient::start(const std::string& wsUrl,
                                   const std::string& username,
-                                  const std::string& roomName)
+                                  const std::string& roomName, const std::string& password)
 {
+    _password = password;
+    _stopping = false;
     _username = username;
     _roomName = roomName;
     _ws.open(QUrl(QString::fromStdString(wsUrl)));
     _connectTimer.start(5000);
-    INFO_LOG << "[signal] connecting to:" << wsUrl.c_str();
+    INFO_LOG << "[signal] connecting";
 }
 
 void Oran7SignalingClient::notifyStreamPublished(const std::string& streamId)
@@ -58,17 +60,16 @@ void Oran7SignalingClient::notifyStreamStopped()
 
 void Oran7SignalingClient::stop()
 {
+    if (_stopping) return;
+    _stopping = true;
+    _connectTimer.stop();
     notifyStreamStopped();
     // 离开房间，必须确保消息在 close 之前发出去
     if (_inRoom) {
         QJsonObject msg;
         msg["type"] = "leave_room";
         sendJson(msg);
-        // QWebSocket 是异步的，用局部事件循环等待消息真正发出
-        QEventLoop loop;
-        QTimer::singleShot(200, &loop, &QEventLoop::quit);
-        connect(&_ws, &QWebSocket::disconnected, &loop, &QEventLoop::quit);
-        loop.exec();  // 最多等 200ms 让 TCP 栈把数据发出去
+        _ws.flush(); // 交由 Qt 异步发送，不在 GUI 里嵌套事件循环等待断开。
         _inRoom = false;
     }
     _ws.close();
@@ -78,13 +79,15 @@ void Oran7SignalingClient::stop()
 
 void Oran7SignalingClient::onConnected()
 {
-    INFO_LOG << "[signal] connected, logging in as:" << _username.c_str();
+    if (_stopping) return;
+    INFO_LOG << "[signal] connected, submitting login";
     _connectTimer.stop();
     doLogin();
 }
 
 void Oran7SignalingClient::onMessage(const QString& text)
 {
+    if (_stopping) return;
     QJsonDocument doc = QJsonDocument::fromJson(text.toUtf8());
     if (!doc.isObject()) return;
     QJsonObject obj = doc.object();
@@ -143,7 +146,7 @@ void Oran7SignalingClient::onMessage(const QString& text)
             INFO_LOG << "[signal] join failed (room gone), creating:" << _roomName.c_str();
             doCreateRoom();
         } else {
-            WARNING_LOG << "[signal] server error:" << msg;
+            WARNING_LOG << "[signal] server reported an error";
         }
     }
 }
@@ -161,7 +164,7 @@ void Oran7SignalingClient::doLogin()
     QJsonObject msg;
     msg["type"]     = "login";
     msg["username"] = QString::fromStdString(_username);
-    msg["password"] = "123456";
+    msg["password"] = QString::fromStdString(_password);
     sendJson(msg);
 }
 
