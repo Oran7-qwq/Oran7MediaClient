@@ -2,10 +2,17 @@
 
 **Oran柒 MediaClient · 音乐、视频与桌面录制，一个工作台。**
 
-![Windows](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows)
-![Qt](https://img.shields.io/badge/Qt-6.7.3-41CD52?logo=qt)
-![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus)
-![License](https://img.shields.io/badge/License-MIT-blue)
+![Windows](https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square)
+![Qt](https://img.shields.io/badge/Qt-6.7.3-41CD52?style=flat-square&logo=qt)
+![QML](https://img.shields.io/badge/UI-QML-41CD52?style=flat-square)
+![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?style=flat-square&logo=cplusplus)
+![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
+
+![FFmpeg](https://img.shields.io/badge/FFmpeg-6.0-007808?style=flat-square&logo=ffmpeg)
+![Direct3D 11](https://img.shields.io/badge/Graphics-Direct3D_11-5C6BC0?style=flat-square)
+![QRhi](https://img.shields.io/badge/Rendering-QRhi-607D8B?style=flat-square)
+![WASAPI](https://img.shields.io/badge/Audio-WASAPI-607D8B?style=flat-square)
+![CMake](https://img.shields.io/badge/Build-CMake-064F8C?style=flat-square&logo=cmake)
 
 Oran7MediaClient 是一款面向 Windows 的桌面多媒体应用，由 C++ 与 Qt Quick / QML 构建。它把本地音乐、网易云音乐、视频播放、B 站直播观看和桌面录制放在同一个界面中，同时提供可自定义的外观、桌面歌词与音效调节。
 
@@ -27,7 +34,7 @@ Oran7MediaClient 是一款面向 Windows 的桌面多媒体应用，由 C++ 与 
 
 ## 能做什么
 
-### 🎵 音乐与桌面歌词
+### <img src="docs/images/icons/music.svg" width="20" height="20" alt=""> 音乐与桌面歌词
 
 - 管理本地曲库，支持音乐搜索、网易云登录与喜欢的音乐列表。
 - 提供顺序、随机、单曲循环，以及心动、私人漫游、熟悉、探索等网易云推荐入口。
@@ -35,7 +42,7 @@ Oran7MediaClient 是一款面向 Windows 的桌面多媒体应用，由 C++ 与 
 - 灵动岛式桌面歌词：逐句滚动、文字渐显，空闲时展示「曲名 - 作者」，悬停展开播放控制。
 - 内置 10 段均衡器、音效预设及其他声音处理选项，调整实时生效。
 
-### 🎬 视频空间
+### <img src="docs/images/icons/video.svg" width="20" height="20" alt=""> 视频空间
 
 - 播放本地视频，支持画面适应 / 填充与全屏观看。
 - 保存最近播放与观看进度，重启后可快捷继续观看。
@@ -44,14 +51,14 @@ Oran7MediaClient 是一款面向 Windows 的桌面多媒体应用，由 C++ 与 
 - 输入 B 站直播间号即可观看，提供直播间信息、历史入口与弹幕展示。
 - 鼠标静止时自动收起播放控件，随后隐藏光标，减少画面干扰。
 
-### 🖥️ 桌面录制工作台
+### <img src="docs/images/icons/monitor.svg" width="20" height="20" alt=""> 桌面录制工作台
 
 - 基于 D3D11 桌面采集，提供实时预览与显示器选择。
 - 可设置录制分辨率、帧率、视频码率，输出 MP4 文件。
 - 支持录制系统声音，常用设置自动保存。
 - 工作台采用来源、预览、输出三区布局，底部集中放置音频和录制控制。
 
-### 🎨 外观与设置
+### <img src="docs/images/icons/settings.svg" width="20" height="20" alt=""> 外观与设置
 
 - 支持图片 / 视频背景、窗口毛玻璃与自定义界面配色。
 - 独立下拉式设置窗口，提供颜色预设与自定义取色。
