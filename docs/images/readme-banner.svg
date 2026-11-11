@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="280" viewBox="0 0 1280 280" fill="none">
+  <rect width="1280" height="280" rx="18" fill="#151820"/>
+  <path d="M0 220H1280M860 0V280" stroke="#292D38"/>
+  <path d="M940 0 800 280M1040 0 900 280M1140 0 1000 280M1240 0 1100 280" stroke="#202430" stroke-width="24"/>
+  <path d="M34 62V34H62M1218 34H1246V62M34 218V246H62M1218 246H1246V218" stroke="#777387" stroke-width="1.5"/>
+  <path d="M58 66H80" stroke="#BCB2FF" stroke-width="3"/>
+  <text x="92" y="71" fill="#BCB2FF" font-family="Segoe UI,Arial,sans-serif" font-size="13" letter-spacing="3">PERSONAL MEDIA WORKSPACE</text>
+  <text x="56" y="140" fill="#F0EDE7" font-family="Segoe UI,Arial,sans-serif" font-weight="700" font-size="62" letter-spacing="1">Oran7<tspan fill="#BCB2FF">MediaClient</tspan></text>
+  <text x="60" y="176" fill="#9CA3B3" font-family="Segoe UI,Arial,sans-serif" font-size="16" letter-spacing="1">Your music. Your screen. Your space.</text>
+  <text x="60" y="248" fill="#C9C5D5" font-family="Segoe UI,Arial,sans-serif" font-size="12" letter-spacing="3">MUSIC</text>
+  <circle cx="142" cy="244" r="2" fill="#BCB2FF"/>
+  <text x="164" y="248" fill="#C9C5D5" font-family="Segoe UI,Arial,sans-serif" font-size="12" letter-spacing="3">VIDEO</text>
+  <circle cx="248" cy="244" r="2" fill="#BCB2FF"/>
+  <text x="270" y="248" fill="#C9C5D5" font-family="Segoe UI,Arial,sans-serif" font-size="12" letter-spacing="3">CAPTURE</text>
+  <g stroke="#414556" stroke-width="1.5">
+    <rect x="930" y="64" width="222" height="134" rx="10" fill="#1D212C"/>
+    <path d="M950 86H1132M950 176H1132"/>
+    <path d="m1027 108 31 23-31 23Z" stroke="#BCB2FF" stroke-width="2"/>
+    <path d="M1014 213H1068M1041 198V213"/>
+  </g>
+  <g stroke="#BCB2FF" stroke-width="3" stroke-linecap="round">
+    <path d="M893 118V146M903 104V160M913 113V151M923 123V141"/>
+  </g>
+  <circle cx="1176" cy="95" r="19" fill="#262738" stroke="#55506D"/>
+  <circle cx="1176" cy="95" r="6" fill="#BCB2FF"/>
+  <text x="1096" y="249" fill="#7F8597" font-family="Segoe UI,Arial,sans-serif" font-size="11" letter-spacing="2">ORAN7 / WINDOWS</text>
+</svg>
