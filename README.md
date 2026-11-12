@@ -182,4 +182,8 @@ cmake --build --preset release
 <p align="center">
   <strong>Oran7MediaClient</strong><br>
   <sub>听喜欢的音乐，看想看的画面。</sub>
+<<<<<<< HEAD
 </p>
+=======
+</p>
+>>>>>>> 22b3368c39c51dbd081419ad08640054ba562091
