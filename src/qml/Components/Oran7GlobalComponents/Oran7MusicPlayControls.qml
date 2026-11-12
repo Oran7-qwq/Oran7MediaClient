@@ -368,13 +368,12 @@ Rectangle{
             onClicked: Client.playNext()
         }
     }
-    // 播放模式切换按钮：四种模式轮换（0=顺序播放 1=单曲循环 2=随机播放 3=网易云漫游）
+    // 播放顺序只轮换 0/1/2，网易云推荐使用右侧独立入口。
     Image {
         id: playstateImage
         source: [ "qrc:/image/playstate1.png",
                   "qrc:/image/ph_repeat-once-bold.png",
-                  "qrc:/image/fa7-solid_random.png",
-                  "qrc:/image/streamline-flex_heart-rate.png" ][BasicConfig.playMode]
+                  "qrc:/image/fa7-solid_random.png" ][Client.musicQueue.orderMode]
         visible: root.visible
         anchors.left: playRectangle.right
         anchors.leftMargin: 60
@@ -401,10 +400,8 @@ Rectangle{
             onPressed: parent.isPressed = true
             onReleased: parent.isPressed = false
             onClicked: {
-                // 0→1→2→3→0 轮换；切入网易云漫游(3)需聚焦网易云播放页，否则跳过；关闭漫游(3→0)不受限
-                var next = (BasicConfig.playMode + 1) % 4;
-                if (next === 3 && !BasicConfig.searchMusicStackActive)
-                    next = 0;
+                // 切换播放顺序同时退出推荐，沿用之前的普通列表归属。
+                var next = (Client.musicQueue.orderMode + 1) % 3;
                 Client.setPlayMode(next);
             }
         }
@@ -488,6 +485,13 @@ Rectangle{
         spacing: 15
         visible: root.visible
         //音质选择
+        Oran7RecommendationButton {
+            queue: Client.musicQueue
+            mode: Client.playback.mode
+            ink: Oran7Theme.Oran7MusicPlayControls["textColorBase-6"]
+            accent: Oran7Theme.Oran7MusicPlayControls["colorPrimaryBase-5"]
+            anchors.verticalCenter: parent.verticalCenter
+        }
         Rectangle{
             id:soudEffectRectangle
             width: 30

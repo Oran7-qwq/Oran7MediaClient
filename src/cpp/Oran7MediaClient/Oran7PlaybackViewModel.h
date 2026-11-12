@@ -14,12 +14,19 @@ class Oran7PlaybackViewModel : public QObject
     Q_OBJECT
     Q_PROPERTY(QString owner READ owner NOTIFY ownerChanged)
     Q_PROPERTY(bool roamFilterLiked READ roamFilterLiked WRITE setRoamFilterLiked NOTIFY roamFilterLikedChanged)
+    Q_PROPERTY(int orderMode READ orderMode NOTIFY orderModeChanged)
+    Q_PROPERTY(bool recommendationBusy READ recommendationBusy NOTIFY recommendationStatusChanged)
+    Q_PROPERTY(QString recommendationError READ recommendationError NOTIFY recommendationStatusChanged)
 public:
     Oran7PlaybackViewModel(Oran7TrackLibrary& tracks, Oran7PlaybackState& playback,
                           Oran7CloudMusicService& cloud);
     QString owner() const { return m_owner; }
     bool roamFilterLiked() const { return m_roamFilterLiked; }
     void setRoamFilterLiked(bool enabled);
+    int orderMode() const { return m_orderMode; }
+    bool recommendationBusy() const { return m_roamRequest || m_waitingForLikes; }
+    QString recommendationError() const { return m_recommendationError; }
+    Q_INVOKABLE bool selectRecommendation(int mode);
     quint64 commandRevision() const { return m_commandRevision; }
     Q_INVOKABLE bool activate(Oran7TrackListModel* model, int index);
     Q_INVOKABLE void toggleCurrent();
@@ -30,6 +37,9 @@ public:
 signals:
     void ownerChanged();
     void roamFilterLikedChanged();
+    void orderModeChanged();
+    void recommendationStatusChanged();
+    void recommendationActivated();
     void musicActivated();
     void trackRequested(const QVariantMap& track, bool restart);
     void stopRequested();
@@ -43,6 +53,7 @@ private:
     bool acceptsRoam(const QVariant& song) const;
     bool owns(Oran7TrackListModel* model) const;
     void adoptCurrent();
+    bool recommendationActive() const;
     Oran7TrackLibrary& m_tracks;
     Oran7PlaybackState& m_playback;
     Oran7CloudMusicService& m_cloud;
@@ -59,4 +70,6 @@ private:
     int m_filteredBatches = 0;
     quint64 m_roamRequest = 0;
     quint64 m_commandRevision = 0;
+    int m_orderMode = 0;
+    QString m_recommendationError;
 };

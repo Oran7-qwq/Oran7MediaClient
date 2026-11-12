@@ -1,7 +1,7 @@
 /*
  * Oran7CaptionBar
  *
- * 一个类似 HuskarUI HusCaptionBar 的自定义标题栏组件
+ * Oran7MediaClient 自定义标题栏组件
  */
 
 pragma ComponentBehavior: Bound
@@ -20,6 +20,8 @@ Rectangle {
 
     property var targetWindow: null
     property Oran7WindowAgent windowAgent: null
+    readonly property bool windowExpanded: targetWindow?.visibility === Window.Maximized
+                                           || targetWindow?.visibility === Window.FullScreen
 
     property alias layoutDirection: __row.layoutDirection
 
@@ -44,6 +46,9 @@ Rectangle {
     property bool showMinimizeButton: Qt.platform.os !== 'osx'
     property bool showMaximizeButton: Qt.platform.os !== 'osx'
     property bool showCloseButton: Qt.platform.os !== 'osx'
+    property real windowButtonsOpacity: 1
+    readonly property bool windowButtonsHovered: __windowButtonsLoader.item
+        ? __windowButtonsLoader.item.hovered : false
 
     property var returnCallback: () => {}
     property var themeCallback: () => {}
@@ -57,7 +62,7 @@ Rectangle {
         if (!targetWindow)
             return;
 
-        if (targetWindow.visibility === Window.Maximized || targetWindow.visibility === Window.FullScreen) {
+        if (windowExpanded) {
             targetWindow.showNormal();
         } else {
             targetWindow.showMaximized();
@@ -154,6 +159,15 @@ Rectangle {
         property color hoverColor: "#c42b1c"
         property string iconText: "✕"
         property int buttonTextPixelSize: 15
+        property Component iconDelegate: Text {
+            text: button.iconText
+            color: "#ffffff"
+            font.pixelSize: button.buttonTextPixelSize
+            font.bold: true
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        readonly property bool hovered: mouseArea.containsMouse
 
         signal clicked
 
@@ -183,18 +197,13 @@ Rectangle {
             }
         }
 
-        Text {
-            id: buttonText
+        Loader {
+            id: buttonIcon
             anchors.centerIn: parent
-            text: iconText
-            color: "#ffffff"
-            font.pixelSize: button.buttonTextPixelSize
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            sourceComponent: button.iconDelegate
             opacity: 0.8
 
-            // 文字透明度过渡
+            // 图标透明度过渡
             Behavior on opacity {
                 NumberAnimation {
                     duration: 150
@@ -212,12 +221,12 @@ Rectangle {
 
             onEntered: {
                 button.color = hoverColor;
-                buttonText.opacity = 1.0;
+                buttonIcon.opacity = 1.0;
             }
 
             onExited: {
                 button.color = button.buttonColor;
-                buttonText.opacity = 0.8;
+                buttonIcon.opacity = 0.8;
             }
 
             onClicked: {
@@ -240,6 +249,7 @@ Rectangle {
 
     property Component winButtonsDelegate: Row {
         id: nativeWindowControls
+        readonly property bool hovered: __closeButton.hovered || __maximizeButton.hovered || __minimizeButton.hovered
         width: (Oran7Theme.Oran7MainGUI.topBarDefaultHeight + spacing) * 3
         height: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 0.8
         // anchors.margins: Oran7Theme.Oran7MainGUI.topBarDefaultHeight * 0.1
@@ -278,8 +288,22 @@ Rectangle {
             visible: control.showMaximizeButton
             buttonColor: "transparent"
             hoverColor: Qt.rgba(0.2, 0.2, 0.2, 0.5)
-            iconText: control.targetWindow?.visibility === Window.Maximized ? "❐" : "▢"
-            buttonTextPixelSize: control.targetWindow?.visibility === Window.Maximized ? 15 : 34
+            iconDelegate: Shape {
+                width: 11
+                height: 11
+
+                ShapePath {
+                    fillColor: "transparent"
+                    strokeColor: "#ffffff"
+                    strokeWidth: 1
+
+                    PathSvg {
+                        path: control.windowExpanded
+                              ? "M 2.5 2.5 V 0.5 H 10.5 V 8.5 H 8.5 M 0.5 2.5 H 8.5 V 10.5 H 0.5 Z"
+                              : "M 0.5 0.5 H 10.5 V 10.5 H 0.5 Z"
+                    }
+                }
+            }
             onClicked: control.maximizeCallback()
         }
 
@@ -392,9 +416,14 @@ Rectangle {
         }
 
         Loader {
+            id: __windowButtonsLoader
+            objectName: "nativeWindowButtons"
             Layout.fillHeight: false
             Layout.alignment: Qt.AlignVCenter
             sourceComponent: control.winButtonsDelegate
+            opacity: Math.max(0, Math.min(1, control.windowButtonsOpacity))
+            visible: opacity > 0
+            enabled: opacity > 0.1
         }
     }
 

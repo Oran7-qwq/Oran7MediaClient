@@ -294,25 +294,33 @@ QVariant roamSongsHandler(const QVariantMap& args)
     const qint64 playlistId = args.value(QLatin1String("playlistId")).toLongLong();
     const QString cookie = args.value(QLatin1String("cookie")).toString();
     const QString csrf = args.value(QLatin1String("csrf")).toString();
-
-    if (songId <= 0)
+    const int mode = args.value("recommendationMode", 3).toInt();
+    if (mode < 3 || mode > 6) throw std::runtime_error("不支持的推荐模式");
+    if (mode == 3 && songId <= 0)
         throw std::runtime_error("当前歌曲无 songId，无法漫游");
-    if (playlistId <= 0)
+    if (mode == 3 && playlistId <= 0)
         throw std::runtime_error("未获取到'我喜欢的音乐'歌单ID");
 
     // 与 binaryify playmode_intelligence_list 一致：songId/type/playlistId/startMusicId/count
     QJsonObject payload;
-    payload[QLatin1String("songId")] = songId;
-    payload[QLatin1String("type")] = QStringLiteral("fromPlayOne");
-    payload[QLatin1String("playlistId")] = playlistId;
-    payload[QLatin1String("startMusicId")] = songId;
-    payload[QLatin1String("count")] = 20;
+    if (mode == 3) {
+        payload[QLatin1String("songId")] = songId;
+        payload[QLatin1String("type")] = QStringLiteral("fromPlayOne");
+        payload[QLatin1String("playlistId")] = playlistId;
+        payload[QLatin1String("startMusicId")] = songId;
+        payload[QLatin1String("count")] = 20;
+    } else {
+        // 私人 FM 不依赖歌曲种子或喜欢歌单，取向来自同一个 radio/get 接口。
+        payload["mode"] = mode == 4 ? "DEFAULT" : mode == 5 ? "FAMILIAR" : "EXPLORE";
+        payload["limit"] = 20;
+    }
     if (!csrf.isEmpty())
         payload[QLatin1String("csrf_token")] = csrf;
 
     NcmProtocol protocol;
     NcmRequest req = protocol.prepareWeapi(
-        QStringLiteral("/weapi/playmode/intelligence/list?csrf_token=%1").arg(csrf), payload);
+        (mode == 3 ? QStringLiteral("/weapi/playmode/intelligence/list?csrf_token=%1")
+                   : QStringLiteral("/weapi/v1/radio/get?csrf_token=%1")).arg(csrf), payload);
     // 注意：漫游走基础 cookie（不带 os=pc，NcmProtocol 已说明带 os=pc 会触发风控）
     if (!cookie.isEmpty())
         req.headers.insert(QByteArrayLiteral("Cookie"), cookie.toUtf8());
@@ -326,8 +334,11 @@ QVariant roamSongsHandler(const QVariantMap& args)
 
     QList<Oran7NcmTrackMeta> tracks;
     QList<qint64> missing;
-    for (const auto& value : root.value("data").toArray()) {
-        const auto track = Oran7NcmJsonMapper::track(value.toObject());
+    auto songs = root.value("data").toArray();
+    if (songs.isEmpty()) songs = root.value("data").toObject().value("songs").toArray();
+    for (const auto& value : songs) {
+        const auto object = value.toObject();
+        const auto track = Oran7NcmJsonMapper::track(object.value("song").isObject() ? object.value("song").toObject() : object);
         if (!track) continue;
         tracks.append(*track);
         if (track->title.isEmpty() || track->artist.isEmpty() || track->cover.isEmpty()) missing.append(track->songId);

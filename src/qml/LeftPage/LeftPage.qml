@@ -165,7 +165,7 @@ Rectangle {
         id: topListModel
         ListElement {
             iconImage: "qrc:/image/hugeicons_ai-video.png"
-            iconText: "视频播放器"
+            iconText: "视频空间"
             pageName: "VideoPlayerPage"
         }
         ListElement {
@@ -321,6 +321,11 @@ Rectangle {
             iconText: "从网易云搜索"
             pageName: "SearchMusicPage"
         }
+        ListElement {
+            iconImage: "qrc:/image/oran7_qq_music.svg"
+            iconText: "从 QQ 音乐搜索"
+            pageName: "QQMusicPage"
+        }
     }
     //中间的列表
     Column {
@@ -400,6 +405,9 @@ Rectangle {
                             break;
                         case 1:
                             BasicConfig.pushSearchMusicStackInto_RightPageMainStackView();
+                            break;
+                        case 2:
+                            BasicConfig.pushQQMusicStackInto_RightPageMainStackView();
                             break;
                         default:
                             break;

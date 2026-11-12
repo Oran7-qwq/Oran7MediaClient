@@ -8,7 +8,7 @@ import Oran7UI.Impl
 Oran7BlurCard {
     id: root
 
-    width: targetWidth
+    width: islandMinWidth
     height: 52
     z: 999
 
@@ -21,10 +21,7 @@ Oran7BlurCard {
     // 悬浮窗模式：脱离主窗口、独立成窗（桌面歌词）。此时无法复用主窗口背景做 blur，
     // 改用下方半透明胶囊底色兜底，保证在任何桌面上歌词都可读。
     property bool floatingMode: false
-    property real floatingOpacity: 0.9      // 悬浮模式胶囊底色不透明度（0=纯文字无底）
     property color _floatingBackdropColor: Oran7Theme.Oran7MusicLyricsIsland["floatingBackdropColor-6"]   // 悬浮模式胶囊底色（主题可配）
-    property string backgroundImage: ""     // 悬浮模式背景图片（完整填充胶囊，圆角裁剪；空=不显示）
-    property bool enableBackGroundImage: Oran7Theme.Oran7MusicLyricsIsland.backgroundImageEnabled
 
     // 胶囊宽度随歌词像素宽度动态伸缩
     property real islandMinWidth: 120      // 最小胶囊宽（极短/空歌词兜底）
@@ -78,9 +75,62 @@ Oran7BlurCard {
 
     readonly property string titleText: presentation.titleText
     readonly property bool _displayLyrics: presentation.lyricsVisible
-    // 统一交接进度，淡化与纵向微动同拍；不对文字做横向缩放。
-    property real lyricsBlend: _displayLyrics ? 1 : 0
-    Behavior on lyricsBlend { NumberAnimation { duration: 520; easing.type: Easing.InOutCubic } }
+    // 外壳、歌词滚动与空闲交接共用一次动画起步和同一条缓动曲线。
+    property int presentationDuration: 680
+    property real lyricsBlend: 0
+    property bool _presentationReady: false
+    property bool _lyricScrollPending: false
+    property int minimumRevealDuration: 900
+    property int maximumRevealDuration: 4000
+    property int revealBaseDuration: 450
+    property int revealUnitDuration: 120
+    property int revealedTextHoldDuration: 300
+    property int _revealLine: -1
+    property int _revealDurationMs: minimumRevealDuration
+    property bool _revealStarted: false
+    property real _revealQueuedAtMs: 0
+    property real _revealStartedAtMs: 0
+    signal lyricRevealRequested(int line, int durationMs)
+
+    function revealTextBudget(text) {
+        // 空格不拉长动画；英文/数字按半个字左右计，标点只保留少量停顿。
+        // 按 Unicode 码点遍历，避免把代理对字符重复计数。
+        var units = 0
+        var characters = Array.from(text)
+        for (var i = 0; i < characters.length; ++i) {
+            var character = characters[i]
+            if (/\s/.test(character)) continue
+            if (/[A-Za-z0-9]/.test(character)) units += 0.55
+            else if (/[.,!?;:'"…，。！？；：、（）()\[\]《》“”‘’—-]/.test(character)) units += 0.25
+            else units += 1
+        }
+        return revealBaseDuration + units * revealUnitDuration
+    }
+
+    function revealDurationForLine(line, positionMs) {
+        // 空白行已由模型过滤；按下一有效句、空闲回退或曲尾的实际展示边界计算。
+        var nextTime = lyricsModel.lineTriggerTime(line + 1) * 1000
+        var songEnd = Client.playback.durationMs
+        var available = presentation.idleTimeoutMs
+        if (nextTime >= 0)
+            available = Math.min(available, Math.max(0, nextTime - positionMs))
+        else if (songEnd > positionMs)
+            available = Math.min(available, songEnd - positionMs)
+        // 展示时间只限定来得及完成的预算，短句不必把整段停留时间都耗在溶解上。
+        return Math.round(Math.max(minimumRevealDuration, Math.min(maximumRevealDuration,
+            revealTextBudget(lyricsModel.textAt(line)),
+            available - presentationDuration / 2 - revealedTextHoldDuration)))
+    }
+    function beginLyricReveal() {
+        if (_revealStarted || !_displayLyrics || _revealLine !== displayedLine || _revealLine < 0)
+            return
+        _revealStarted = true
+        // 元数据更新可能重启外壳动画，中点实际推迟的部分也要从展示预算扣除。
+        _revealDurationMs = Math.max(minimumRevealDuration, _revealDurationMs - Math.max(0,
+            Date.now() - _revealQueuedAtMs - presentationDuration / 2))
+        _revealStartedAtMs = Date.now()
+        lyricRevealRequested(_revealLine, _revealDurationMs)
+    }
     readonly property int displayedLine: presentation.displayedLine
     property real currentLabelWidth: root._displayLyrics
         ? Math.min(Math.ceil(titleFontMetrics.advanceWidth(lyricsModel.textAt(root.displayedLine))) + 2, root.islandMaxWidth - root.horizontalPadding * 2)
@@ -96,13 +146,16 @@ Oran7BlurCard {
             ? Client.playback.positionMs / 1000 : 0
         onLyricsVisibleChanged: {
             if (!lyricsVisible) {
+                root._revealLine = -1
+                root._revealStarted = false
                 suffixTimer.stop()
                 root.cu_suffixStep = root.suffixStep
             }
+            root.schedulePresentationTransition(false)
         }
     }
 
-    // 目标尺寸只驱动胶囊动画；文字随实际宽度居中，避免目标变化时先跳位。
+    // 目标尺寸只驱动外壳；文字保持固定画布居中，避免目标变化时先跳位。
     readonly property real targetWidth: Math.max(
         islandMinWidth,
         Math.min(islandMaxWidth, currentLabelWidth + horizontalPadding * 2))
@@ -113,10 +166,66 @@ Oran7BlurCard {
     scale: islandVisible ? 1.0 : 0.8
     Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
     Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-    // 宽度平滑动画（换句/歌曲名↔歌词过渡时仅胶囊外壳伸缩）。
-    // 歌曲名宽度用 FontMetrics 纯同步计算，切歌时宽度目标稳定、不闪变，
-    // 因此可以全程开动画：歌曲信息与歌词按播放时间切换并平滑调整宽度，衔接丝滑。
-    Behavior on width { NumberAnimation { duration: 520; easing.type: Easing.InOutCubic } }
+    function schedulePresentationTransition(scrollRequested) {
+        _lyricScrollPending = _lyricScrollPending || scrollRequested
+        if (_presentationReady)
+            Qt.callLater(root.startPresentationTransition)
+    }
+    function startPresentationTransition() {
+        // 合并同一轮的 displayedLine / lyricsVisible / 字体测量变化，避免外壳抢先起步。
+        var scrollTarget = presentationAnimation.running ? scrollAnimation.to : lyricList.contentY
+        presentationAnimation.stop()
+        if (_lyricScrollPending && lyricsModel.hasLyrics && displayedLine >= 0) {
+            _revealLine = displayedLine
+            _revealStarted = false
+            _revealQueuedAtMs = Date.now()
+            _revealDurationMs = revealDurationForLine(displayedLine, presentation.positionSeconds * 1000)
+            scrollTarget = lyricList.targetYForCurrentLine()
+            if (lyricsBlend < 0.01 || Math.abs(scrollTarget - lyricList.contentY) > lyricList.lineH * 1.5)
+                lyricList.contentY = scrollTarget // 首次展示和跨行跳转先就位，再淡入。
+        }
+        _lyricScrollPending = false
+        shellAnimation.from = root.width
+        shellAnimation.to = root.targetWidth
+        scrollAnimation.from = lyricList.contentY
+        scrollAnimation.to = scrollTarget
+        blendAnimation.from = root.lyricsBlend
+        blendAnimation.to = root._displayLyrics ? 1 : 0
+        presentationAnimation.start()
+    }
+    onTargetWidthChanged: schedulePresentationTransition(false)
+    Component.onCompleted: {
+        width = targetWidth
+        lyricsBlend = _displayLyrics ? 1 : 0
+        lyricList.contentY = lyricList.targetYForCurrentLine()
+        _presentationReady = true
+    }
+
+    ParallelAnimation {
+        id: presentationAnimation
+        SequentialAnimation {
+            PauseAnimation { duration: root.presentationDuration / 2 }
+            ScriptAction { script: root.beginLyricReveal() }
+        }
+        NumberAnimation {
+            id: shellAnimation
+            target: root; property: "width"
+            duration: root.presentationDuration
+            easing.type: Easing.InOutCubic
+        }
+        NumberAnimation {
+            id: scrollAnimation
+            target: lyricList; property: "contentY"
+            duration: root.presentationDuration
+            easing.type: Easing.InOutCubic
+        }
+        NumberAnimation {
+            id: blendAnimation
+            target: root; property: "lyricsBlend"
+            duration: root.presentationDuration
+            easing.type: Easing.InOutCubic
+        }
+    }
 
     // ----  islandVisible 开关控制 ----
     function toggle() { islandVisible = !islandVisible }
@@ -125,31 +234,6 @@ Oran7BlurCard {
 
     // ---- 歌词 数据模型 ----
     LyricsModel { id: lyricsModel; skipEmptyLines: true }
-
-    Rectangle {
-        visible: root.floatingMode && root.floatingOpacity > 0
-        anchors.fill: parent
-        radius: height / 2
-        color: "transparent"
-        border.color: "transparent"
-        border.width: 0
-        z: 0
-        Oran7RoundedImage {
-            anchors.fill: parent
-            source: root.backgroundImage
-            radius: parent.height / 2
-            tiled: true
-            tileAreaWidth: 1600
-            autoPan: true
-            visible: root.enableBackGroundImage && root.backgroundImage.length > 0
-        }
-        Rectangle {
-            anchors.fill: parent
-            radius: root.height/2
-            color: root.enableBackGroundImage && root.backgroundImage.length > 0 ? "transparent" : root._floatingBackdropColor
-            opacity: root.floatingOpacity
-        }
-    }
 
     // === Lyrics Content ===
     Item {
@@ -210,7 +294,10 @@ Oran7BlurCard {
             transform: Translate {
                 y: 3 * (1 - root.lyricsBlend)
             }
-            anchors.fill: parent
+            anchors.centerIn: parent
+            width: parent.width
+            // 浮窗的滚动坐标系固定，只改变外部裁剪范围，避免调高或展开时挪动歌词。
+            height: root.floatingMode ? lineH * 3 : parent.height
             interactive: false            // 禁止滑动
             boundsBehavior: Flickable.StopAtBounds
             clip: true
@@ -218,7 +305,7 @@ Oran7BlurCard {
 
             // 行高略小于胶囊高度：给邻居行留出滑入/滑出的空间；
             // 邻居在边缘焦点≈0 → 完全透明，滚动完成后不残留（见 delegate 的 opacity 处理）
-            property real lineH: 40
+            readonly property real lineH: root.floatingMode ? 52 : 40
             topMargin: height / 2
             bottomMargin: height / 2
 
@@ -231,30 +318,12 @@ Oran7BlurCard {
                 return Math.max(minY, Math.min(targetY, maxY))
             }
 
-            // 平滑滚动动画（OutCubic：先快后缓，滚动自然不僵硬）
-            NumberAnimation {
-                id: scrollAnim
-                target: lyricList
-                property: "contentY"
-                duration: 500
-                easing.type: Easing.OutCubic
-            }
-
-            // 当前行变化 → 平滑上滚到该行居中；跨行跳跃（启动/切歌/拖进度条）直接落位不滚动
+            // 换句只提交意图，和外壳一起启动；不再各自使用不同的时长与曲线。
             Connections {
                 target: presentation
                 function onLyricActivated() {
                     if (!lyricsModel.hasLyrics || root.displayedLine < 0) return
-                    var targetY = lyricList.targetYForCurrentLine()
-                    var delta = Math.abs(targetY - lyricList.contentY)
-                    scrollAnim.stop()
-                    if (root.lyricsBlend < 0.01 || delta > lyricList.lineH * 1.5) {
-                        lyricList.contentY = targetY
-                    } else {
-                        scrollAnim.from = lyricList.contentY
-                        scrollAnim.to = targetY
-                        scrollAnim.start()
-                    }
+                    root.schedulePresentationTransition(true)
                 }
             }
 
@@ -286,7 +355,7 @@ Oran7BlurCard {
                 readonly property real _viewCenter: lyricList.contentY + lyricList.height / 2
                 readonly property real _selfCenter: y + height / 2
                 readonly property real _normDist: Math.min(
-                    Math.abs(_selfCenter - _viewCenter) / (lyricList.height / 2), 1.0)
+                    Math.abs(_selfCenter - _viewCenter) / (textContainer.height / 2), 1.0)
                 readonly property real _focus: 1.0 - _normDist
                 scale: 0.6 + 0.4 * _focus
                 opacity: Math.max(0.0, (_focus - 0.08) / 0.92)   // 边缘裁成完全透明
@@ -294,7 +363,7 @@ Oran7BlurCard {
 
                 // === 溶解过渡（逐元素操作字符串，单层无重叠） === //
                 // displayText = 左侧已揭示的真实字符 + 右侧 $$$ 占位（占位宽度匹配剩余歌词像素宽度）
-                // 每次成为当前行都会重放溶解（含 seek 回来）；节奏用 OutCubic（先快后慢）
+                // 滚动到一半才启动溶解；换句/拖进度会使旧请求失效。
                 property real revealProgress: 0.0   // 溶解进度 0..1（由动画驱动）
                 property string displayText: ""     // 最终显示字符串
                 // 同步测量并封顶到固定画布；不受胶囊动画、后缀或逐字溶解影响。
@@ -302,28 +371,23 @@ Oran7BlurCard {
                 readonly property real _textWidth: Math.min(Math.ceil(lyricFontMetrics.advanceWidth(text)) + 2,
                     root.islandMaxWidth - root.horizontalPadding * 2)
 
-                // 新行加载（delegate 复用）→ 重置为全 $$$ 占位；若本行即当前行则立即开始溶解
-                onTextChanged: {
+                function prepareReveal() {
                     revealAnim.stop()
                     revealProgress = 0
                     updateDisplayText()
-                    if (lineIndex === root.displayedLine)
-                        startReveal()
+                    // 委托晚于中点创建时，仍能接上当前句，不提前启动其他句。
+                    if (root._revealStarted && lineIndex === root._revealLine && root._displayLyrics)
+                        startReveal(Math.max(1, root._revealDurationMs - (Date.now() - root._revealStartedAtMs)))
                 }
-                // 行索引就位（与 onTextChanged 顺序不定，双保险，避免误判）
-                onLineIndexChanged: {
-                    revealAnim.stop()
-                    revealProgress = 0
-                    updateDisplayText()
-                    if (lineIndex === root.displayedLine)
-                        startReveal()
-                }
+                onTextChanged: prepareReveal()
+                onLineIndexChanged: prepareReveal()
+                Component.onCompleted: prepareReveal()
 
                 // 溶解进度变化 → 重建显示字符串（已揭示字符数 = floor(进度 × 总字符数)）
                 onRevealProgressChanged: updateDisplayText()
 
                 // 生成：已揭示真实字符 + 右侧 $$$ 占位（富文本，逐个 $ 的透明度从 1 渐降到 0.4）
-                // 用 floor：字符铺满整个溶解时长；OutCubic 开头起步快，首字符等待可忽略
+                // 用 floor：字符铺满整个溶解时长；OutQuad 开头起步快，首字符等待可忽略
                 function updateDisplayText() {
                     var chars = Math.min(text.length, Math.floor(revealProgress * text.length))
                     var revealed = text.substring(0, chars)
@@ -365,20 +429,14 @@ Oran7BlurCard {
                     return s
                 }
 
-                // 每次成为当前行都重放溶解：重置为 $$$ 占位再按 OutCubic 逐字揭示（seek 回来也会再溶解）
-                function startReveal() {
+                function startReveal(durationMs) {
                     revealAnim.stop()
-                    // 从歌曲信息切入时只做一次整句交接，避免滚动/溶解/缩放同时叠加。
-                    if (root.lyricsBlend < 0.01) {
-                        revealProgress = 1
-                        return
-                    }
-                    revealAnim.duration = Math.min(2400,Math.max(500, text.length * 50))   // 时长随字符数伸缩
+                    revealAnim.duration = durationMs
                     revealProgress = 0
                     revealAnim.start()
                 }
 
-                // 溶解动画：OutCubic 节奏（先快后慢，等价 QEasingCurve::OutCubic）
+                // 保留先快后缓的溶解曲线，时长由当前句的展示窗口决定。
                 // 注意：不要换成 InOutQuint/InOutCubic 这类"两端缓"的曲线——它们开头平缓会空等、中间陡峭溶解飞快
                 NumberAnimation {
                     id: revealAnim
@@ -386,7 +444,7 @@ Oran7BlurCard {
                     property: "revealProgress"
                     from: 0
                     to: 1
-                    duration: 400//default value
+                    duration: root.minimumRevealDuration
                     easing.type: Easing.OutQuad
                 }
 
@@ -395,7 +453,22 @@ Oran7BlurCard {
                     target: presentation
                     function onLyricActivated() {
                         if (lyricDelegate.lineIndex === root.displayedLine)
-                            lyricDelegate.startReveal()
+                            lyricDelegate.prepareReveal()
+                    }
+                }
+                Connections {
+                    target: presentationAnimation
+                    function onFinished() {
+                        // 旧行移出的整个过程继续溶解，滚动/交接完整结束后再停止后台动画。
+                        if (lyricDelegate.lineIndex !== root.displayedLine || !root._displayLyrics)
+                            revealAnim.stop()
+                    }
+                }
+                Connections {
+                    target: root
+                    function onLyricRevealRequested(line, durationMs) {
+                        if (lyricDelegate.lineIndex === line)
+                            lyricDelegate.startReveal(durationMs)
                     }
                 }
 

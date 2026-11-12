@@ -1,7 +1,5 @@
 import QtQuick
 import Oran7UI.Impl
-import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 
 Item {
     id:root
@@ -10,18 +8,6 @@ Item {
     anchors.top: parent.top
     anchors.left: parent.left
     visible: true
-
-    property bool start_gradientLayerColorAnimation: false
-    // onStart_gradientLayerColorAnimationChanged: {
-    //     if(root.start_gradientLayerColorAnimation===false)
-    //     {
-    //         gradientLayerColorAnimationTImer.stop()
-    //     }
-    //     else
-    //     {
-    //         gradientLayerColorAnimationTImer.start()
-    //     }
-    // }
 
     property var dataItems: [
         {value:qsTranslate("Oran7Ui", "VideoPlayer模块稳定支持播放4k60fps高帧率视频资源文件~")},
@@ -95,19 +81,13 @@ Item {
         }
     }
 
-    Oran7GradientMask{
-        id: linearGradientTextRectangle
-
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.horizontalCenter: parent.horizontalCenter
+    Oran7ShaderTextMask {
+        anchors.centerIn: parent
         width: column.implicitWidth
         height: column.implicitHeight
 
-        gradientColorIndex: 0
-        dynamicGradient: root.start_gradientLayerColorAnimation
-        gradientMaskEnabled: true
-        transitionDuration: 1000
-        dynamicInterval: 1000
+        shaderName: "clouds"
+        effectEnabled: root.visible
 
         Column {
             id: column
@@ -125,7 +105,6 @@ Item {
                 Row {
                     spacing: 12
                     anchors.verticalCenter: parent.verticalCenter
-                    z:linearGradientTextRectangle.z+1
                     Text {id: typewriterDisplay; text: root.currentText; font.pixelSize: 27; color: "white"; font.weight: Font.Bold}
                     Text {id: cursor; text: "|"; font.pixelSize: 27; color:"white"; font.weight: Font.Bold; visible: root.currentText.length > 0}
                     Timer{id: blinkTimer; interval: 500; repeat: true; running: root.currentText.length > 0; onTriggered: {cursor.visible = !cursor.visible}
@@ -134,78 +113,6 @@ Item {
             }
         }
     }
-    // Rectangle {
-    //     id:linearGradientTextRectangle
-    //     anchors.verticalCenter: parent.verticalCenter
-    //     anchors.horizontalCenter: parent.horizontalCenter
-    //     width: column.implicitWidth
-    //     height: column.implicitHeight
-    //     color: "transparent"
-
-    //     // 创建渐变层
-    //     LinearGradient {
-    //         id: gradientLayer
-    //         anchors.fill: parent
-    //         start: Qt.point(0, 0)
-    //         end: Qt.point(width, height)
-    //         property color begainColor: "#96fbc4"
-    //         property color middleColor: "#7ed321"
-    //         property color endColor: "#f9f586"
-    //         property int currentColorIndex: 0
-    //         onCurrentColorIndexChanged: {
-    //             gradientLayerColorAnimationTImer.start()
-    //         }
-    //         property var colorItems: [
-    //             {begainColorValue: "#96fbc4",middleColorValue: "#7ed321",endColorValue: "#f9f586"},//自然绿
-    //             {begainColorValue: "#fa709a",middleColorValue: "#fee140",endColorValue: "#ff9a8b"},//焦糖奶茶
-    //             {begainColorValue: "#fd63a3",middleColorValue: "#fe9800",endColorValue: "#ffb74d"},//夕阳橙
-    //             {begainColorValue: "#ff6b6b",middleColorValue: "#ff4757",endColorValue: "#ee5a52"},//热情红
-    //             {begainColorValue: "#f093fb",middleColorValue: "#f5576c",endColorValue: "#4facfe"},//霓虹粉
-    //             {begainColorValue: "#0093e9",middleColorValue: "#00f2fe",endColorValue: "#4facfe"},//清新蓝
-    //             {begainColorValue: "#ffcc02",middleColorValue: "#f7971e",endColorValue: "#ffd200"},//金秋黄
-    //             {begainColorValue: "#2d5016",middleColorValue: "#a4de6c",endColorValue: "#40e0d0"}//森林松绿色
-    //         ]
-    //         //动态渐变
-    //         Timer{
-    //             id:gradientLayerColorAnimationTImer
-    //             interval: gradientLayerColorParallelAnimation.transDuration + 100
-    //             repeat: false
-    //             onTriggered: {
-    //                 //console.log("gradientLayerColorAnimationTImer be triggered.")
-    //                 gradientLayerColorParallelAnimation.start()
-    //             }
-    //         }
-    //         ParallelAnimation{
-    //             id:gradientLayerColorParallelAnimation
-    //             property real transDuration: 1000 //2000ms
-    //             PropertyAnimation{property:"begainColor"; to:gradientLayer.colorItems[gradientLayer.currentColorIndex].begainColorValue;
-    //                 target:gradientLayer; duration:gradientLayerColorParallelAnimation.transDuration}
-    //             PropertyAnimation{property:"middleColor"; to:gradientLayer.colorItems[gradientLayer.currentColorIndex].middleColorValue;
-    //                 target:gradientLayer; duration:gradientLayerColorParallelAnimation.transDuration}
-    //             PropertyAnimation{property:"endColor"; to:gradientLayer.colorItems[gradientLayer.currentColorIndex].endColorValue;
-    //                 target:gradientLayer; duration:gradientLayerColorParallelAnimation.transDuration}
-    //             onFinished: {
-    //                 //console.log("gradientLayerColorParallelAnimation finished,index:",gradientLayer.currentColorIndex)
-    //                 gradientLayer.currentColorIndex = (gradientLayer.currentColorIndex + 1)%gradientLayer.colorItems.length
-    //             }
-    //         }
-
-    //         gradient: Gradient {
-    //             GradientStop { position: 0.0; color: gradientLayer.begainColor}
-    //             GradientStop { position: 0.5; color: gradientLayer.middleColor }
-    //             GradientStop { position: 1.0; color: gradientLayer.endColor}
-    //         }
-    //     }
-
-    //     // 创建白色文字层
-    //     // 将渐变层和文字层组合
-    //     layer.enabled: true
-    //     layer.effect: OpacityMask {
-    //         maskSource: column
-    //         source: gradientLayer
-    //     }
-    // }
-
     Component.onCompleted: {
         column.forceLayout();
         typeWriteTimer.start()

@@ -606,6 +606,27 @@ Rectangle {
             }
         }
     }
+    // 阴影只采样固定的圆角轮廓，不因封面下载、hover 或选中动画重复生成。
+    Rectangle {
+        id: coverShadowShape
+        width: coverImage.width
+        height: coverImage.height
+        radius: coverImage.radius
+        color: "black"
+        visible: false
+    }
+    DropShadow {
+        anchors.fill: coverImage
+        source: coverShadowShape
+        horizontalOffset: 0
+        verticalOffset: 3
+        radius: 7
+        samples: 15
+        spread: 0
+        color: "#78000000"
+        transparentBorder: true
+        cached: true
+    }
     // 专辑封面
     Oran7RoundedImage{
         id:coverImage

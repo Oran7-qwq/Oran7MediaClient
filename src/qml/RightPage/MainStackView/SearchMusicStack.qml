@@ -24,6 +24,22 @@ Item {
     property string pageName: ""
     readonly property int likedPageIndex: 0
     readonly property int searchPageIndex: 1
+    readonly property int recommendationPageIndex: 2
+    function focusRecommendations() {
+        searchMuscStack_playlistView.switchToPage(recommendationPageIndex)
+        Qt.callLater(searchMuscStack_playlistView.scrollToCurrentIndex)
+    }
+    Connections {
+        target: Client.musicQueue
+        function onRecommendationActivated() { root.focusRecommendations() }
+    }
+    Connections {
+        target: Client.playback
+        function onCurrentTrackChanged() {
+            if (searchMuscStack_playlistView.currentPageIndex === root.recommendationPageIndex)
+                Qt.callLater(searchMuscStack_playlistView.scrollToCurrentIndex)
+        }
+    }
 
     // 搜索结果由 Client 持有；网络返回后一次提交完整快照。
     readonly property var searchCacheListModel: Client.tracks.search
@@ -77,11 +93,8 @@ Item {
     property bool isActive: false
     // 页面激活：提示文案淡入并计时 5 秒后淡出；页面失活：停止计时立即淡出
     onIsActiveChanged: {
-        // 同步聚焦状态到全局：仅聚焦时底部模式轮转才允许切入网易云漫游(3)
+        // 只记录页面聚焦，浏览其他页面不结束后台的推荐会话。
         BasicConfig.searchMusicStackActive = root.isActive;
-        // 漫游（心动模式）仅在本搜索页内可用：离开该 Stack 时若仍处于 3，强制切回顺序播放(0)，(3+1)%4=0
-        if (!root.isActive && BasicConfig.playMode === 3)
-            Client.setPlayMode(0);
         if (root.isActive) {
             // 超过三次不再重新显示
             if (ncmPlainTextLabel.showCount >= 3)
@@ -151,6 +164,7 @@ Item {
     }
 
     Component.onCompleted: {
+        if (Client.musicQueue.owner === "recommendation") Qt.callLater(root.focusRecommendations)
         Qt.callLater(findAndSetupStackView);
         // 喜欢列表成为首个页签，首次进入也提交加载意图，沿用服务已有缓存去重。
         BasicConfig.fetchNeteaseLikedSongs();
@@ -372,11 +386,15 @@ Item {
 
 
         //初始化属性
-        titleModel: [qsTranslate("Oran7Ui", "我喜欢的音乐"), qsTranslate("Oran7Ui", "搜索结果")]
+        titleModel: [qsTranslate("Oran7Ui", "我喜欢的音乐"), qsTranslate("Oran7Ui", "搜索结果"), qsTranslate("Oran7Ui", "推荐队列")]
         // 页面数据源：0=云端"我喜欢的音乐"模型，1=搜索结果缓存模型。
-        pageListModels: [BasicConfig.neteaseLikedListModel, searchCacheListModel]
+        pageListModels: [BasicConfig.neteaseLikedListModel, searchCacheListModel, Client.tracks.recommendations]
+        allowDragReorder: currentPageIndex !== root.recommendationPageIndex
         // 空列表占位提示（逐页对齐）：搜索结果页为空时显示引导大字，网易云喜欢页不显示
-        pageEmptyHintTexts: ["", ""]
+        pageEmptyHintTexts: ["", "", Client.musicQueue.recommendationError
+            ? qsTranslate("Oran7Ui", Client.musicQueue.recommendationError)
+            : Client.musicQueue.recommendationBusy ? qsTranslate("Oran7Ui", "正在加载推荐…")
+            : qsTranslate("Oran7Ui", "从底部网易云推荐菜单开始播放")]
 
         // ------------- innder signals -------------
         onItemDoubleClicked: function (index) {

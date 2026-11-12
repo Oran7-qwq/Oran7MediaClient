@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="image/ClearPlay.png">../../image/ClearPlay.png</file>
+        <file alias="image/ClearPause.png">../../image/ClearPause.png</file>
+        <file alias="image/volume.png">../../image/volume.png</file>
+    </qresource>
+</RCC>

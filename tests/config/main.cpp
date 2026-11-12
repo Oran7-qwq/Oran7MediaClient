@@ -34,8 +34,36 @@ int main(int argc,char** argv) {
     check(Oran7AppConfig::normalize({},defaults,&normalized,&error)&&error.isEmpty(),"unversioned empty document migration");
     check(normalized==defaults,"all defaults come from single default.json");
     check(Oran7AppConfig::fromJson(normalized).toJson()==defaults,"typed roundtrip default schema");
+    check(Oran7AppConfig::fromJson(normalized).recording.format=="mp4", "old config restores MP4 default format");
+    {
+        auto formatConfig=Oran7AppConfig::fromJson(normalized);
+        formatConfig.recording.format="flv";
+        QJsonObject formatJson;
+        check(Oran7AppConfig::normalize(formatConfig.toJson(),defaults,&formatJson,&error) &&
+              Oran7AppConfig::fromJson(formatJson).recording.format=="flv", "FLV format persists independently");
+        formatConfig.recording.format="unknown";
+        check(Oran7AppConfig::normalize(formatConfig.toJson(),defaults,&formatJson,&error) &&
+              Oran7AppConfig::fromJson(formatJson).recording.format=="mp4", "invalid file format falls back to defaults");
+        const auto formatPath=directory.filePath("formats.json");
+        {
+            Oran7AppConfigManager formatManager(formatPath,defaults);
+            auto selected=formatManager.snapshot();selected.recording.format="flv";
+            formatManager.updateConfig(selected);
+            check(formatManager.saveConfig(), "FLV preference saved through production config manager");
+        }
+        Oran7AppConfigManager restoredFormat(formatPath,defaults);
+        check(restoredFormat.snapshot().recording.format=="flv", "restart restores saved FLV format");
+    }
     auto recording=Oran7AppConfig::fromJson(normalized);recording.recording.mode=1;recording.recording.whipUrl="https://example.test/whip";recording.recording.bearerToken="fixture-token";recording.recording.width=1280;recording.recording.height=720;
     check(Oran7AppConfig::normalize(recording.toJson(),defaults,&normalized,&error)&&Oran7AppConfig::fromJson(normalized).recording.bearerToken=="fixture-token"&&Oran7AppConfig::fromJson(normalized).recording.width==1280,"recording schema and credentials roundtrip without changing v2 keys");
+    auto audio=Oran7AppConfig::fromJson(normalized);
+    audio.audio.enabled=true;audio.audio.presetId="custom";audio.audio.preampDb=3.5;audio.audio.outputGainDb=-2.0;
+    audio.audio.limiterCeilingDb=-3.0;audio.audio.bandGainsDb=QList<double>{6,4,2,1,0,0,-1,-2,-3,-4};
+    check(Oran7AppConfig::normalize(audio.toJson(),defaults,&normalized,&error)&&Oran7AppConfig::fromJson(normalized).audio.bandGainsDb==audio.audio.bandGainsDb
+              &&Oran7AppConfig::fromJson(normalized).audio.enabled&&Oran7AppConfig::fromJson(normalized).audio.presetId=="custom"
+              &&Oran7AppConfig::fromJson(normalized).audio.limiterCeilingDb==-3.0,"audio schema roundtrip");
+    auto invalidAudio=audio.toJson();auto invalidBands=invalidAudio.value("audio").toObject();invalidBands["band_gains_db"]=QJsonArray{99,0,0};invalidAudio["audio"]=invalidBands;
+    check(Oran7AppConfig::normalize(invalidAudio,defaults,&normalized,&error)&&Oran7AppConfig::fromJson(normalized).audio.bandGainsDb==QList<double>(10,0.0),"invalid audio bands fall back to defaults");
     auto legacy=QJsonObject{{"window",QJsonObject{{"width",1440},{"position",QJsonObject{{"x",-1440},{"extra",true}}},{"futureWindow",42}}},
         {"screen_capture",QJsonObject{{"fps",120}}},{"playerVolume",73},{"last_used_file_isvip",true},
         {"netease_auth",QJsonObject{{"MUSIC_U","fixture-secret"}}},{"bilibili_auth",QJsonObject{{"sessdata","fixture-bili"}}},

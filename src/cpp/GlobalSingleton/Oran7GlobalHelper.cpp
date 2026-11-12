@@ -1,6 +1,21 @@
 #include "Oran7GlobalHelper.h"
 #include <QCoreApplication>
 #include <QDir>
+#include <atomic>
+
+namespace {
+std::atomic_bool developerModeEnabled{false};
+}
+
+bool Oran7GlobalHelper::developerMode()
+{
+    return developerModeEnabled.load(std::memory_order_relaxed);
+}
+
+void Oran7GlobalHelper::setDeveloperMode(bool enabled)
+{
+    developerModeEnabled.store(enabled, std::memory_order_relaxed);
+}
 
 Oran7GlobalHelper::Oran7GlobalHelper()
 {

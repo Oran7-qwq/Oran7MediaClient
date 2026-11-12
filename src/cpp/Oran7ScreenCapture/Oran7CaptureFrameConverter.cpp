@@ -7,8 +7,10 @@
 #include <cstring>
 extern "C"
 {
+#include <libavcodec/defs.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/pixdesc.h>
+#include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 }
 using Microsoft::WRL::ComPtr;
@@ -30,6 +32,7 @@ struct Oran7CaptureFrameConverter::Oran7Resources
     int m_fps;
     FrameTransfer m_download = &av_hwframe_transfer_data;
     ComPtr<ID3D11Texture2D> m_encodeNv12Tex, m_encodeReadback;
+    ComPtr<ID3D11VideoProcessorOutputView> m_encodeOutputView;
     ComPtr<ID3D11VideoProcessorEnumerator> m_encodeVpEnum;
     ComPtr<ID3D11VideoProcessor> m_encodeVp;
     QSize m_encodeSourceSize, m_encodeTargetSize;
@@ -39,6 +42,13 @@ struct Oran7CaptureFrameConverter::Oran7Resources
         void operator()(SwsContext* context) const { sws_freeContext(context); }
     };
     std::unique_ptr<SwsContext, Oran7SwsDeleter> m_sws;
+    struct Oran7PoolDeleter
+    {
+        void operator()(AVBufferPool* pool) const { av_buffer_pool_uninit(&pool); }
+    };
+    std::unique_ptr<AVBufferPool, Oran7PoolDeleter> m_recordingPool;
+    QSize m_recordingPoolSize;
+    Frame allocateRecordingFrame(int width, int height);
     QThread* m_owner = QThread::currentThread(); // 只作线程断言，不跨线程解引用。
     ~Oran7Resources() { Q_ASSERT(m_owner == QThread::currentThread()); }
     bool ensurePreviewPool(int w, int h);
@@ -48,6 +58,34 @@ struct Oran7CaptureFrameConverter::Oran7Resources
     AVFrame* convertRecordingFrame(const AVFrame* frame, int width, int height);
     AVFrame* convertRecordingWithProcessor(const AVFrame* frame, int width, int height);
 };
+
+Oran7CaptureFrameConverter::Frame Oran7CaptureFrameConverter::Oran7Resources::allocateRecordingFrame(int width,
+                                                                                                     int height)
+{
+    if (!m_recordingPool || m_recordingPoolSize != QSize(width, height))
+    {
+        const int bytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, width, height, 32);
+        if (bytes < 0)
+            return {};
+        m_recordingPool.reset(av_buffer_pool_init(size_t(bytes) + AV_INPUT_BUFFER_PADDING_SIZE, nullptr));
+        if (!m_recordingPool)
+            return {};
+        m_recordingPoolSize = QSize(width, height);
+    }
+    Frame result(av_frame_alloc());
+    if (!result)
+        return {};
+    result->buf[0] = av_buffer_pool_get(m_recordingPool.get());
+    if (!result->buf[0])
+        return {};
+    result->format = AV_PIX_FMT_NV12;
+    result->width = width;
+    result->height = height;
+    if (av_image_fill_arrays(result->data, result->linesize, result->buf[0]->data, AV_PIX_FMT_NV12, width, height, 32) <
+        0)
+        return {};
+    return result;
+}
 
 Oran7CaptureFrameConverter::Oran7CaptureFrameConverter(ID3D11Device* device, int fps, FrameTransfer download)
     : m_impl(std::make_unique<Oran7Resources>())
@@ -67,7 +105,14 @@ Oran7CaptureFrameConverter::~Oran7CaptureFrameConverter() = default;
 void Oran7CaptureFrameConverter::beginRecording()
 {
     Q_ASSERT(m_impl->m_owner == QThread::currentThread());
+    endRecording();
     m_impl->m_gpuConversionUnavailable = false;
+}
+void Oran7CaptureFrameConverter::endRecording()
+{
+    Q_ASSERT(m_impl->m_owner == QThread::currentThread());
+    m_impl->m_recordingPool.reset();
+    m_impl->m_recordingPoolSize = {};
 }
 Oran7CaptureFrameConverter::Frame Oran7CaptureFrameConverter::recording(const AVFrame* source, int width, int height)
 {
@@ -221,15 +266,8 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingFrame(const
     const int sourceRange = sourceRgb || hwFrame->color_range == AVCOL_RANGE_JPEG ? 1 : 0;
     sws_setColorspaceDetails(m_sws.get(), coefficients, sourceRange, coefficients, 0, 0, 1 << 16, 1 << 16);
 
-    Frame dst(av_frame_alloc());
+    Frame dst = allocateRecordingFrame(outW, outH);
     if (!dst)
-    {
-        return nullptr;
-    }
-    dst->format = AV_PIX_FMT_NV12;
-    dst->width = outW;
-    dst->height = outH;
-    if (av_frame_get_buffer(dst.get(), 32) < 0)
     {
         return nullptr;
     }
@@ -258,6 +296,7 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingWithProcess
     if (!m_encodeVp || source != m_encodeSourceSize || target != m_encodeTargetSize)
     {
         m_encodeVp.Reset();
+        m_encodeOutputView.Reset();
         m_encodeVpEnum.Reset();
         m_encodeNv12Tex.Reset();
         m_encodeReadback.Reset();
@@ -289,6 +328,11 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingWithProcess
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
         if (FAILED(m_capDev->CreateTexture2D(&desc, nullptr, &m_encodeReadback)))
             return nullptr;
+        D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outputDesc{};
+        outputDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+        if (FAILED(m_capVideoDev->CreateVideoProcessorOutputView(m_encodeNv12Tex.Get(), m_encodeVpEnum.Get(),
+                                                                 &outputDesc, &m_encodeOutputView)))
+            return nullptr;
         m_encodeSourceSize = source;
         m_encodeTargetSize = target;
     }
@@ -297,12 +341,6 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingWithProcess
     inputDesc.Texture2D.ArraySlice = UINT(reinterpret_cast<intptr_t>(frame->data[1]));
     ComPtr<ID3D11VideoProcessorInputView> input;
     if (FAILED(m_capVideoDev->CreateVideoProcessorInputView(texture, m_encodeVpEnum.Get(), &inputDesc, &input)))
-        return nullptr;
-    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outputDesc{};
-    outputDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
-    ComPtr<ID3D11VideoProcessorOutputView> output;
-    if (FAILED(m_capVideoDev->CreateVideoProcessorOutputView(m_encodeNv12Tex.Get(), m_encodeVpEnum.Get(), &outputDesc,
-                                                             &output)))
         return nullptr;
     RECT sourceRect{0, 0, source.width(), source.height()}, targetRect{0, 0, width, height};
     m_capVideoCtx->VideoProcessorSetStreamFrameFormat(m_encodeVp.Get(), 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
@@ -320,19 +358,12 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingWithProcess
     D3D11_VIDEO_PROCESSOR_STREAM stream{};
     stream.Enable = TRUE;
     stream.pInputSurface = input.Get();
-    if (FAILED(m_capVideoCtx->VideoProcessorBlt(m_encodeVp.Get(), output.Get(), 0, 1, &stream)))
+    if (FAILED(m_capVideoCtx->VideoProcessorBlt(m_encodeVp.Get(), m_encodeOutputView.Get(), 0, 1, &stream)))
         return nullptr;
     m_capCtx->CopyResource(m_encodeReadback.Get(), m_encodeNv12Tex.Get());
-    Frame result(av_frame_alloc());
+    Frame result = allocateRecordingFrame(width, height);
     if (!result)
         return nullptr;
-    result->format = AV_PIX_FMT_NV12;
-    result->width = width;
-    result->height = height;
-    if (av_frame_get_buffer(result.get(), 32) < 0)
-    {
-        return nullptr;
-    }
     D3D11_MAPPED_SUBRESOURCE mapped{};
     if (FAILED(m_capCtx->Map(m_encodeReadback.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
     {

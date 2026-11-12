@@ -8,6 +8,9 @@
             "y": 200
         }
     },
+    "general": {
+        "developerMode": false
+    },
     "appearance": {
         "themeProfile": "profile-default",
         "language": "zh_CN",
@@ -61,6 +64,7 @@
         "list": []
     },
     "recording": {
+        "format": "mp4",
         "mode": 0,
         "width": 0,
         "height": 0,
@@ -80,5 +84,31 @@
         "signaling_url": "",
         "signaling_user": "",
         "signaling_password": ""
+    },
+    "video": {
+        "history": []
+    },
+    "audio": {
+        "version": 2,
+        "enabled": false,
+        "preset_id": "custom",
+        "preamp_db": 0.0,
+        "output_gain_db": 0.0,
+        "limiter_ceiling_db": -1.0,
+        "band_gains_db": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "custom_presets": [],
+        "high_pass_hz": 20.0,
+        "low_pass_hz": 20000.0,
+        "bass_boost_db": 0.0,
+        "bass_freq_hz": 120.0,
+        "stereo_width": 1.0,
+        "crossfeed": 0,
+        "compressor_enabled": false,
+        "compressor_threshold_db": -18.0,
+        "compressor_ratio": 3.0,
+        "compressor_attack_ms": 10.0,
+        "compressor_release_ms": 150.0,
+        "compressor_knee_db": 3.0,
+        "compressor_makeup_db": 0.0
     }
 }

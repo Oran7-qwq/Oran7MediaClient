@@ -31,6 +31,8 @@ Rectangle{
     // --- signal ---
 
      signal positionChanged()
+    signal seekCommitted(int seconds)
+    property bool autoSeek: true
 
     //========
 
@@ -67,6 +69,12 @@ Rectangle{
     //Mouse
     property bool isPressed: false
     property bool isInOutSide: true
+    function updateFromMouse(mouseX) {
+        var position = Math.max(0, Math.min(root.width, mouseX))
+        root.progressHandleX = position - root.progressHandleWidth / 2
+        root.visibleProgressX = position
+        root.nowSecondTime = root.width > 0 ? root.allSecondTime * position / root.width : 0
+    }
 
     Slider{
         id:progressSlier
@@ -133,40 +141,25 @@ Rectangle{
             root.isInOutSide=true
         }
         onPressed: (mouse)=>{
-            if(root.allSecondTime !== 0)
-                root.progressHandleX=mouse.x
             root.isPressed=true
+            root.updateFromMouse(mouse.x)
         }
         onReleased: {
+            var seconds = root.nowSecondTime
             root.isPressed=false
             if(root.isInOutSide===true)
             {
                 progressHandle.visible = false
                 root.visibleColor=root.sliderColor_themeItems[root.sliderColor_themeIndex].default_Color
             }
-            if(BasicConfig.globalPlayingFocus === root.focusedPlayer)
-                Client.seekTo(root.nowSecondTime)
+            if(root.autoSeek && BasicConfig.globalPlayingFocus === root.focusedPlayer)
+                Client.seekTo(seconds)
+            root.seekCommitted(seconds)
         }
         onMouseXChanged: (mouse)=>{
             if(root.isPressed===true)
             {
-                 if(mouse.x<=root.width&&mouse.x>=0)
-                 {
-                     root.progressHandleX = mouse.x - progressHandle.width/2
-                     root.visibleProgressX =mouse.x
-                     root.nowSecondTime=root.allSecondTime*(mouse.x/root.width)
-                 }
-                if(mouse.x<0)
-                {
-                    root.progressHandleX=0-progressHandle.width/2
-                    root.visibleProgressX =0
-                    root.nowSecondTime=0
-                }
-                if(mouse.x>root.width)
-                {
-                    root.progressHandleX=root.width-progressHandle.width/2
-                    root.visibleProgressX =root.width
-                }
+                root.updateFromMouse(mouse.x)
             }
         }
 

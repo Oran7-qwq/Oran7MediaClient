@@ -81,6 +81,7 @@ public:
      * @brief 调试
      */
     int64_t sentFrameCount() const { return _frameIndex.load(); }
+    int64_t droppedFrameCount() const { return _droppedFrames.load(); }
     int queuedPktCount() const {
         std::lock_guard<std::mutex> lock(_pkt_mtx);
         return (int)_pktQueue.size();

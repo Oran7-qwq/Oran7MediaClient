@@ -5,14 +5,19 @@
 #include "FFPlay_Def.h"
 #include "Oran7FFmpegDecoderCore.h"        // Oran7FFmpegDecoderCore 已独立成文件
 #include "Oran7SdlAudioDevice.h"
+#include "Audio/Oran7AudioVolumeRamp.h"
 
 #include <thread>
 #include <functional>
 #include <atomic>
+#include <cstdint>
+#include <memory>
 
 // 前向声明：仅指针成员引用，避免把平台头/第三方头泄漏进公共头
 struct ID3D11Device;
 struct sonicStreamStruct;
+class Oran7AudioProcessor;
+class Oran7AudioParameterQueue;
 
 /**
  * @brief Oran7FFplayerCore  播放器核心（ffplay 系移植）：解封装读取线程、播放控制、音视频同步、
@@ -46,6 +51,10 @@ public:
     // =========渲染/设备注入 =========//
     void AddVideoRefreshCallback(std::function<int(const Frame *,AVFrame *)> callback);
     void setD3D11Device(ID3D11Device *dev);                       //外部定义D3D11设备-接口
+
+    // =========音效参数通道 =========//
+    // 必须在 ffp_prepare_async_l 之前注入；空队列表示整体旁路。
+    void setAudioParameterQueue(std::shared_ptr<Oran7AudioParameterQueue> queue);
 
     //================= 消息队列访问器 =================//
     // msg_queue_ 的唯一外部出口（Oran7MediaPlayer 经它收发播放状态消息）
@@ -117,6 +126,8 @@ private:
     static int  audio_resample_frame(Oran7FFplayerCore *is);
     // SDL 音频回调
     static void sdl_audio_callback(void *opaque, Uint8 *stream, int len);
+    // 按当前输出格式应用音量斜坡；source 可为空（静音）。
+    void applyVolumeToStream(Uint8 *stream, const Uint8 *source, int bytes) noexcept;
 
     //==== 硬件加速（D3D11/Qt 设备注入） ====
     bool initialize_hardware_acceleration(const AVCodec* codec);//初始化硬件加速
@@ -138,6 +149,9 @@ private:
     int step = 0;                       //逐帧单步运行，未启用
     int framedrop = -1;
     int frame_drops_late = 0;
+    int m_videoDiscardedSerial = 0;
+    int m_lastReportedDrops = 0;
+    int64_t m_lastVideoReportUs = 0;
 
     int eof = 0;                        //FFPlayer数据读取read_thread线程结束标志
     bool Audio_EOF= false;    //音频流结束标志
@@ -194,16 +208,30 @@ private:
 
 
     Oran7SdlAudioDevice m_audioDevice; // 独占设备，暂停/关闭串行；未打开时无效，销毁自动关闭。
-    struct AudioParams audio_src;           // 音频解码后的frame参数
-    struct AudioParams audio_tgt;           // SDL支持的音频参数，重采样转换：audio_src->audio_tgt
+    bool m_sdlInitialized = false;
+    struct AudioParams audio_src{};           // 音频解码后的frame参数
+    struct AudioParams audio_tgt{};           // SDL支持的音频参数，重采样转换：audio_src->audio_tgt
     struct SwrContext *swr_ctx  = NULL;  // 音频重采样context
     int   audio_hw_buf_size = 0;              // SDL音频缓冲区的大小(字节为单位)
     int   audio_write_buf_size;                //向SDL音频缓冲区实际写入的数据大小
     uint8_t *audio_buf = NULL;               // 指向待播放的一帧音频数据，指向的数据区将被拷入SDL音频缓冲区
-    uint8_t *audio_buf1 = NULL;             // 指向重采样后的数据
+    uint8_t *audio_buf1 = NULL;             // 指向重采样后的稳定数据（A0：不再借用解码帧）
+    uint8_t *audio_sonic_buf = NULL;        // 变速输出缓冲，与输入 audio_buf 完全分离
+    uint8_t *audio_dsp_buf = NULL;          // 音效处理输出，避免与 Sonic/输入缓冲复用
     unsigned int audio_buf_size = 0;      // 待播放的一帧音频数据(audio_buf指向)的大小
     unsigned int audio_buf1_size = 0;    // 申请到的音频缓冲区audio_buf1的实际尺寸
+    unsigned int audio_sonic_buf_size = 0; // 申请到的音频缓冲区audio_sonic_buf的实际尺寸
+    unsigned int audio_dsp_buf_size = 0;   // 申请到的音频缓冲区audio_dsp_buf的实际尺寸
     int audio_buf_index = 0;                  // 更新拷贝位置 当前音频帧中已拷入SDL音频缓冲区
+
+    // A0-3：浮点/整数音量斜坡；目标来自 audio_volume（0…SDL_MIX_MAXVOLUME）。
+    Oran7AudioVolumeRamp audio_volume_ramp_;
+
+    // A0：每播放器独立的参数通道与处理器；seek 用代际号清理旧 PCM/滤波历史。
+    std::shared_ptr<Oran7AudioParameterQueue> audio_parameter_queue_;
+    std::unique_ptr<Oran7AudioProcessor> audio_processor_;
+    std::atomic<std::uint32_t> audio_discontinuity_{0};
+    std::uint32_t audio_seen_discontinuity_ = 0;
 
     std::atomic<int> audio_volume=DEFAULT_VOLUM_SIZE; //音量
     int startup_volume = DEFAULT_VOLUM_SIZE; // 起始音量

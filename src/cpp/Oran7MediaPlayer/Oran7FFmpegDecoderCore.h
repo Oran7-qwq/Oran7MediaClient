@@ -34,9 +34,9 @@ private:
     int video_thread(void* arg);
 
     // —— 包队列与解码器句柄 ——
-    PacketQueue   *queue_;          // 数据包队列
-    AVCodecContext *avctx_;        // 解码器上下文
-    AVPacket pkt_;                        // AVERROR(EAGAIN) 缓存包
+    PacketQueue   *queue_ = nullptr;          // 数据包队列
+    AVCodecContext *avctx_ = nullptr;        // 解码器上下文
+    AVPacket pkt_{};                        // AVERROR(EAGAIN) 缓存包
     int      pkt_serial_ = -1;           // 取出的队头数据包序列号,在/*阻塞式读取packet*/时获取到
     int      finished_;                      // =0，解码器处于工作状态；=非0，解码器处于空闲状态
     std::thread *decoder_thread_ = nullptr;

@@ -6,9 +6,10 @@ Oran7TrackLibrary::Oran7TrackLibrary(QObject* parent) : QObject(parent),
     m_local(std::make_unique<Oran7TrackListModel>()),
     m_integrated(std::make_unique<Oran7TrackListModel>()),
     m_liked(std::make_unique<Oran7TrackListModel>()),
-    m_search(std::make_unique<Oran7TrackListModel>())
+    m_search(std::make_unique<Oran7TrackListModel>()),
+    m_recommendations(std::make_unique<Oran7TrackListModel>())
 {
-    for (auto* model : {local(), integrated(), liked(), search()}) {
+    for (auto* model : {local(), integrated(), liked(), search(), recommendations()}) {
         QQmlEngine::setObjectOwnership(model, QQmlEngine::CppOwnership);
         connect(model, &Oran7TrackListModel::contentsChanged, this, &Oran7TrackLibrary::refreshMembership);
     }
@@ -20,7 +21,7 @@ void Oran7TrackLibrary::refreshMembership()
 {
     const auto likes = liked()->songIds();
     const auto integrations = integrated()->identityKeys();
-    for (auto* model : {local(), integrated(), liked(), search()}) model->updateMembership(likes, integrations);
+    for (auto* model : {local(), integrated(), liked(), search(), recommendations()}) model->updateMembership(likes, integrations);
 }
 void Oran7TrackLibrary::replaceLocalTracks(const QVariantList& tracks) { local()->replaceTracks(tracks); }
 void Oran7TrackLibrary::restoreIntegratedTracks(const QVariantList& tracks)
@@ -62,3 +63,4 @@ void Oran7TrackLibrary::replaceLikedTracks(const QVariantList& tracks) { liked()
 void Oran7TrackLibrary::clearLikedTracks() { liked()->replaceTracks({}); }
 void Oran7TrackLibrary::replaceSearchResults(const QVariantList& tracks) { search()->replaceTracks(tracks); }
 void Oran7TrackLibrary::clearSearchResults() { search()->replaceTracks({}); }
+void Oran7TrackLibrary::replaceRecommendations(const QVariantList& tracks) { recommendations()->replaceTracks(tracks); }

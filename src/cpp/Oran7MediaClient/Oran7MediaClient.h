@@ -5,6 +5,7 @@
 #include "Oran7TrackLibrary.h"
 #include "Oran7CloudMusicService.h"
 #include "Oran7PlaybackViewModel.h"
+#include "Oran7VideoHistory.h"
 #include <QObject>
 #include <QQuickItem>
 #include <QList>
@@ -14,6 +15,7 @@
 
 class QQmlApplicationEngine;
 class QQuickItem;
+class QTimer;
 class Oran7RenderBridge;
 class Oran7LyricsService;
 class Oran7LocalLibraryService;
@@ -23,6 +25,7 @@ class Oran7ScreenCaptureBridge;
 class Oran7ConfigBinding;
 class Oran7TrackMetadataService;
 class Oran7LegacyServerClient;
+class Oran7AudioEffects;
 struct ID3D11Device;
 
 // QML 命令与通知门面；业务状态和生命周期由各服务持有。
@@ -33,6 +36,8 @@ class Oran7MediaClient : public QObject
     Q_PROPERTY(Oran7TrackLibrary* tracks READ tracks CONSTANT)
     Q_PROPERTY(Oran7CloudMusicService* cloudMusic READ cloudMusic CONSTANT)
     Q_PROPERTY(Oran7PlaybackViewModel* musicQueue READ musicQueue CONSTANT)
+    Q_PROPERTY(Oran7AudioEffects* audioEffects READ audioEffects CONSTANT)
+    Q_PROPERTY(Oran7VideoHistory* videoHistory READ videoHistory CONSTANT)
 public:
     explicit Oran7MediaClient(const QString& host, quint16 port, QObject* parent = nullptr);
     ~Oran7MediaClient() override;
@@ -41,6 +46,8 @@ public:
     Oran7TrackLibrary* tracks() const { return m_tracks.get(); }
     Oran7CloudMusicService* cloudMusic() const { return m_cloudMusic.get(); }
     Oran7PlaybackViewModel* musicQueue() const { return m_musicQueue.get(); }
+    Oran7AudioEffects* audioEffects() const { return m_audioEffects.get(); }
+    Oran7VideoHistory* videoHistory() const { return m_videoHistory.get(); }
 
     // 应用生命周期：配置管理器须先加载，调用方负责最终落盘。
     bool restoreConfiguration(QQmlApplicationEngine& engine);
@@ -55,9 +62,11 @@ public:
     Q_INVOKABLE void playNetworkSong(qint64 songId, const QString& fallbackUrl, bool isVip);
     Q_INVOKABLE void playVideo(QString source);
     Q_INVOKABLE void stopPlayback();
+    Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE int seekTo(int seconds);
     Q_INVOKABLE void setVolume(int volume);
     Q_INVOKABLE void setPlayMode(int mode);
+    Q_INVOKABLE bool saveAudioEffects();
     Q_INVOKABLE void playNext() { emit playNextTriggered(); }
     Q_INVOKABLE void playPrevious() { emit playPreviousTriggered(); }
     // 实际播放器目标与所选曲目路径可能不同（临时 CDN 地址、视频）。
@@ -150,8 +159,12 @@ private:
     void onPlaybackOpenFailed();
 
     std::unique_ptr<Oran7TrackLibrary> m_tracks;
+    std::unique_ptr<Oran7VideoHistory> m_videoHistory;
     std::unique_ptr<Oran7CloudMusicService> m_cloudMusic;
     std::unique_ptr<Oran7PlaybackViewModel> m_musicQueue;
+    std::unique_ptr<Oran7AudioEffects> m_audioEffects;
+    std::unique_ptr<QTimer> m_audioSaveTimer;
+    bool m_audioSaveReady = false;
     std::unique_ptr<Oran7LocalLibraryService> m_libraryService;
     std::unique_ptr<Oran7ConfigBinding> m_configBinding;
     std::unique_ptr<Oran7TrackMetadataService> m_metadataService;

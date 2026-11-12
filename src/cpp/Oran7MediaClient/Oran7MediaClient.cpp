@@ -9,6 +9,7 @@
 #include "Oran7NetworkSongResolver.h"
 #include "Oran7PlaybackController.h"
 #include "Oran7ScreenCaptureBridge.h"
+#include "Oran7AudioEffects.h"
 
 #include "Oran7GlobalHelper.h"
 #include "Oran7AppConfigManager.h"
@@ -40,11 +41,17 @@ Oran7MediaClient::Oran7MediaClient(const QString &host,quint16 port,QObject *par
 {
     m_configBinding = std::make_unique<Oran7ConfigBinding>(Oran7AppConfigManager::ins());
     m_tracks = std::make_unique<Oran7TrackLibrary>();
+    m_videoHistory = std::make_unique<Oran7VideoHistory>(Oran7AppConfigManager::ins());
+    QQmlEngine::setObjectOwnership(m_videoHistory.get(), QQmlEngine::CppOwnership);
     QQmlEngine::setObjectOwnership(m_tracks.get(), QQmlEngine::CppOwnership);
     m_metadataService = std::make_unique<Oran7TrackMetadataService>();
     m_legacyClient = std::make_unique<Oran7LegacyServerClient>(host, port);
     // Client 保留 QML 状态入口，播放生命周期交由 Controller。
     m_playback = std::make_unique<Oran7PlaybackState>();
+    m_videoHistory->bindPlayback(*m_playback);
+    connect(m_videoHistory.get(),&Oran7VideoHistory::resumeRequested,this,[this](int seconds) {
+        m_playbackController->seekTo(seconds);
+    });
     m_renderBridge = std::make_unique<Oran7RenderBridge>();
     // QML 仅借用 playback 指针，生命周期始终由 Client 的 unique_ptr 管理。
     QQmlEngine::setObjectOwnership(m_playback.get(), QQmlEngine::CppOwnership);
@@ -79,6 +86,37 @@ Oran7MediaClient::Oran7MediaClient(const QString &host,quint16 port,QObject *par
     m_musicQueue = std::make_unique<Oran7PlaybackViewModel>(*m_tracks, *m_playback, *m_cloudMusic);
     QQmlEngine::setObjectOwnership(m_cloudMusic.get(), QQmlEngine::CppOwnership);
     QQmlEngine::setObjectOwnership(m_musicQueue.get(), QQmlEngine::CppOwnership);
+    m_audioEffects = std::make_unique<Oran7AudioEffects>();
+    m_audioSaveTimer = std::make_unique<QTimer>();
+    m_audioSaveTimer->setSingleShot(true);
+    m_audioSaveTimer->setInterval(400);
+    connect(m_audioSaveTimer.get(), &QTimer::timeout, this, &Oran7MediaClient::saveAudioEffects);
+    const auto scheduleAudioSave = [this] { if (m_audioSaveReady) m_audioSaveTimer->start(); };
+    connect(m_audioEffects->equalizer(), &Oran7EqualizerModel::gainChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::enabledChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::presetIdChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::preampDbChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::outputGainDbChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::limiterCeilingDbChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::highPassHzChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::lowPassHzChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::bassBoostDbChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::stereoWidthChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::crossfeedChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::compressorEnabledChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::compressorThresholdDbChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::compressorRatioChanged, this, scheduleAudioSave);
+    connect(m_audioEffects.get(), &Oran7AudioEffects::compressorMakeupDbChanged, this, scheduleAudioSave);
+    QQmlEngine::setObjectOwnership(m_audioEffects.get(), QQmlEngine::CppOwnership);
+    m_audioEffects->setPublisher([this](const Oran7AudioParameters& parameters) {
+        return m_playbackController && m_playbackController->publishAudioParameters(parameters);
+    });
+    m_playbackController->setAudioParameterProvider([this] {
+        return m_audioEffects->parameters();
+    });
+    connect(m_audioEffects.get(), &Oran7AudioEffects::presetsChanged, this, [this] {
+        m_configBinding->saveAudio(m_audioEffects->toConfig());
+    });
     connect(m_musicQueue.get(), &Oran7PlaybackViewModel::roamFilterLikedChanged, this, [this] {
         if (!m_configBinding->saveRoamFilterLiked(m_musicQueue->roamFilterLiked()))
             WARNING_LOG << "漫游过滤设置保存失败";
@@ -118,6 +156,7 @@ Oran7MediaClient::~Oran7MediaClient()
     shutdown();
     m_musicQueue.reset();
     m_cloudMusic.reset();
+    m_audioEffects.reset();
     // 先失效消息邮箱并释放播放器，再销毁渲染桥/状态和其他服务。
     m_playbackController.reset();
     m_networkResolver.reset();
@@ -129,6 +168,11 @@ Oran7MediaClient::~Oran7MediaClient()
 
 void Oran7MediaClient::shutdown()
 {
+    if (m_videoHistory) { m_videoHistory->captureProgress(); m_videoHistory->flush(); }
+    if (m_videoHistory) m_videoHistory->shutdown();
+    if (m_audioSaveTimer && m_audioSaveTimer->isActive()) saveAudioEffects();
+    m_audioSaveReady = false;
+    if (m_audioEffects) m_audioEffects->setPublisher({});
     m_musicQueue->shutdown();
     m_cloudMusic->shutdown();
     m_metadataService->cancel();
@@ -203,6 +247,7 @@ void Oran7MediaClient::initializeConnections()
         this, &Oran7MediaClient::playbackStopRequested);
     m_connections << connect(m_playbackController.get(), &Oran7PlaybackController::mediaAccepted,
         this, [this](const QString& source, bool musicPlayback) {
+            if (!musicPlayback) m_videoHistory->beginLocalPlayback(source);
             if (musicPlayback) m_lyricsService->load(source, m_configBinding->lyricsDirectory(), m_playback->currentTrack());
             else m_lyricsService->stop();
         });
@@ -335,6 +380,12 @@ void Oran7MediaClient::stopPlayback()
     m_playbackController->stop();
 }
 
+void Oran7MediaClient::togglePlayback()
+{
+    if (m_playbackController->hasPlayer())
+        m_playbackController->toggle();
+}
+
 bool Oran7MediaClient::isNetworkUrl(const QString &path)
 {
     return Oran7NetworkSongResolver::isNetworkUrl(path);
@@ -342,6 +393,7 @@ bool Oran7MediaClient::isNetworkUrl(const QString &path)
 
 int Oran7MediaClient::seekTo(int seconds)
 {
+    m_videoHistory->cancelResume();
     return m_playbackController->seekTo(seconds);
 }
 
@@ -349,6 +401,16 @@ void Oran7MediaClient::setPlayMode(int mode)
 {
     m_playback->setMode(mode);
     INFO_LOG << "Oran7MediaClient::setPlayMode:" << mode;
+}
+
+bool Oran7MediaClient::saveAudioEffects()
+{
+    if (!m_audioSaveReady) return false;
+    m_audioSaveTimer->stop();
+    m_configBinding->saveAudio(m_audioEffects->toConfig());
+    const bool ok = Oran7AppConfigManager::ins().saveConfig();
+    if (!ok) WARNING_LOG << "音效配置保存失败";
+    return ok;
 }
 
 void Oran7MediaClient::setVolume(int volume)
@@ -540,6 +602,8 @@ bool Oran7MediaClient::restoreConfiguration(QQmlApplicationEngine& engine)
     scanLocalMusic(directory);
     restoreFocusedMusic();
     restoreVolume();
+    m_audioEffects->loadFromConfig(m_configBinding->audio());
+    m_audioSaveReady = true;
     m_musicQueue->setRoamFilterLiked(m_configBinding->roamFilterLiked());
     loadScreenCaptureSettings();
     return true;
@@ -547,9 +611,12 @@ bool Oran7MediaClient::restoreConfiguration(QQmlApplicationEngine& engine)
 
 void Oran7MediaClient::saveConfiguration(QQmlApplicationEngine& engine)
 {
+    m_videoHistory->captureProgress();
+    m_videoHistory->flush();
     saveFocusedMusic();
     saveLocalMusicOrder();
     saveVolume();
+    m_configBinding->saveAudio(m_audioEffects->toConfig());
     saveWindowSize(engine);
     saveWindowPosition(engine);
 }

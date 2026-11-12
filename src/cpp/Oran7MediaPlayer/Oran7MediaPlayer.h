@@ -6,12 +6,14 @@
 #include <functional>
 #include <atomic>      // destroying_
 #include <string>
+#include <memory>
 
 #include "FFPlay_Def.h"   // Frame / AVFrame（AddVideoRefreshCallback 形参）
 #include "FFMsgQueue.h"   // AVMessage（oran7mp_get_msg 形参）
 
 // 前向声明：Oran7FFplayerCore 仅作指针成员；ID3D11Device 仅作指针形参（完整类型在 .cpp 侧 include）
 class Oran7FFplayerCore;
+class Oran7AudioParameterQueue;
 struct ID3D11Device;
 
 /*-
@@ -195,6 +197,12 @@ public:
      * @param dev
      */
     void oran7mp_setD3D11Device(ID3D11Device* dev);
+
+    /**
+     * @brief 注入音效参数队列；必须在 oran7mp_prepare_async 之前调用。
+     *        队列由播放器共享持有，播放器退役后仍可安全读到回调停止。
+     */
+    void oran7mp_setAudioParameterQueue(std::shared_ptr<Oran7AudioParameterQueue> queue);
 
 private:
     std::mutex mutex_;                    // 线程同步互斥量

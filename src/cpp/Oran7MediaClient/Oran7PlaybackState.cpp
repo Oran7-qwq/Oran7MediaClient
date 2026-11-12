@@ -103,7 +103,7 @@ void Oran7PlaybackState::setVolume(int volume)
 void Oran7PlaybackState::setMode(int mode)
 {
     Q_ASSERT(QThread::currentThread() == thread());
-    if (mode < 0 || mode > 3 || m_mode == mode) return;
+    if (mode < 0 || mode > 6 || m_mode == mode) return;
     m_mode = mode;
     emit modeChanged();
 }

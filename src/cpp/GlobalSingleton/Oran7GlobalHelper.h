@@ -9,7 +9,6 @@
 
 #include <QCoreApplication>
 
-#define DEVELOPER_MODE 0
 #define MAX_SLIDER_VALUE 65536
 
 enum ERROR_CODE
@@ -150,6 +149,11 @@ public:
     Oran7GlobalHelper();
 
     static QString getConfigDir();
+    // 共享库中唯一的原子状态，后台线程只读，不访问配置或 QML。
+    static bool developerMode();
+private:
+    friend class Oran7UiPreferences;
+    static void setDeveloperMode(bool enabled);
 };
 
 
@@ -175,6 +179,9 @@ public:
     QString renderDevice;
     QString fillModeName;
     QString sourceTag;      // "player" / "screen"，区分来源
+    int bitDepth = 8;
+    bool hdr = false;
+    QString colorTransfer, colorPrimaries, colorMatrix, colorRange, outputColorMode;
 };
 
 //============= tools function ==============//
@@ -193,6 +200,9 @@ static QString dxgiFormatName(DXGI_FORMAT fmt)
     case DXGI_FORMAT_Y416:    return "DXGI_FORMAT_Y416";
     case DXGI_FORMAT_R8G8B8A8_UNORM: return "DXGI_FORMAT_R8G8B8A8_UNORM";
     case DXGI_FORMAT_B8G8R8A8_UNORM: return "DXGI_FORMAT_B8G8R8A8_UNORM";
+    case DXGI_FORMAT_R10G10B10A2_UNORM: return "DXGI_FORMAT_R10G10B10A2_UNORM";
+    case DXGI_FORMAT_R16G16B16A16_FLOAT: return "DXGI_FORMAT_R16G16B16A16_FLOAT";
+    case DXGI_FORMAT_R16_UNORM: return "DXGI_FORMAT_R16_UNORM";
     //...
     default:
         return QString("DXGI_FORMAT(%1)").arg(fmt);
@@ -221,6 +231,10 @@ static QVariantMap Oran7VideoInfo_To_QVariantMap(const Oran7VideoInfo &i)
             {"renderDevice", i.renderDevice},
             {"fillModeName", i.fillModeName},
             {"sourceTag",    i.sourceTag},
+            {"bitDepth", i.bitDepth}, {"hdr", i.hdr},
+            {"colorTransfer", i.colorTransfer}, {"colorPrimaries", i.colorPrimaries},
+            {"colorMatrix", i.colorMatrix}, {"colorRange", i.colorRange},
+            {"outputColorMode", i.outputColorMode},
     };
 }
 

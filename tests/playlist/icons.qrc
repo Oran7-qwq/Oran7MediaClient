@@ -1,4 +1,5 @@
 <RCC><qresource prefix="/">
+<file alias="image/oran7_qq_music.svg">../../image/oran7_qq_music.svg</file>
 <file alias="image/hugeicons_ai-video.png">../../image/hugeicons_ai-video.png</file>
 <file alias="image/hugeicons_video-camera-ai.png">../../image/hugeicons_video-camera-ai.png</file>
 <file alias="image/arcticons_star-music-tag-editor.png">../../image/arcticons_star-music-tag-editor.png</file>

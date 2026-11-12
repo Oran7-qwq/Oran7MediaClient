@@ -9,6 +9,7 @@ Item {
     property bool dwmEnabled: false
     property bool nativeReady: false
     property bool prepareActive: false
+    property bool playbackAllowed: true
     property url videoUrl: ""
     property url imageUrl: ""
     property color baseColor: "#171a22"
@@ -23,7 +24,7 @@ Item {
         || (selectedLayer === "Video" ? frameMonitor.frameReady
             : still.status === Image.Ready || still.status === Image.Error || still.status === Image.Null))
     readonly property var videoSink: output.videoSink
-    function play() { if (prepareActive && wantsVideo && !videoFailed && player.source.toString().length) player.play() }
+    function play() { if (playbackAllowed && prepareActive && wantsVideo && !videoFailed && player.source.toString().length) player.play() }
     function pause() { player.pause() }
     function reloadVideo() {
         if (!initialized) return
@@ -33,7 +34,7 @@ Item {
         player.source = wantsVideo ? videoUrl : ""
         frameMonitor.reset()
         play()
-        if (prepareActive && wantsVideo && !videoFailed && !frameMonitor.frameReady) deadline.start()
+        if (playbackAllowed && prepareActive && wantsVideo && !videoFailed && !frameMonitor.frameReady) deadline.start()
     }
     function useImageFallback() {
         if (!wantsVideo || videoFailed) return
@@ -42,13 +43,20 @@ Item {
         player.stop()
         frameMonitor.reset()
     }
+    onPlaybackAllowedChanged: {
+        if (!initialized) return
+        if (playbackAllowed) {
+            play()
+            if (prepareActive && wantsVideo && !videoFailed && !frameMonitor.frameReady) deadline.restart()
+        } else { deadline.stop(); pause() }
+    }
     onVideoUrlChanged: reloadVideo()
     onWantsVideoChanged: reloadVideo()
     onPrepareActiveChanged: {
         if (!initialized) return
         if (prepareActive) {
             play()
-            if (wantsVideo && !videoFailed && !frameMonitor.frameReady) deadline.restart()
+            if (playbackAllowed && wantsVideo && !videoFailed && !frameMonitor.frameReady) deadline.restart()
         } else { deadline.stop(); pause() }
     }
     Component.onCompleted: { initialized = true; reloadVideo() }

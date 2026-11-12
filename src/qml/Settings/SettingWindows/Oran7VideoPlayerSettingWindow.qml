@@ -106,18 +106,7 @@ Oran7SettingsPanel {
                                 checked: parent.checked
                                 onSwitchToggleChanged: function (checked) {
                                     Oran7Theme.saveComponentToken("Oran7VideoPlayer","ScaleMode",checked  ? "Fill" : "Fit")
-                                    parent.updateVideoPlayerRender_ScaleMode()
                                 }
-                            }
-                            Component.onCompleted: {
-                                updateVideoPlayerRender_ScaleMode()
-                            }
-                            function updateVideoPlayerRender_ScaleMode()
-                            {
-                                if(checked)
-                                    Client.setScaleMode(Client.VideoPlayerRender, Client.Fill);
-                                else
-                                    Client.setScaleMode(Client.VideoPlayerRender, Client.Fit);
                             }
                         }
                     }

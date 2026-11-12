@@ -132,6 +132,12 @@ void Oran7ConfigBinding::saveLocalOrder(const QVariantList& order) {
     m_config.updateConfig(saved); m_config.saveConfig();
 }
 int Oran7ConfigBinding::volume() const { return m_config.snapshot().player.volume; }
+Oran7AudioConfig Oran7ConfigBinding::audio() const { return m_config.snapshot().audio; }
+void Oran7ConfigBinding::saveAudio(const Oran7AudioConfig& audio) {
+    auto saved = m_config.snapshot(); saved.audio = audio;
+    m_config.updateConfig(saved);
+    m_config.saveConfig();
+}
 bool Oran7ConfigBinding::roamFilterLiked() const { return m_config.snapshot().player.roamFilterLiked; }
 bool Oran7ConfigBinding::saveRoamFilterLiked(bool enabled)
 {

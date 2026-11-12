@@ -6,6 +6,7 @@
 #include <QMutexLocker>
 #include <functional>
 #include <memory>
+#include <atomic>
 extern "C"
 {
 #include <libavutil/frame.h>
@@ -83,6 +84,7 @@ class Oran7VideoFrameMailbox
     {
         QMutexLocker lock(&m_mutex);
         ++m_epoch;
+        m_releaseSerial.fetch_add(1, std::memory_order_release);
         m_frame.reset();
         m_clear = true;
         m_delivery = {};
@@ -92,6 +94,7 @@ class Oran7VideoFrameMailbox
         m_fpsClock.invalidate();
         notifyLocked();
     }
+    quint64 releaseSerial() const { return m_releaseSerial.load(std::memory_order_acquire); }
     Packet take()
     {
         QMutexLocker lock(&m_mutex);
@@ -142,6 +145,7 @@ class Oran7VideoFrameMailbox
     std::function<void()> m_notification;
     bool m_closed = false, m_scheduled = false, m_clear = false;
     quint64 m_epoch = 0;
+    std::atomic<quint64> m_releaseSerial{0};
     Oran7VideoFrame m_frame;
     Delivery m_delivery;
     QSize m_sourceSize;

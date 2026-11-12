@@ -1,1153 +1,616 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
-import Qt5Compat.GraphicalEffects
+import QtQuick.Layouts
+import QtQuick.Shapes
 import "../../Basic"
 import "../../Components/Oran7GlobalComponents"
 import Client 1.0
-import Oran7UI.Impl 1.0
+import Oran7UI.Impl
 import BilibiliRoomAddressCatch 1.0
 import BilibiliDanmakuClient 1.0
 import BilibiliAuth 1.0
 
-
 Item {
     id: root
-
     property string pageName: ""
-    property var stackView_rootItemContainer: root //包含此组件的外部作为stackViewItem的根项
-
-    property var mainWindow: null
-    function findMainWindow() {
-        return BasicConfig.mainWindow;
-    }
-
-    // 使用 Binding 动态绑定到父容器尺寸，确保在父容器尺寸变化时也能正确更新
-    Binding on width {
-        value: root.parent ? root.parent.width : 0
-        when: root.parent !== null
-    }
-    Binding on height {
-        value: root.parent ? root.parent.height : 0
-        when: root.parent !== null
-    }
-
-    // ==================== StackView 活动状态检测 ====================//
+    property var stackView_rootItemContainer: root
+    property var mainWindow: BasicConfig.mainWindow
     property bool isActive: false
-    property var _myStackView: null
-
-    function findAndSetupStackView() {
-        if (StackView.view) {
-            _myStackView = StackView.view;
-        } else {
-            var parent = container.parent;
-            var depth = 0;
-            while (parent && depth < 20) {
-                if (typeof parent.push === "function" && typeof parent.pop === "function") {
-                    _myStackView = parent;
-                    break;
-                }
-                parent = parent.parent;
-                depth++;
-            }
-        }
-
-        if (_myStackView) {
-            _myStackView.currentItemChanged.connect(updateActiveState);
-            updateActiveState();
-        }
+    property bool playbackView: false
+    property bool fullscreen: false
+    property int previousVisibility: Window.Windowed
+    property rect previousGeometry: Qt.rect(0, 0, 990, 564)
+    property color surfaceColor: "#dd1e222a"
+    property color textColor: "#f1f2f5"
+    property color secondaryTextColor: "#a8aebb"
+    property color accentColor: "#ebc286"
+    property bool live: false
+    property string openedSource: ""
+    property string localPath: ""
+    property string roomNumber: ""
+    property string displayTitle: ""
+    property string statusText: ""
+    property string streamDescription: ""
+    property string danmakuErrorText: ""
+    property bool danmakuEnabled: true
+    property bool showInfo: false
+    property bool controlsVisible: true
+    property bool windowButtonsHovered: false
+    // 主窗口直接沿用视频标题栏的实际动画进度，不另外维护显隐定时器。
+    readonly property real windowControlsOpacity: isActive && playbackView ? header.opacity : 1
+    // 本地视频仅在画布内静止时跟随标题栏隐藏；直播和画布外始终显示网络延迟。
+    readonly property real networkLatencyOpacity: live || !playerHover.hovered ? 1 : windowControlsOpacity
+    property bool mouseHidden: false
+    property int controlsIdleDelay: 1500
+    property int cursorIdleDelay: 2000
+    readonly property bool controlsFullyHidden: !controlsVisible && header.opacity === 0 && toolbar.opacity === 0
+    onControlsFullyHiddenChanged: {
+        if (controlsFullyHidden && isActive && playbackView) hideCursor.restart()
+        else hideCursor.stop()
     }
+    property int requestGeneration: 0
+    property var activeRequest: null
+    readonly property bool resolving: activeRequest !== null
+    readonly property bool ownsPlayback: openedSource.length > 0 && Client.playback.source === openedSource
+        && (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex
+            || BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
+    readonly property bool opening: resolving || (ownsPlayback && Client.playback.state === 1)
+    readonly property bool failed: ownsPlayback && Client.playback.state === 6
 
-    function updateActiveState() {
-        if (!_myStackView || !_myStackView.currentItem) {
-            root.isActive = false;
-            return;
+    anchors.fill: parent
+    StackView.onActivated: isActive = true
+    StackView.onDeactivated: {
+        isActive = false
+        hideControls.stop()
+        hideCursor.stop()
+        mouseHidden = false
+        singleClick.stop()
+        toolbar.closePopups()
+        settings.close()
+        cancelResolve()
+        exitFullscreen()
+        if (ownsPlayback) {
+            if (Client.playback.state === 1) Client.stopPlayback()
+            else if (Client.playback.active) Client.togglePlayback()
         }
-
-        root.isActive = (_myStackView.currentItem === root.stackView_rootItemContainer);
-        if (root.isActive) {
-            //Page被激活 -> touch 业务
-            root.activeResponseTask()
-        }
-        else
-        {
-            root.activeCanceledTask()
-        }
+        danmaku.stop()
+        BasicConfig.clearAllUi_inVIdeoRenderArea(false)
     }
-
-    //Page被激活 -> touch 业务
-    function activeResponseTask(){
-
-    }
-    //Page取消活跃业务
-    function activeCanceledTask(){
-        if (!(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex || BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex))
-            return;
-        if (BasicConfig.isPlaying === true) {
-            if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
-                bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_pause();
-            if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
-                inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause();
-        }
-    }
-
-    Component.onCompleted: {
-        Qt.callLater(findAndSetupStackView);
-
-        // 延迟执行，确保BasicConfig.mainWindow已设置
-        Qt.callLater(function() {
-            mainWindow = findMainWindow();
-
-            // 检查blurSource状态
-            if(!videoPlayerMenue.blurSource){
-                console.warn("Warning: blurSource is null. mainWindow:", mainWindow);
-            }
-        });
-    }
-
     Component.onDestruction: {
-        if (_myStackView) {
-            _myStackView.currentItemChanged.disconnect(updateActiveState);
+        cancelResolve()
+        exitFullscreen()
+    }
+
+    function cancelResolve() {
+        ++requestGeneration
+        var previous = activeRequest
+        activeRequest = null
+        if (previous) previous.destroy()
+    }
+    function showPlayer() {
+        playbackView = true
+        wakeControls()
+        playerSurface.forceActiveFocus()
+    }
+    function showLibrary() {
+        exitFullscreen()
+        playbackView = false
+        hideControls.stop()
+        hideCursor.stop()
+        mouseHidden = false
+        singleClick.stop()
+        toolbar.closePopups()
+        settings.close()
+        BasicConfig.clearAllUi_inVIdeoRenderArea(false)
+    }
+    function wakeControls() {
+        controlsVisible = true
+        mouseHidden = false
+        hideCursor.stop()
+        if (!isActive || !playbackView) return
+        BasicConfig.clearAllUi_inVIdeoRenderArea(false)
+        hideControls.restart()
+    }
+    function idleBlocked() {
+        return toolbar.interacting || headerHover.hovered || root.windowButtonsHovered
+            || settings.visible || fileDialog.visible || root.opening || root.failed || !root.ownsPlayback
+    }
+    function playLocal(path) {
+        var value = String(path).trim()
+        if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1)
+        if (value.startsWith("file:")) {
+            try { value = decodeURIComponent(value.replace(/^file:\/\/\//, "").replace(/^file:\/\//, "//")) }
+            catch (error) { statusText = qsTranslate("Oran7Ui", "文件路径无效"); return }
+        }
+        if (!fileHelper.fileExists(value)) {
+            statusText = qsTranslate("Oran7Ui", "文件不存在，请重新选择")
+            return
+        }
+        cancelResolve()
+        danmaku.stop()
+        danmakuErrorText = ""
+        localPath = value
+        live = false
+        displayTitle = value.replace(/\\/g, "/").split("/").pop()
+        statusText = ""
+        streamDescription = ""
+        var sameSource = ownsPlayback && openedSource === value
+        openedSource = value
+        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_VideoPlayerIndex
+        showPlayer()
+        videoRenderItem.tryAttachDelayed()
+        if (sameSource && (Client.playback.state === 5 || Client.playback.state === 6))
+            Client.stopPlayback()
+        if (!sameSource || !Client.playback.active) Client.playVideo(value)
+    }
+    function playRoom(number) {
+        if (!/^[0-9]{1,12}$/.test(number)) {
+            statusText = qsTranslate("Oran7Ui", "请输入有效的房间号")
+            return
+        }
+        number = String(Number(number))
+        cancelResolve()
+        if (ownsPlayback) Client.stopPlayback()
+        danmaku.stop()
+        danmakuErrorText = ""
+        openedSource = ""
+        live = true
+        roomNumber = number
+        displayTitle = qsTranslate("Oran7Ui", "直播间") + " " + number
+        statusText = qsTranslate("Oran7Ui", "正在连接直播间…")
+        showPlayer()
+        activeRequest = roomRequest.createObject(root, {generation: requestGeneration})
+        activeRequest.getRoomInfo(number)
+    }
+    function acceptRoom(request) {
+        if (activeRequest !== request || request.generation !== requestGeneration) return
+        var urls = request.avliStrAdr
+        if (!urls.length) { rejectRoom(request); return }
+        var url = String(urls[0])
+        streamDescription = request.selectedCodecName.toUpperCase() + " / " + request.selectedFormatName.toUpperCase()
+        activeRequest = null
+        request.destroy()
+        openedSource = url
+        statusText = ""
+        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_LivePlayerIndex
+        videoRenderItem.tryAttachDelayed()
+        Client.playVideo(url)
+        syncDanmaku()
+    }
+    function rejectRoom(request) {
+        if (activeRequest !== request || request.generation !== requestGeneration) return
+        activeRequest = null
+        request.destroy()
+        statusText = qsTranslate("Oran7Ui", "直播连接失败，房间可能未开播，请重试")
+        wakeControls()
+    }
+    function retry() {
+        if (live) playRoom(roomNumber)
+        else if (localPath.length) playLocal(localPath)
+    }
+    function togglePlayback() {
+        if (opening) return
+        if (!ownsPlayback || Client.playback.state === 0 || Client.playback.state === 5 || failed) retry()
+        else Client.togglePlayback()
+        wakeControls()
+    }
+    function syncDanmaku() {
+        var enabled = isActive && ownsPlayback && live && danmakuEnabled && Client.playback.playing
+        if (enabled && !danmaku.active) danmaku.start(roomNumber)
+        else if (!enabled && danmaku.active) danmaku.stop()
+    }
+    function rememberViewing() {
+        if (!ownsPlayback || !Client.playback.playing) return
+        if (live) Client.videoHistory.rememberRoom(roomNumber)
+    }
+    function toggleFullscreen() {
+        if (!mainWindow) return
+        if (fullscreen) { exitFullscreen(); return }
+        previousVisibility = mainWindow.visibility
+        if (typeof mainWindow.captureNormalGeometry === "function") mainWindow.captureNormalGeometry()
+        previousGeometry = mainWindow.normalWindowGeometry || Qt.rect(mainWindow.x, mainWindow.y, mainWindow.width, mainWindow.height)
+        fullscreen = true
+        mainWindow.showFullScreen()
+        wakeControls()
+    }
+    function exitFullscreen() {
+        if (!fullscreen || !mainWindow) return
+        fullscreen = false
+        if (previousVisibility === Window.Maximized) mainWindow.showMaximized()
+        else {
+            mainWindow.showNormal()
+            mainWindow.x = previousGeometry.x
+            mainWindow.y = previousGeometry.y
+            mainWindow.width = previousGeometry.width
+            mainWindow.height = previousGeometry.height
         }
     }
-    //================================================
-
-    //=============== 自定义组件 ===============
-    Oran7FileHelper {
-        id: fileHelper
+    function login() {
+        settings.close()
+        exitFullscreen()
+        BasicConfig.openBilibiliLoginPopup()
     }
-    Oran7VideoRendererItem {
-        id: videoRenderItem
-        anchors.fill: parent
-        renderObject: Client.VideoPlayerRender
-        openVideoInfo: Oran7MainUiSetting.openVideoInfo
 
-        radius: 10
-
-        layer.effect: DropShadow{
-            source: videoRenderItem
-            samples: 60
-            spread: 0.3
-            horizontalOffset: 10
-            verticalOffset: 0
-            radius:10
-            color:"black"
+    Component {
+        id: roomRequest
+        BilibiliRoomAddressCatch {
+            id: request
+            property int generation: 0
+            onUrlsReady: root.acceptRoom(request)
+            onUrlsError: root.rejectRoom(request)
+        }
+    }
+    Oran7FileHelper { id: fileHelper }
+    Oran7FileDialog {
+        id: fileDialog
+        nameFilters: [qsTranslate("Oran7Ui", "视频文件 (*.mp4 *.mkv *.mov *.avi *.flv *.webm *.ts *.m4v)"),
+            qsTranslate("Oran7Ui", "所有文件 (*)")]
+        onReady: root.playLocal(String(selectedFile))
+    }
+    BilibiliDanmakuClient {
+        id: danmaku
+        onDanmakuReceived: (text, uname, color, timestamp) => {
+            if (videoRenderItem.danmakuEnabled) videoRenderItem.danmakuLayer.spawn(text, color)
+        }
+        onSuperChatReceived: (text, uname, price, color) => {
+            if (videoRenderItem.danmakuEnabled) videoRenderItem.danmakuLayer.showSuperChat(text, uname, price, color)
+        }
+        onErrorOccurred: (message) => { root.danmakuErrorText = message; root.wakeControls() }
+        onConnectionChanged: if (isConnected) root.danmakuErrorText = ""
+    }
+    Connections {
+        target: Client.videoHistory
+        function onRecordsChanged() {
+            var recent = Client.videoHistory.latest
+            if (root.live && recent.mediaKind === "live" && recent.target === root.roomNumber
+                && recent.roomTitle) root.displayTitle = recent.roomTitle
+        }
+    }
+    Connections {
+        target: Client.playback
+        function onStateChanged() {
+            root.syncDanmaku()
+            root.rememberViewing()
+            if (root.failed) root.wakeControls()
+        }
+        function onSourceChanged() {
+            if (root.resolving) { root.cancelResolve(); root.statusText = "" }
+            root.syncDanmaku()
+            if (!root.ownsPlayback && !root.resolving) root.exitFullscreen()
         }
     }
     Connections {
         target: Client
         function onPlaybackStopRequested() {
-            bilibiliDanmaku.stop();
-            videoRenderItem.danmakuEnabled = false;
-            Client.renderBlackFrame(videoRenderItem.renderObject);
+            danmaku.stop()
+            Client.renderBlackFrame(videoRenderItem.renderObject)
         }
     }
-
-    // ==================== B站弹幕客户端 ====================
-    property string danmakuErrorText: ""
+    Connections {
+        target: root.mainWindow
+        function onVisibilityChanged() {
+            if (root.fullscreen && root.mainWindow.visibility !== Window.FullScreen) root.fullscreen = false
+        }
+    }
     Timer {
-        id: danmakuErrorHideTimer
-        interval: 6000
-        repeat: false
-        onTriggered: root.danmakuErrorText = ""
+        id: hideControls
+        interval: root.controlsIdleDelay
+        onTriggered: {
+            if (root.idleBlocked()) { root.wakeControls(); return }
+            root.controlsVisible = false
+            BasicConfig.clearAllUi_inVIdeoRenderArea(true)
+        }
     }
-    BilibiliDanmakuClient {
-        id: bilibiliDanmaku
-        onDanmakuReceived: (text, uname, color, timestamp) => {
-            if (danmakuToggle.checked && videoRenderItem.danmakuEnabled)
-                videoRenderItem.danmakuLayer.spawn(text, color)
-        }
-        onSuperChatReceived: (text, uname, price, color) => {
-            if (danmakuToggle.checked && videoRenderItem.danmakuEnabled)
-                videoRenderItem.danmakuLayer.showSuperChat(text, uname, price, color)
-        }
-        onConnectionChanged: (connected) => {
-            if (connected) root.danmakuErrorText = ""
-        }
-        onErrorOccurred: (message) => {
-            root.danmakuErrorText = message
-            danmakuErrorHideTimer.restart()
+    Timer {
+        id: hideCursor
+        interval: root.cursorIdleDelay
+        onTriggered: {
+            if (root.idleBlocked()) { root.wakeControls(); return }
+            if (!root.controlsFullyHidden || !root.isActive || !root.playbackView) return
+            root.mouseHidden = true
         }
     }
 
-    //openSemiCircleRect
-    Rectangle {
-        id: openSemiCircleRect
-        width: 40
-        height: 40
-        color: /*"#fef2e8"*/ "transparent"
-        radius: width * 0.3
-        anchors.right: videoPlayerMenue.left
-        anchors.rightMargin: -width / 2
-        anchors.top: videoPlayerMenue.top
-        anchors.topMargin: 20
-
-        Connections {
-            target: BasicConfig
-            function onClearAllUi_inVIdeoRenderArea(ok) {
-                //console.log("[DEBUG] onClearAllUi_inVIdeoRenderArea RECEIVED, ok:", ok)
-                if (ok === false) {
-                    openImage.visible = true;
-                } else {
-                    openImage.visible = false;
-                    openSemiCircleRect.openIngState = false;
-                }
-            }
+    Oran7VideoLibraryPage {
+        anchors.fill: parent
+        visible: !root.playbackView
+        title: root.displayTitle
+        hasSession: root.displayTitle.length > 0
+        roomNumber: root.roomNumber
+        resolving: root.resolving
+        statusText: root.statusText
+        loggedIn: BilibiliAuthManager.isLoggedIn
+        historyModel: Client.videoHistory
+        latestRecord: Client.videoHistory.latest
+        historyCount: selectedTab === 0 ? Client.videoHistory.localCount : Client.videoHistory.liveCount
+        surfaceColor: root.surfaceColor
+        textColor: root.textColor
+        secondaryTextColor: root.secondaryTextColor
+        accentColor: root.accentColor
+        onOpenFileRequested: fileDialog.open()
+        onPlayFileRequested: (path) => root.playLocal(path)
+        onPlayRoomRequested: (number) => root.playRoom(number)
+        onResumeRequested: root.showPlayer()
+        onLoginRequested: root.login()
+        onHistoryRequested: (kind, target) => {
+            if (kind === "local") root.playLocal(target)
+            else root.playRoom(target)
         }
+        onRemoveHistoryRequested: (kind, target) => Client.videoHistory.remove(kind, target)
+    }
 
-        property bool openIngState: false
-        Image {
-            id: openImage
-            scale: 2
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.left: parent.left
-            anchors.leftMargin: 0 //4
-            source: "qrc:/image/stackback.png"
-
-            rotation: parent.openIngState ? 180 : 0
-            Behavior on rotation {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.OutCubic
-                }
-            }
-            property color openImageColorOverlay_defaultColor: "#c74054"
-            property color openImageColorOverlay_selectedColor: "#fc3c55"
-            property color openImageColorOverlay_usedColor: openImage.openImageColorOverlay_defaultColor
-            layer.enabled: true
-            layer.effect: ColorOverlay {
-                source: openImage
-                anchors.fill: openImage
-                color: openImage.openImageColorOverlay_usedColor
-            }
-            asynchronous: false
-            mipmap: true
-            cache: true
-            antialiasing: true
+    Item {
+        id: playerSurface
+        objectName: "videoPlaybackSurface"
+        parent: root.fullscreen && root.mainWindow ? root.mainWindow.contentItem : root
+        anchors.fill: parent
+        z: root.fullscreen ? 100000 : 1
+        visible: root.playbackView && root.isActive
+        focus: visible
+        Keys.onSpacePressed: (event) => { if (!event.isAutoRepeat) root.togglePlayback(); event.accepted = true }
+        Rectangle { anchors.fill: parent; color: "#080a0e" }
+        Oran7VideoRendererItem {
+            id: videoRenderItem
+            objectName: "videoRenderer"
+            anchors.fill: parent
+            renderObject: Client.VideoPlayerRender
+            scaleMode: Oran7Theme.Oran7VideoPlayer.ScaleMode === "Fill" ? Client.Fill : Client.Fit
+            openVideoInfo: root.showInfo
+            danmakuEnabled: root.ownsPlayback && root.live && root.danmakuEnabled && danmaku.isConnected
         }
         MouseArea {
+            id: canvasMouseArea
             anchors.fill: parent
-            onClicked: {
-                if (parent.openIngState === true) {
-                    videoPlayerMenue.width = 0;
-                    parent.openIngState = false;
-                } else {
-                    videoPlayerMenue.width = videoPlayerMenue.defaultWidth;
-                    parent.openIngState = true;
-                }
-            }
+            hoverEnabled: true
+            // 点击层也参与光标选择，必须与 HoverHandler 的隐藏状态一致。
+            cursorShape: root.mouseHidden ? Qt.BlankCursor : Qt.ArrowCursor
+            onClicked: singleClick.restart()
+            onDoubleClicked: { singleClick.stop(); root.toggleFullscreen() }
         }
-    }
-    // =============== VideoPlayer Menue Rectangle ================
-    Oran7BlurCard{
-        id:videoPlayerMenue
-        property real defaultWidth: 300
-        width:openSemiCircleRect.openIngState ? videoPlayerMenue.defaultWidth : 0
-        Behavior on width {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
-            }
-        }
-        height: root.height > 0 ? root.height * 0.8 : 0
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-
-        blurEnabled: true
-        blurAmount: 1
-        borderRadius: 7
-        blurSource: root.mainWindow ? root.mainWindow.__Oran7WindowBackGround__ : null
-        themeColor: "#04FFFFFF"
-        Rectangle {
-            id: videoPlayerMenueRectangle
-            anchors.fill: parent
-
-            property bool fileDialog_isOpen: inputFilePathWay_OpenFileDialog.isOpen
-            color: "transparent"
-            radius: videoPlayerMenue.borderRadius
-
-            Connections {
-                target: BasicConfig
-                function onClickedOutside() {
-                    if (bilibiliRoomTextFiled.focus === true)
-                        bilibiliRoomTextFiled.focus = false;
-                    if (inputFilePathTextArea.focus === true)
-                        inputFilePathTextArea.focus = false;
-                }
-            }
-            Column {
-                anchors.left: parent.left
-                anchors.leftMargin: 7
-                anchors.top: parent.top
-                anchors.topMargin: 7
-                spacing: 7
-
-                //----->First way : open in bilibili room number
-                Label {
-                    text: qsTranslate("Oran7Ui", "bilibili直播房间号 :")
-                    font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                    font.pixelSize: 20
-                    font.bold: true
-                    color: Oran7Theme.Oran7MainGUI.themeColor
-                }
-                // B站登录状态按钮
-                Rectangle {
-                    width: bilibiliLoginBtnRow.width + 20
-                    height: 30
-                    radius: 15
-                    color: bilibiliLoginBtnArea.containsMouse ? "#e05a7a" : (BilibiliAuthManager.isLoggedIn ? "#fb7299" : "#888888")
-                    opacity: bilibiliLoginBtnArea.containsMouse ? 1.0 : 0.9
-
-                    Row {
-                        id: bilibiliLoginBtnRow
-                        anchors.centerIn: parent
-                        spacing: 5
-                        Label {
-                            text: BilibiliAuthManager.isLoggedIn ? qsTranslate("Oran7Ui", "✓ B站已登录") : qsTranslate("Oran7Ui", "B站扫码登录")
-                            font.pixelSize: 12
-                            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                            color: "white"
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Label {
-                            text: BilibiliAuthManager.isLoggedIn ? BilibiliAuthManager.userName : ""
-                            font.pixelSize: 11
-                            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                            color: "#FFE4E1"
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: BilibiliAuthManager.isLoggedIn
-                        }
-                    }
-
-                    MouseArea {
-                        id: bilibiliLoginBtnArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (BilibiliAuthManager.isLoggedIn) {
-                                // 已登录时点击可登出（长按或双击可以扩展，这里简单处理）
-                                BilibiliAuthManager.logout()
-                            } else {
-                                BasicConfig.openBilibiliLoginPopup()
-                            }
-                        }
-                    }
-                }
-                // 流信息标签
-                Label {
-                    text: {
-                        if (bilibiliRoomAddressCatch.urls.length > 0) {
-                            return qsTranslate("Oran7Ui", "流: ") + bilibiliRoomAddressCatch.selectedCodecName.toUpperCase() + " / " + bilibiliRoomAddressCatch.selectedFormatName.toUpperCase()
-                        }
-                        return ""
-                    }
-                    font.pixelSize: 11
-                    font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                    color: "#578b2c"
-                    visible: bilibiliRoomAddressCatch.urls.length > 0
-                }
-                // ==================== 弹幕开关 + 连接状态 ====================
-                Item {
-                    width: 260
-                    height: 24
-                    Label {
-                        id: dmLabel
-                        text: qsTranslate("Oran7Ui", "弹幕")
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                        font.pixelSize: 14
-                        color: Oran7Theme.Oran7MainGUI.themeColor
-                    }
-                    Rectangle {
-                        id: danmakuToggle
-                        width: 38
-                        height: 22
-                        radius: 11
-                        anchors.left: dmLabel.right
-                        anchors.leftMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: danmakuToggle.checked ? "#578b2c" : "#888888"
-                        Behavior on color {
-                            ColorAnimation { duration: 150 }
-                        }
-                        property bool checked: true
-                        Rectangle {
-                            width: parent.height - 6
-                            height: width
-                            radius: width / 2
-                            color: "white"
-                            x: parent.checked ? parent.width - width - 3 : 3
-                            anchors.verticalCenter: parent.verticalCenter
-                            Behavior on x {
-                                NumberAnimation { duration: 150 }
-                            }
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                danmakuToggle.checked = !danmakuToggle.checked;
-                                if (!danmakuToggle.checked) {
-                                    bilibiliDanmaku.stop();
-                                    videoRenderItem.danmakuEnabled = false;
-                                } else {
-                                    videoRenderItem.danmakuEnabled = (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex && BasicConfig.isPlaying);
-                                    if (videoRenderItem.danmakuEnabled)
-                                        bilibiliDanmaku.start(bilibiliRoomTextFiled.text);
-                                }
-                            }
-                        }
-                    }
-                    Label {
-                        anchors.left: danmakuToggle.right
-                        anchors.leftMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                        font.pixelSize: 11
-                        color: root.danmakuErrorText.length > 0 ? "#d63348"
-                             : (bilibiliDanmaku.isConnected ? "#578b2c" : "#888888")
-                        text: root.danmakuErrorText.length > 0 ? root.danmakuErrorText
-                            : (bilibiliDanmaku.isConnected ? qsTranslate("Oran7Ui", "弹幕已连接")
-                                : (bilibiliDanmaku.active ? qsTranslate("Oran7Ui", "弹幕连接中...") : qsTranslate("Oran7Ui", "弹幕未连接")))
-                    }
-                }
-                Rectangle {
-                    id: inputBilibiliRoomNumRect
-                    property int collapsedWidth: 140
-                    property int expandedWidth: 200
-                    property int currentWidth: collapsedWidth
-                    width: currentWidth
-                    Behavior on width {
-                        NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                    height: 40
-                    color: "#f8c7c7"
-                    radius: 10
-                    border.width: 1
-                    border.color: "#4d4d56"
-
-                    //Behavior on inputBilibiliRoomNumRect width
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                    Connections {
-                        target: Client
-                        function onPlaybackStopRequested() {
-                            videoNetwork_Loader.visible = false;
-                            if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_LivePlayerIndex)
-                                bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl;
-                            if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex)
-                                inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                        }
-                    }
-                    BilibiliRoomAddressCatch {
-                        id: bilibiliRoomAddressCatch
-                        property var urls: []
-                        property bool isRefreshing: false  // 标记是否为刷新流操作
-                        onUrlsReady: {
-                            urls = []; //Clear
-                            bilibiliRoomAddressCatch.avliStrAdr.forEach(function (url) {
-                                urls.push(url);
-                            });
-                            bilibiliRoomNumWayPlayBtnImage.sureReadyPlay = true;
-                            videoNetwork_Loader.visible = false; //reset
-
-                            // 如果是刷新操作且正在播放中，自动用新URL重新播放
-                            if (bilibiliRoomAddressCatch.isRefreshing && BasicConfig.isPlaying && urls.length > 0) {
-                                bilibiliRoomAddressCatch.isRefreshing = false;
-                                Client.playVideo(urls[0]);
-                            } else {
-                                bilibiliRoomAddressCatch.isRefreshing = false;
-                            }
-                        }
-                        onUrlsError: {
-                            bilibiliRoomNumWayPlayBtnImage.sureReadyPlay = false;
-                            bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl;
-                            videoNetwork_Loader.visible = false;
-                        }
-                    }
-                    TextField {
-                        id: bilibiliRoomTextFiled
-                        anchors.fill: parent
-                        anchors.margins: 5
-                        color: "black"
-                        font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                        font.pixelSize: 15
-                        background: Rectangle {
-                            anchors.fill: parent
-                            color: "transparent"
-                        }
-                        //placeholderText
-                        placeholderText: "bilibili"
-                        placeholderTextColor: "#888888"
-                        onFocusChanged: {
-                            if (focus) {
-                                BasicConfig.newTextAreaFocused(bilibiliRoomTextFiled);
-                                inputBilibiliRoomNumRect.currentWidth = inputBilibiliRoomNumRect.expandedWidth;
-                            } else {
-                                if (bilibiliRoomTextFiled.text.length === 0)
-                                    inputBilibiliRoomNumRect.currentWidth = inputBilibiliRoomNumRect.collapsedWidth;
-                            }
-                        }
-                        onTextChanged: {
-                            var isValid = /^[0-9]+$/.test(text);
-                            if (isValid && text.length <= 10) {
-                                videoNetwork_Loader.visible = true;
-                                netStreamAddressGet_DelayTimer.restart();
-                            }
-                        }
-
-                        Timer {
-                            id: netStreamAddressGet_DelayTimer
-                            interval: 3000
-                            repeat: false
-                            running: false
-                            onTriggered: {
-                                bilibiliRoomAddressCatch.getRoomInfo(bilibiliRoomTextFiled.text);
-                            }
-                        }
-                    }
-                    //BilibiliRoomNumWayPlayBtnRect
-                    Image {
-                        id: bilibiliRoomNumWayPlayBtnImage
-                        height: inputBilibiliRoomNumRect.height
-                        width: height
-                        anchors.left: bilibiliRoomTextFiled.right
-                        anchors.leftMargin: 4
-                        anchors.verticalCenter: bilibiliRoomTextFiled.verticalCenter
-                        scale: 0.77
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        mipmap: true
-                        cache: true
-                        asynchronous: false
-                        antialiasing: true
-                        property string bilibiliRoomNumWayBtn_playImageSourceUrl: "qrc:/image/ClearPlay.png"
-                        property string bilibiliRoomNumWayBtn_pauseImageSourceUrl: "qrc:/image/ClearPause.png"
-                        source: bilibiliRoomNumWayBtn_playImageSourceUrl
-                        layer.enabled: true
-                        layer.effect: ColorOverlay {
-                            source: bilibiliRoomNumWayPlayBtnImage
-                            color: bilibiliRoomNumWayPlayBtnImage.sureReadyPlay ? "#578b2c" : "#d63348"
-                        }
-                        function handle_bilibiliRoomNumWay_play() {
-                            bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_pauseImageSourceUrl;
-
-                            videoRenderItem.tryAttachDelayed(); //sureLoad videoItemCpp
-                            Client.playVideo(bilibiliRoomAddressCatch.urls[0]);
-                            // 开启弹幕
-                            if (danmakuToggle.checked) {
-                                videoRenderItem.danmakuEnabled = true;
-                                bilibiliDanmaku.start(bilibiliRoomTextFiled.text);
-                            }
-                        }
-                        function handle_bilibiliRoomNumWay_pause() {
-                            bilibiliRoomNumWayPlayBtnImage.source = bilibiliRoomNumWayPlayBtnImage.bilibiliRoomNumWayBtn_playImageSourceUrl;
-
-                            Client.playVideo(bilibiliRoomAddressCatch.urls[0]);
-                            // 暂停直播时停止弹幕
-                            bilibiliDanmaku.stop();
-                            videoRenderItem.danmakuEnabled = false;
-                        }
-                        property bool sureReadyPlay: false
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                if (bilibiliRoomNumWayPlayBtnImage.sureReadyPlay === true) {
-                                    if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_LivePlayerIndex) {
-
-                                        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_LivePlayerIndex;
-                                    }
-
-                                    if (!BasicConfig.isPlaying || Client.mediaSource() !== bilibiliRoomAddressCatch.urls[0])
-                                        bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_play();
-                                    else
-                                        bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_pause();
-                                }
-                            }
-                            onExited: cursorShape = Qt.ArrowCursor
-                            onEntered: cursorShape = Qt.PointingHandCursor
-                            onPressed: bilibiliRoomNumWayPlayBtnImage.scale = 0.5
-                            onReleased: bilibiliRoomNumWayPlayBtnImage.scale = 0.77
-                        }
-                    }
-                    // 刷新直播流按钮
-                    Image {
-                        id: refreshStreamBtn
-                        height: inputBilibiliRoomNumRect.height
-                        width: height
-                        anchors.left: bilibiliRoomNumWayPlayBtnImage.right
-                        anchors.leftMargin: 2
-                        anchors.verticalCenter: bilibiliRoomNumWayPlayBtnImage.verticalCenter
-                        scale: refreshStreamBtnArea.containsPress ? 0.5 : 0.7
-                        source: "qrc:/image/mage_refresh-reverse.png"
-                        sourceSize.height: 512
-                        sourceSize.width: 512
-                        visible: /*BasicConfig.isPlaying && *//*bilibiliRoomAddressCatch.urls.length > 0*/true
-                        layer.enabled: true
-                        layer.effect: ColorOverlay {
-                            source: refreshStreamBtn
-                            color: refreshStreamBtnArea.containsMouse ? "#2196F3" : "#888888"
-                        }
-                        MouseArea {
-                            id: refreshStreamBtnArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                // 重新获取流URL并重新播放
-                                bilibiliRoomAddressCatch.isRefreshing = true
-                                videoNetwork_Loader.visible = true
-                                bilibiliRoomAddressCatch.getRoomInfo(bilibiliRoomTextFiled.text)
-                            }
-                        }
-                        ToolTip {
-                            visible: refreshStreamBtnArea.containsMouse
-                            text: qsTranslate("Oran7Ui", "刷新直播流")
-                            delay: 500
-                        }
-                    }
-
-                    // 网络加载指示器
-                    Oran7Loader {
-                        id: videoNetwork_Loader
-                        anchors.centerIn: parent
-                        size: 30
-                        color: "#578b2c"
-                        visible: false
-                    }
-                }
-                //----->Second way : open in local folder
-                Label {
-                    text: qsTranslate("Oran7Ui", "从本地文件夹 :")
-                    font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                    font.pixelSize: 20
-                    font.bold: true
-                    color: Oran7Theme.Oran7MainGUI.themeColor
-                }
-                //input file path rectangle
-                Rectangle {
-                    id: inputFilePathRect
-                    property int collapsedWidth: 140
-                    property int expandedWidth: 200
-                    property int currentWidth: collapsedWidth
-                    property int collapsedHeight: 40
-                    property int expandHeight: 120
-                    property int currentHeight: collapsedHeight
-                    implicitWidth: currentWidth
-                    width: currentWidth
-                    Behavior on width {
-                        NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                    height: currentHeight
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                    color: "#f8c7c7"
-                    radius: 10
-                    border.width: 1
-                    border.color: "#4d4d56"
-                    ScrollView {
-                        id: inputFilePathView
-                        anchors.fill: parent
-                        TextArea {
-                            id: inputFilePathTextArea
-                            width: inputFilePathRect.currentWidth
-                            height: inputFilePathRect.currentHeight
-                            //implicitBackgroundWidth: inputFilePathRect.currentWidth
-                            text: ""
-                            font.pixelSize: 15
-                            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                            wrapMode: TextArea.Wrap
-                            placeholderText: "C:/.../video.mp4"
-                            placeholderTextColor: "#888888"
-                            onFocusChanged: {
-                                if (focus) {
-                                    BasicConfig.newTextAreaFocused(inputFilePathTextArea);
-
-                                    inputFilePathRect.currentWidth = inputFilePathRect.expandedWidth;
-                                    inputFilePathRect.currentHeight = inputFilePathRect.expandHeight;
-                                } else {
-                                    if (inputFilePathTextArea.text.length === 0) {
-                                        inputFilePathRect.currentWidth = inputFilePathRect.collapsedWidth;
-                                        inputFilePathRect.currentHeight = inputFilePathRect.collapsedHeight;
-                                    }
-                                }
-                            }
-                            onTextChanged: {
-                                fileExistsDetect_DelayTimer.restart();
-                            }
-                            Timer {
-                                id: fileExistsDetect_DelayTimer
-                                interval: 500
-                                repeat: false
-                                running: false
-                                onTriggered: {
-                                    if (fileHelper.fileExists(inputFilePathTextArea.text) === true) {
-                                        inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_curColorOverlay_Color = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_sureReadyColorOverlay_Color;
-                                        inputFilePath_WayPlayBtnImage.sureReadyPlay = true;
-                                    } else {
-                                        inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_curColorOverlay_Color = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_noReadyColorOverlay_Color;
-                                        inputFilePath_WayPlayBtnImage.sureReadyPlay = false;
-                                    }
-                                }
-                            }
-                        }
-                        //
-                    }
-                    //inputFilePath_WayPlayBtnImage
-                    Image {
-                        id: inputFilePath_WayPlayBtnImage
-                        height: inputFilePathRect.collapsedHeight
-                        width: height
-                        anchors.left: inputFilePathRect.right
-                        anchors.leftMargin: 1
-                        anchors.top: inputFilePathRect.top
-                        scale: 0.77
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        mipmap: true
-                        cache: true
-                        asynchronous: false
-                        antialiasing: true
-                        property string inputFilePathWayBtn_playImageSourceUrl: "qrc:/image/ClearPlay.png"
-                        property string inputFilePathWayBtn_pauseImageSourceUrl: "qrc:/image/ClearPause.png"
-                        source: inputFilePathWayBtn_playImageSourceUrl
-                        property color inputFilePathWayBtn_curColorOverlay_Color: inputFilePathWayBtn_noReadyColorOverlay_Color
-                        property color inputFilePathWayBtn_noReadyColorOverlay_Color: "#d63348"
-                        property color inputFilePathWayBtn_sureReadyColorOverlay_Color: "#578b2c"
-                        property bool sureReadyPlay: false
-                        layer.enabled: true
-                        layer.effect: ColorOverlay {
-                            source: inputFilePath_WayPlayBtnImage
-                            color: inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_curColorOverlay_Color
-                        }
-                        function handle_InputFilePathWay_play() {
-                            inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_pauseImageSourceUrl;
-
-                            videoRenderItem.tryAttachDelayed();
-                            Client.playVideo(inputFilePathTextArea.text);
-                        }
-                        function handle_InputFilePathWay_pause() {
-                            inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-
-                            Client.playVideo(inputFilePathTextArea.text);
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                if (inputFilePath_WayPlayBtnImage.sureReadyPlay === true) {
-                                    if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex) {
-
-                                        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_VideoPlayerIndex;
-                                    }
-
-                                    if (!BasicConfig.isPlaying || Client.mediaSource() !== inputFilePathTextArea.text)
-                                        inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_play();
-                                    else
-                                        inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause();
-                                }
-                            }
-                            onExited: cursorShape = Qt.ArrowCursor
-                            onEntered: cursorShape = Qt.PointingHandCursor
-                            onPressed: inputFilePath_WayPlayBtnImage.scale = 0.5
-                            onReleased: inputFilePath_WayPlayBtnImage.scale = 0.77
-                        }
-                    }
-                    //inputFilePathWay_OpenFileBtnImage
-                    Image {
-                        id: inputFilePathWay_OpenFileBtnImage
-                        source: "qrc:/image/formkit_file.png"
-                        height: inputFilePathRect.collapsedHeight
-                        width: height
-                        anchors.left: inputFilePath_WayPlayBtnImage.right
-                        anchors.leftMargin: 0
-                        scale: 0.7
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        asynchronous: false
-                        cache: true
-                        mipmap: false
-                        antialiasing: true
-
-                        layer.enabled: true
-                        layer.effect: ColorOverlay {
-                            source: inputFilePathWay_OpenFileBtnImage
-                            color: Oran7Theme.Oran7MainGUI.themeColor
-                        }
-                        Oran7FileDialog {
-                            id: inputFilePathWay_OpenFileDialog
-                            selectReset: true
-                            onReady: {
-                                inputFilePathTextArea.text = filesArray[0];
-                                inputFilePathTextArea.focus = true;
-                                //reset
-                                if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex) {
-                                    BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_VideoPlayerIndex;
-                                }
-                                inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-
-                                Client.stopPlayback();
-                            }
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onExited: cursorShape = Qt.ArrowCursor
-                            onEntered: cursorShape = Qt.PointingHandCursor
-                            onPressed: inputFilePathWay_OpenFileBtnImage.scale = 0.5
-                            onReleased: inputFilePathWay_OpenFileBtnImage.scale = 0.7
-                            onClicked: inputFilePathWay_OpenFileDialog.open()
-                        }
-                    }
-                    //in inputFilePathRect
-                }
-
-                // //======== 启用开发者信息调试模式 openVideoInfo======//
-                // Oran7ESelectRect {
-                //     id: openVIdeoInfo_eSelRect
-                //     labelText: "OpenVideoInfo"
-                //     labelTextColor:Oran7Theme.Oran7MainGUI.themeColor
-                //     onClicked: {
-                //         if (checked === false) {
-                //             checked = true;
-                //             videoRenderItem.openVideoInfo = checked;
-                //         } else {
-                //             checked = false;
-                //             videoRenderItem.openVideoInfo = checked;
-                //         }
-                //     }
-                // }
-                //============= 选择videoScaleMode ==================//
-                // property int scaleMode: Client.Fit
-                // Label {
-                //     id: scaleModeTextLabel
-                //     font.pixelSize: 20
-                //     font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-                //     font.bold: true
-                //     text: "ScaleMode:"
-                //     color: Oran7Theme.Oran7MainGUI.themeColor
-                // }
-                // Oran7ESelectRect {
-                //     labelText: "Fit"
-                //     checked: parent.scaleMode === Client.Fit
-                //     onClicked: {
-                //         parent.scaleMode = Client.Fit;
-                //         Client.setScaleMode(Client.VideoPlayerRender, Client.Fit);
-                //     }
-                // }
-                // Oran7ESelectRect {
-                //     labelText: "Fill"
-                //     checked: parent.scaleMode === Client.Fill
-                //     onClicked: {
-                //         parent.scaleMode = Client.Fill;
-                //         Client.setScaleMode(Client.VideoPlayerRender, Client.Fill);
-                //     }
-                // }
-                //==========================================//
-
-                //in colume
-            }
-            HoverHandler {
-                id: videoPlayerMenueHoverHandler
-                acceptedDevices: PointerDevice.Mouse
-            }
-            //in videoPlayerMenueRectangle
-        }
-    }
-    // -------------------------------- VideoPlayer Menue Rectangle END -----------------------------
-
-    //videoBottomControlBarRect
-    Rectangle {
-        id: videoBottomControlBarRect
-        anchors.left: root.left
-        anchors.right: root.right
-        anchors.bottom: root.bottom
-        height: 80
-        color: /*"#262626"*/ "transparent"
-        visible: true
-        opacity: 0
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.OutCubic
-            }
-        }
-
-        //PauseOrPlay_Image
-        Image {
-            id: playImage
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 7
-            anchors.left: parent.left
-            anchors.leftMargin: 15
-            sourceSize.width: 40
-            sourceSize.height: 40
-            scale: 0.9
-            Behavior on scale {
-                NumberAnimation {
-                    duration: 300
-                    easing.type: Easing.OutCubic
-                }
-            }
-            property string playImageSourceUrl: "qrc:/image/ClearPlay.png"
-            property string pouseImageSourceUrl: "qrc:/image/ClearPause.png"
-            source: BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex && BasicConfig.isPlaying ? pouseImageSourceUrl : playImageSourceUrl
-            layer.enabled: true
-            layer.effect: ColorOverlay {
-                source: playImage
-                color: "white"
-            }
-            property bool isPlaying: false
-            MouseArea {
-                id: playIamgeMouseArea
-                anchors.fill: parent
-                hoverEnabled: true
-                onClicked: {
-                    if (!(BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex || BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex))
-                        return;
-                    if (BasicConfig.isPlaying === false) {
-                        if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
-                            bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_play();
-                        if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
-                            inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_play();
-                    } else {
-                        if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_LivePlayerIndex)
-                            bilibiliRoomNumWayPlayBtnImage.handle_bilibiliRoomNumWay_pause();
-                        if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex)
-                            inputFilePath_WayPlayBtnImage.handle_InputFilePathWay_pause();
-                    }
-                }
-                onExited: cursorShape = Qt.ArrowCursor
-                onEntered: cursorShape = Qt.PointingHandCursor
-                onPressed: playImage.scale = 0.7
-                onReleased: playImage.scale = 0.9
-            }
-            Connections {
-                target: BasicConfig
-                function onPlayerFocusChanged() {
-                    if (BasicConfig.globalPlayingFocus !== BasicConfig.globalPlayer_VideoPlayerIndex) {
-                        inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                    }
-                }
-            }
-            //<---playImage
-        }
-
-        //Oran7ProgressSlider
-        Oran7ProgressSlider {
-            id: videoProgressSlider
-            width: parent.width * 0.98
-            height: 12
-            progressHandleWidth: 14
-            anchors.top: parent.top
-            anchors.topMargin: 10
-            anchors.horizontalCenter: parent.horizontalCenter
-            focusedPlayer: BasicConfig.globalPlayer_VideoPlayerIndex
-            property real ratio: 0
-            onPositionChanged: {
-                hideControlRectTimer.restart();
-            }
-            Connections {
-                target: Client
-                enabled: videoBottomControlBarRect.visible
-                             && videoBottomControlBarRect.enabled
-                             && videoBottomControlBarRect.Window
-                             && videoBottomControlBarRect.Window.active
-                function onPlayProgressUpdated(CurPos, CurTime_Second) {
-                    if (videoProgressSlider.isPressed === false && BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
-                        //console.log(CurPos,CurTime_Second)
-                        videoProgressSlider.nowSecondTime = CurTime_Second;
-                        videoProgressSlider.ratio = CurPos / BasicConfig.max_Slider_Value;
-                        // console.log(videoProgressSlider.ratio)
-                        videoProgressSlider.progressHandleX = videoProgressSlider.width * videoProgressSlider.ratio - videoProgressSlider.progressHandleWidth / 2;
-                        videoProgressSlider.visibleProgressX = videoProgressSlider.width * videoProgressSlider.ratio;
-                        if (videoProgressSlider.nowSecondTime >= videoProgressSlider.allSecondTime) {
-                            inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                        }
-                    }
-                }
-                function onTotalDurationUpdated(AllTime) {
-                    if (BasicConfig.globalPlayingFocus === BasicConfig.globalPlayer_VideoPlayerIndex) {
-                        videoProgressSlider.allSecondTime = AllTime;
-                    }
-                }
-                function onStopIconUpdated() {
-                    inputFilePath_WayPlayBtnImage.source = inputFilePath_WayPlayBtnImage.inputFilePathWayBtn_playImageSourceUrl;
-                    videoProgressSlider.progressHandleX = videoProgressSlider.width - videoProgressSlider.progressHandleWidth / 2;
-                    videoProgressSlider.visibleProgressX = videoProgressSlider.width;
-
-                }
-            }
-        }
-        Label {
-            id: progressTimeLabel
-            anchors.left: playImage.right
-            anchors.leftMargin: 15
-            anchors.verticalCenter: playImage.verticalCenter
-            color: "white"
-            font.family: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-            font.pixelSize: 20
-            text: videoProgressSlider.nowTimeText + " - " + videoProgressSlider.allTimeText
-        }
-
-        //Volume set
-        Oran7PlayerVolumeComponent {
-            id: videoPlayerStackBottomControl_playerVolumeControl
-            anchors.right: parent.right
-            anchors.rightMargin: 20
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 20
-        }
-
-        // ================ bottom Control Hidden logic=================
-        HoverHandler {
-            id: hover
-            acceptedDevices: PointerDevice.Mouse
-
-            property point lastPos: Qt.point(-99999, -99999)
-            property bool hasLast: false
-            property real moveThreshold: 2   // 像素阈值，防抖
-
-            onPointChanged: {
-                if (!hovered) {
-                    hasLast = false;
-                    return;
-                }
-
-                const p = point.position;
-                if (!hasLast) {
-                    // 第一次进入/第一次拿到点，不算“移动”
-                    lastPos = p;
-                    hasLast = true;
-                    return;
-                }
-
-                const dx = p.x - lastPos.x;
-                const dy = p.y - lastPos.y;
-                const dist2 = dx * dx + dy * dy;
-
-                if (dist2 >= moveThreshold * moveThreshold) {
-                    //只有真的移动才显示并重置计时器
-                    videoBottomControlBarRect.opacity = 1;
-                    hideControlRectTimer.restart();
-                    lastPos = p;
-                }
-            }
-
-            onHoveredChanged: {
-                // 离开区域就立刻开始隐藏计时
-                if (!hovered) {
-                    hasLast = false;
-                    hideControlRectTimer.restart();
-                }
-            }
-        }
-
         Timer {
-            id: hideControlRectTimer
-            repeat: false
-            interval: 1500
-            onTriggered: mouse => {
-                videoBottomControlBarRect.opacity = 0;
+            id: singleClick
+            interval: 230
+            onTriggered: {
+                if (root.controlsVisible) {
+                    root.controlsVisible = false
+                    root.mouseHidden = false
+                    hideControls.stop()
+                } else root.wakeControls()
+                playerSurface.forceActiveFocus()
             }
         }
-        //<--videoBottomControlBarRect
-    }
-
-    //============= VideoPlayerStack鼠标定时隐藏逻辑 =============//
-    property bool mouseHidden: false
-    onMouseHiddenChanged: {
-        if (root.isActive === false)
-            return;
-
-        if (root.mouseHidden === true && videoPlayerMenueHoverHandler.hovered === false && videoPlayerMenueRectangle.fileDialog_isOpen === false)
-            BasicConfig.clearAllUi_inVIdeoRenderArea(true);
-        else
-            BasicConfig.clearAllUi_inVIdeoRenderArea(false);
-
-        //console.log("[DEBUG] clearAllUi signal emitted, mouseHidden:", root.mouseHidden, "isActive:", root.isActive)
-    }
-
-    Timer {
-        id: mouseHideTimer
-        interval: 2000
-        repeat: false
-        running: true
-        onTriggered: root.mouseHidden = true
-    }
-
-    HoverHandler {
-        id: rootHover
-        acceptedDevices: PointerDevice.Mouse
-
-        //HoverHandler/PointerHandler of cursorShape
-        cursorShape: root.mouseHidden ? Qt.BlankCursor : Qt.ArrowCursor
-
-        property point lastPos: Qt.point(-99999, -99999)
-        property bool hasLast: false
-        property real threshold: 2
-
-        onPointChanged: {
-            if (!hovered) {
-                hasLast = false;
-                return;
+        HoverHandler {
+            id: playerHover
+            acceptedDevices: PointerDevice.Mouse
+            cursorShape: root.mouseHidden ? Qt.BlankCursor : Qt.ArrowCursor
+            property point lastPosition: Qt.point(0, 0)
+            property bool hasPosition: false
+            onPointChanged: {
+                if (!hovered) return
+                var position = point.scenePosition
+                if (!hasPosition) {
+                    lastPosition = position
+                    hasPosition = true
+                    return
+                }
+                var dx = position.x - lastPosition.x
+                var dy = position.y - lastPosition.y
+                // 累计移动至少 2px 才视为活动，避免静止指针被合成事件持续唤醒。
+                if (dx * dx + dy * dy >= 4) {
+                    lastPosition = position
+                    root.wakeControls()
+                }
             }
-
-            const p = point.position;
-            if (!hasLast) {
-                lastPos = p;
-                hasLast = true;
-                return;
-            }
-
-            const dx = p.x - lastPos.x;
-            const dy = p.y - lastPos.y;
-            if (dx * dx + dy * dy >= threshold * threshold) {
-                root.mouseHidden = false;
-                mouseHideTimer.restart();
-                lastPos = p;
+            onHoveredChanged: {
+                hasPosition = false
+                if (hovered) root.wakeControls()
             }
         }
-
-        onHoveredChanged: {
-            if (hovered) {
-                root.mouseHidden = false;
-                mouseHideTimer.restart();
-            } else {
-                hasLast = false;
+        Item {
+            id: header
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 48
+            opacity: root.controlsVisible ? 1 : 0
+            enabled: opacity > 0.1
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            HoverHandler { id: headerHover }
+            // 顶部仅保留渐隐遮罩，浅色画面中也能读清标题，不再覆盖整块工具面板。
+            Rectangle {
+                width: parent.width
+                height: 80
+                gradient: Gradient {
+                    GradientStop { position: 0; color: "#99000000" }
+                    GradientStop { position: 0.6; color: "#3d000000" }
+                    GradientStop { position: 1; color: "transparent" }
+                }
+            }
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 6
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 8
+                ToolButton {
+                    id: backButton
+                    objectName: "videoBackButton"
+                    implicitWidth: 34
+                    implicitHeight: 34
+                    hoverEnabled: true
+                    Accessible.name: qsTranslate("Oran7Ui", "视频库")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 600
+                    ToolTip.text: Accessible.name
+                    background: Rectangle {
+                        radius: 7
+                        color: backButton.down ? "#3dffffff" : backButton.hovered ? "#20ffffff" : "transparent"
+                        Behavior on color { ColorAnimation { duration: 140 } }
+                    }
+                    contentItem: Item {
+                        Shape {
+                            anchors.centerIn: parent
+                            width: 16; height: 16
+                            antialiasing: true
+                            ShapePath {
+                                fillColor: "transparent"
+                                strokeColor: "#f2f2f2"
+                                strokeWidth: 1.7
+                                capStyle: ShapePath.RoundCap
+                                joinStyle: ShapePath.RoundJoin
+                                startX: 10; startY: 3
+                                PathLine { x: 5; y: 8 }
+                                PathLine { x: 10; y: 13 }
+                            }
+                        }
+                    }
+                    onClicked: root.showLibrary()
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: root.displayTitle
+                    textFormat: Text.PlainText
+                    color: "#f2f2f2"
+                    font.pixelSize: 13
+                    elide: Text.ElideMiddle
+                }
+                ToolButton {
+                    id: moreButton
+                    objectName: "videoSettingsButton"
+                    implicitWidth: 34
+                    implicitHeight: 34
+                    hoverEnabled: true
+                    Accessible.name: qsTranslate("Oran7Ui", "详情与设置")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 600
+                    ToolTip.text: Accessible.name
+                    background: Rectangle {
+                        radius: 7
+                        color: moreButton.down || settings.visible ? "#3dffffff" : moreButton.hovered ? "#20ffffff" : "transparent"
+                        Behavior on color { ColorAnimation { duration: 140 } }
+                    }
+                    contentItem: Item {
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 3
+                            Repeater {
+                                model: 3
+                                Rectangle { width: 3; height: 3; radius: 1.5; color: "#f2f2f2" }
+                            }
+                        }
+                    }
+                    onClicked: settings.open()
+                }
+            }
+        }
+        Column {
+            anchors.centerIn: parent
+            spacing: 16
+            width: Math.min(420, parent.width - 48)
+            visible: root.opening || root.failed || !root.ownsPlayback || root.statusText.length > 0
+            Label {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                color: root.textColor
+                font.pixelSize: 15
+                text: root.resolving ? qsTranslate("Oran7Ui", "正在连接直播间…")
+                    : root.failed ? Client.playback.errorString
+                    : root.opening ? qsTranslate("Oran7Ui", "正在准备画面…")
+                    : root.statusText.length ? root.statusText : qsTranslate("Oran7Ui", "点击播放以打开当前内容")
+            }
+            Oran7StudioButton {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: !root.opening && (root.failed || !root.ownsPlayback)
+                text: qsTranslate("Oran7Ui", "重新播放")
+                onClicked: root.retry()
+            }
+        }
+        Oran7VideoPlaybackToolbar {
+            id: toolbar
+            objectName: "videoPlaybackToolbar"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 0
+            height: implicitHeight
+            opacity: root.controlsVisible ? 1 : 0
+            enabled: opacity > 0.1
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            live: root.live
+            playing: root.ownsPlayback && Client.playback.active
+            opening: root.opening
+            controlsEnabled: !root.resolving
+            fullscreen: root.fullscreen
+            positionSeconds: root.ownsPlayback ? Client.playback.positionMs / 1000 : 0
+            durationSeconds: root.ownsPlayback ? Client.playback.durationMs / 1000 : 0
+            sourceKey: root.openedSource
+            onActivity: root.wakeControls()
+            onToggleRequested: root.togglePlayback()
+            onSeekRequested: (seconds, sourceKey) => {
+                if (root.ownsPlayback && !root.live && sourceKey === root.openedSource) Client.seekTo(seconds)
+                root.wakeControls()
+            }
+            onFullscreenRequested: root.toggleFullscreen()
+        }
+        Popup {
+            id: settings
+            objectName: "videoSettingsPopup"
+            parent: playerSurface
+            x: parent.width - width - 12
+            y: 64
+            width: Math.min(320, parent.width - 24)
+            height: Math.max(100, Math.min(contentColumn.implicitHeight + 32, parent.height - 80))
+            padding: 16
+            focus: true
+            onOpened: root.wakeControls()
+            onClosed: root.wakeControls()
+            background: Rectangle { color: "#f2242933"; radius: 10; border.color: "#48505f" }
+            ScrollView {
+                anchors.fill: parent
+                contentWidth: availableWidth
+                clip: true
+                ColumnLayout {
+                    id: contentColumn
+                    width: parent.width
+                    spacing: 12
+                    Label { text: qsTranslate("Oran7Ui", "播放设置"); color: root.textColor; font.pixelSize: 16 }
+                    Oran7StudioButton {
+                        text: qsTranslate("Oran7Ui", "画面信息")
+                        checkable: true
+                        checked: root.showInfo
+                        onToggled: root.showInfo = checked
+                    }
+                    Oran7StudioButton {
+                        visible: root.live
+                        text: qsTranslate("Oran7Ui", "弹幕")
+                        checkable: true
+                        checked: root.danmakuEnabled
+                        onToggled: { root.danmakuEnabled = checked; root.syncDanmaku() }
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        visible: root.live
+                        text: root.streamDescription + "\n" + (root.danmakuErrorText.length ? root.danmakuErrorText
+                            : danmaku.isConnected ? qsTranslate("Oran7Ui", "弹幕已连接") : qsTranslate("Oran7Ui", "弹幕未连接"))
+                        color: root.secondaryTextColor
+                        wrapMode: Text.Wrap
+                    }
+                    Oran7StudioButton {
+                        visible: root.live
+                        text: qsTranslate("Oran7Ui", "刷新直播流")
+                        onClicked: { settings.close(); root.playRoom(root.roomNumber) }
+                    }
+                    Oran7StudioButton {
+                        text: BilibiliAuthManager.isLoggedIn ? qsTranslate("Oran7Ui", "退出B站登录") : qsTranslate("Oran7Ui", "B站登录")
+                        onClicked: {
+                            if (BilibiliAuthManager.isLoggedIn) BilibiliAuthManager.logout()
+                            else root.login()
+                        }
+                    }
+                }
             }
         }
     }
-    //====================================================//
-
-    //<---root
 }

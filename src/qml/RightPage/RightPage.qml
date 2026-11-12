@@ -18,9 +18,18 @@ Rectangle {
     property int topBarHeight: Oran7Theme.Oran7MainGUI.topBarDefaultHeight
     // 主窗口显式传入展开状态，页面只上报底部播放栏是否需要显示。
     property bool captionExpanded: true
+    property bool windowButtonsHovered: false
+    readonly property var videoPage: mainStackView.currentItem !== null
+        && mainStackView.currentItem.pageName === "VideoPlayerPage" ? mainStackView.currentItem : null
+    readonly property real videoControlsOpacity: videoPage ? videoPage.windowControlsOpacity : 1
+    readonly property real networkLatencyOpacity: videoPage ? videoPage.networkLatencyOpacity : 1
+    function wakeVideoControls() {
+        if (videoPage && videoPage.isActive && videoPage.playbackView) videoPage.wakeControls()
+    }
     readonly property bool musicPageActive: mainStackView.currentItem !== null
         && (mainStackView.currentItem.pageName === "LocalMusicPage"
-            || mainStackView.currentItem.pageName === "SearchMusicPage")
+            || mainStackView.currentItem.pageName === "SearchMusicPage"
+            || mainStackView.currentItem.pageName === "QQMusicPage")
 
     //===================background 动态渐变效果 - 在启用============
     // 创建渐变层
@@ -233,7 +242,8 @@ Rectangle {
         clip: true
 
         initialItem: Qt.createComponent(BasicConfig.getUrl(BasicConfig.videoPlayerPage)).createObject(mainStackView, {
-            "pageName": "VideoPlayerPage"
+            "pageName": "VideoPlayerPage",
+            "windowButtonsHovered": Qt.binding(function() { return root.windowButtonsHovered })
         })
 
         signal upDateStack
@@ -259,9 +269,10 @@ Rectangle {
                     //Create
                     var component = Qt.createComponent(url);
                     if (component.status === Component.Ready) {
-                        var page = component.createObject(mainStackView, {
-                            "pageName": pageName
-                        });
+                        var properties = { "pageName": pageName };
+                        if (pageName === "VideoPlayerPage")
+                            properties.windowButtonsHovered = Qt.binding(function() { return root.windowButtonsHovered });
+                        var page = component.createObject(mainStackView, properties);
                         //cache this page
                         this.cache[pageName] = page;
                         return page;
@@ -312,6 +323,10 @@ Rectangle {
                 BasicConfig.triggerLoad_localMusicList_Aniamtion(0);
                 mainStackView.upDateStack();
             }
+            function onPushQQMusicStackInto_RightPageMainStackView() {
+                mainStackView.pageManager.navigateTo(BasicConfig.getUrl(BasicConfig.qqMusicPage), "QQMusicPage");
+                mainStackView.upDateStack();
+            }
             function onPushLocalMusicStackInto_RightPageMainStackView() {
                 mainStackView.pageManager.navigateTo(BasicConfig.getUrl(BasicConfig.localMusicPage), "LocalMusicPage");
                 BasicConfig.triggerLoad_localMusicList_Aniamtion(0);
@@ -345,6 +360,9 @@ Rectangle {
                     },
                     "SearchMusicPage": function () {
                         BasicConfig.focusCurrent_SelectedMenuModel("SearchMusicPage");
+                    },
+                    "QQMusicPage": function () {
+                        BasicConfig.focusCurrent_SelectedMenuModel("QQMusicPage");
                     },
                     "LocalMusicPage": function () {
                         BasicConfig.focusCurrent_SelectedMenuModel("LocalMusicPage");

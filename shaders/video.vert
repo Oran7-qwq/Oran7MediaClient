@@ -9,6 +9,11 @@ layout(std140, binding = 0) uniform buf {
     mat4 mvp;
     float opacity;
     float black;
+    vec2 padding;
+    vec4 mode;
+    vec4 range;
+    vec4 coefficients;
+    vec4 uvScale;
 } ubuf;
 
 void main()

@@ -99,6 +99,11 @@ int main(int argc,char**argv) {
     popupFixture.setData("import QtQml\nQtObject { property bool dismissed: false; function close() { dismissed = true } }",QUrl());
     auto* activePopup=popupFixture.create();
     check(activePopup,"active settings popup fixture");
+    window->setProperty("activeMainPopup",QVariant::fromValue(activePopup));
+    keyboard.escapeKeyPressed();QTest::qWait(240);
+    check(phase(window)=="Open"&&activePopup->property("dismissed").toBool(),"ESC dismisses main account popup without toggling settings");
+    window->setProperty("activeMainPopup",QVariant::fromValue(static_cast<QObject*>(nullptr)));
+    activePopup->setProperty("dismissed",false);
     settings->setProperty("activeSettingsPopup",QVariant::fromValue(activePopup));
     keyboard.escapeKeyPressed();QTest::qWait(240);
     check(phase(window)=="Open"&&activePopup->property("dismissed").toBool(),"ESC dismisses active color menu without toggling container");

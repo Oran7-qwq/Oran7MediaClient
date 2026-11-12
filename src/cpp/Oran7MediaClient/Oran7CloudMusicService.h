@@ -31,7 +31,7 @@ public:
     Q_INVOKABLE bool fetchLiked(bool force = false);
     Q_INVOKABLE void markLikedDirty();
     Q_INVOKABLE bool toggleLike(const QVariantMap& track);
-    quint64 requestRoam(qint64 seed);
+    quint64 requestRoam(qint64 seed, int mode = 3);
     void cancelRoam();
 signals:
     void likedStatusChanged();

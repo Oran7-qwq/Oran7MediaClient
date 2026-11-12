@@ -1,4 +1,6 @@
 #include "Oran7DesktopCaptureWorker.h"
+#include "Oran7CaptureTimerPeriod.h"
+#include <QElapsedTimer>
 #include <QDateTime>
 #include <QThread>
 #include <wrl/client.h>
@@ -232,6 +234,12 @@ QString Oran7DesktopCaptureWorker::initGraph()
 
 void Oran7DesktopCaptureWorker::grabLoop()
 {
+    Oran7CaptureTimerPeriod timerPeriod(m_fps > 60);
+    INFO_LOG << "[CaptureDiag] requested_fps=" << m_fps << " timer_1ms=" << timerPeriod.active();
+    QElapsedTimer performance;
+    performance.start();
+    qint64 rawFrames = 0, submittedFrames = 0, previewNs = 0, conversionNs = 0, conversions = 0;
+    QElapsedTimer stage;
     bool firstFrame = true;
     const auto reportCaptureError = [this](const char* operation, int error)
     {
@@ -311,7 +319,10 @@ void Oran7DesktopCaptureWorker::grabLoop()
                 //------------------------------------------//
 
                 m_recordingFeed->publish(f->width, f->height, m_hwdev.get());
+                ++rawFrames;
+                stage.start();
                 auto preview = m_converter->preview(f);
+                previewNs += stage.nsecsElapsed();
                 if (!preview.error.isEmpty())
                 {
                     if (preview.invalidated)
@@ -355,8 +366,14 @@ void Oran7DesktopCaptureWorker::grabLoop()
 
                     // 用 av_hwframe_transfer_data 下载 D3D11 帧（正确处理 data[1] 子资源）
                     // 一趟 BGRA → NV12 到编码器分辨率
-                    auto encFrame = nowUs + 1000 >= m_nextRecordUs ? m_converter->recording(f, encW, encH)
-                                                                   : Oran7CaptureFrameConverter::Frame{};
+                    Oran7CaptureFrameConverter::Frame encFrame;
+                    if (nowUs + 1000 >= m_nextRecordUs)
+                    {
+                        stage.start();
+                        encFrame = m_converter->recording(f, encW, encH);
+                        conversionNs += stage.nsecsElapsed();
+                        ++conversions;
+                    }
                     if (encFrame && encoder && encoder->isRuning())
                     {
                         int64_t pts = (nowUs - m_recStartUs) * 90'000 / 1'000'000;
@@ -373,11 +390,29 @@ void Oran7DesktopCaptureWorker::grabLoop()
 
                         m_nextRecordUs = qMax(m_nextRecordUs + 1000000 / qMax(1, recording.fps), nowUs);
                         encoder->pushFrame(encFrame.release());
+                        ++submittedFrames;
                     }
                 }
                 else
                 {
+                    if (m_lastRecEnabled)
+                        m_converter->endRecording();
                     m_lastRecEnabled = false;
+                }
+                if (performance.elapsed() >= 3000)
+                {
+                    const double seconds = performance.nsecsElapsed() / 1e9;
+                    if (Oran7GlobalHelper::developerMode())
+                    {
+                        INFO_LOG << "[CapturePerf] target_capture_fps=" << m_fps << "raw_fps=" << rawFrames / seconds
+                                 << "submitted_fps=" << submittedFrames / seconds
+                                 << "preview_avg_ms=" << (rawFrames ? previewNs / (rawFrames * 1e6) : 0.0)
+                                 << "conversion_avg_ms=" << (conversions ? conversionNs / (conversions * 1e6) : 0.0)
+                                 << "encoder_dropped_total=" << (encoder ? encoder->droppedFrameCount() : 0)
+                                 << "packet_queue=" << (encoder ? encoder->queuedPktCount() : 0);
+                    }
+                    rawFrames = submittedFrames = previewNs = conversionNs = conversions = 0;
+                    performance.restart();
                 }
             }
         }

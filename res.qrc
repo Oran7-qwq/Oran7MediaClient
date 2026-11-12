@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/">
+        <file>image/oran7_qq_music.svg</file>
         <file>image/account.png</file>
         <file>image/backmaxsize.png</file>
         <file>image/clear.png</file>

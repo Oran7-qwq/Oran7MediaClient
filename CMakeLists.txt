@@ -53,7 +53,7 @@ add_custom_target(oran7_update_translations
 # 设置 Qt 策略以避免 QTP0001 警告
 qt_policy(SET QTP0001 NEW)
 
-# 3rdparty QWindowKit (QWKQuick) 配置 - 参考 HuskarUI 方法
+# 3rdparty QWindowKit (QWKQuick) 依赖配置
 set(QWINDOWKIT_BUILD_STATIC ON)
 set(QWINDOWKIT_BUILD_WIDGETS OFF)
 set(QWINDOWKIT_BUILD_QUICK ON)
@@ -323,6 +323,8 @@ qt_add_shaders(Oran7MediaClient "shaders"
     FILES
         shaders/video.vert
         shaders/video.frag
+        shaders/hdrComposite.vert
+        shaders/hdrComposite.frag
         shaders/gradientText.frag
         shaders/octgrams.frag
         shaders/fractal.frag

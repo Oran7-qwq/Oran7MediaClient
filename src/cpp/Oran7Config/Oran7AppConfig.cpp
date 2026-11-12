@@ -57,12 +57,47 @@ bool Oran7AppConfig::normalize(const QJsonObject& input, const QJsonObject& defa
     if (value(result, LastSongId).toInteger(-2) < -1) put(result, LastSongId, value(defaults, LastSongId));
     if (value(result, ThemeProfile).toString().trimmed().isEmpty()) put(result, ThemeProfile, value(defaults, ThemeProfile));
     range(RecordingMode, 0, 1); range(RecordingWidth, 0, 16384); range(RecordingHeight, 0, 16384);
+    if (value(result, RecordingFormat).toString() != "mp4" && value(result, RecordingFormat).toString() != "flv")
+        put(result, RecordingFormat, value(defaults, RecordingFormat));
     range(RecordingFps, 1, 240); range(RecordingBitrate, 100, 200000);
     const int rw = value(result, RecordingWidth).toInt(), rh = value(result, RecordingHeight).toInt();
     if ((rw == 0) != (rh == 0) || rw % 2 || rh % 2) {
         put(result, RecordingWidth, value(defaults, RecordingWidth));
         put(result, RecordingHeight, value(defaults, RecordingHeight));
     }
+    range(AudioVersion, 1, 2);
+    range(AudioPreamp, -24.0, 24.0);
+    range(AudioOutput, -24.0, 24.0);
+    range(AudioCeiling, -24.0, 0.0);
+    range(AudioHighPass, 0.0, 1000.0);
+    range(AudioLowPass, 1000.0, 24000.0);
+    range(AudioBassBoost, 0.0, 12.0);
+    range(AudioBassFreq, 40.0, 300.0);
+    range(AudioStereoWidth, 0.0, 2.0);
+    range(AudioCrossfeed, 0.0, 3.0);
+    range(AudioCompThreshold, -60.0, 0.0);
+    range(AudioCompRatio, 1.0, 20.0);
+    range(AudioCompAttack, 0.1, 100.0);
+    range(AudioCompRelease, 10.0, 1000.0);
+    range(AudioCompKnee, 0.0, 12.0);
+    range(AudioCompMakeup, -12.0, 12.0);
+    if (value(result, AudioHighPass).toDouble() >= value(result, AudioLowPass).toDouble()) {
+        put(result, AudioHighPass, value(defaults, AudioHighPass));
+        put(result, AudioLowPass, value(defaults, AudioLowPass));
+    }
+    put(result, AudioVersion, 2);
+    const auto audioBands = value(result, AudioBands).toArray();
+    bool audioBandsValid = audioBands.size() == 10;
+    for (const auto& band : audioBands) {
+        if (!band.isDouble() || !std::isfinite(band.toDouble())
+            || band.toDouble() < -12.0 || band.toDouble() > 12.0) {
+            audioBandsValid = false;
+            break;
+        }
+    }
+    if (!audioBandsValid) put(result, AudioBands, value(defaults, AudioBands));
+    if (value(result, AudioPreset).toString().trimmed().isEmpty())
+        put(result, AudioPreset, value(defaults, AudioPreset));
     QJsonArray recent;
     for (const auto& v : result.value(RecentFiles).toArray()) if (v.isString()) recent.append(v);
     result[RecentFiles] = recent;
@@ -80,6 +115,7 @@ Oran7AppConfig Oran7AppConfig::fromJson(const QJsonObject& json) {
     result.window.maximized = value(json, WindowMaximized).toVariant().toBool();
     result.appearance.themeProfile = value(json, ThemeProfile).toVariant().toString();
     result.appearance.language = value(json, Language).toString();
+    result.general.developerMode = value(json, DeveloperMode).toBool();
     result.appearance.fontFamily = value(json, UiFontFamily).toString();
     result.appearance.fontPixelSize = value(json, UiFontPixelSize).toInt();
     result.player.volume = value(json, Volume).toVariant().toInt();
@@ -109,8 +145,10 @@ Oran7AppConfig Oran7AppConfig::fromJson(const QJsonObject& json) {
     result.lastMedia.isVip = value(json, LastVip).toVariant().toBool();
     result.lastMedia.sourceIsVip = value(json, LastSourceVip).toVariant().toBool();
     result.recentFiles = value(json, RecentFiles).toVariant().toStringList();
+    result.videoHistory = value(json, QStringLiteral("video.history")).toArray().toVariantList();
     result.recentFilesMaxCount = value(json, RecentMax).toVariant().toInt();
     result.recording.mode = value(json, RecordingMode).toVariant().toInt();
+    result.recording.format = value(json, RecordingFormat).toString();
     result.recording.width = value(json, RecordingWidth).toVariant().toInt();
     result.recording.height = value(json, RecordingHeight).toVariant().toInt();
     result.recording.fps = value(json, RecordingFps).toVariant().toInt();
@@ -129,6 +167,30 @@ Oran7AppConfig Oran7AppConfig::fromJson(const QJsonObject& json) {
     result.recording.signalingUrl = value(json, RecordingSignal).toVariant().toString();
     result.recording.signalingUser = value(json, RecordingSignalUser).toVariant().toString();
     result.recording.signalingPassword = value(json, RecordingSignalPassword).toVariant().toString();
+    result.audio.version = value(json, AudioVersion).toInt(1);
+    result.audio.enabled = value(json, AudioEnabled).toBool();
+    result.audio.presetId = value(json, AudioPreset).toString();
+    result.audio.preampDb = value(json, AudioPreamp).toDouble();
+    result.audio.outputGainDb = value(json, AudioOutput).toDouble();
+    result.audio.limiterCeilingDb = value(json, AudioCeiling).toDouble(-1.0);
+    const auto bands = value(json, AudioBands).toArray();
+    for (int i = 0; i < 10; ++i)
+        result.audio.bandGainsDb.append(bands.at(i).toDouble(0.0));
+    for (const auto& item : value(json, AudioCustom).toArray())
+        result.audio.customPresets.append(item.toVariant());
+    result.audio.highPassHz = value(json, AudioHighPass).toDouble(20.0);
+    result.audio.lowPassHz = value(json, AudioLowPass).toDouble(20000.0);
+    result.audio.bassBoostDb = value(json, AudioBassBoost).toDouble();
+    result.audio.bassFreqHz = value(json, AudioBassFreq).toDouble(120.0);
+    result.audio.stereoWidth = value(json, AudioStereoWidth).toDouble(1.0);
+    result.audio.crossfeed = value(json, AudioCrossfeed).toInt();
+    result.audio.compressorEnabled = value(json, AudioCompressor).toBool();
+    result.audio.compressorThresholdDb = value(json, AudioCompThreshold).toDouble(-18.0);
+    result.audio.compressorRatio = value(json, AudioCompRatio).toDouble(3.0);
+    result.audio.compressorAttackMs = value(json, AudioCompAttack).toDouble(10.0);
+    result.audio.compressorReleaseMs = value(json, AudioCompRelease).toDouble(150.0);
+    result.audio.compressorKneeDb = value(json, AudioCompKnee).toDouble(3.0);
+    result.audio.compressorMakeupDb = value(json, AudioCompMakeup).toDouble();
     return result;
 }
 
@@ -140,6 +202,7 @@ QJsonObject Oran7AppConfig::toJson() const {
     put(result, WindowY, QJsonValue::fromVariant(QVariant::fromValue(window.y)));
     put(result, WindowMaximized, QJsonValue::fromVariant(QVariant::fromValue(window.maximized)));
     put(result, Language, appearance.language);
+    put(result, DeveloperMode, general.developerMode);
     put(result, UiFontFamily, appearance.fontFamily);
     put(result, UiFontPixelSize, appearance.fontPixelSize);
     put(result, ThemeProfile, QJsonValue::fromVariant(QVariant::fromValue(appearance.themeProfile)));
@@ -170,8 +233,10 @@ QJsonObject Oran7AppConfig::toJson() const {
     put(result, LastVip, QJsonValue::fromVariant(QVariant::fromValue(lastMedia.isVip)));
     put(result, LastSourceVip, QJsonValue::fromVariant(QVariant::fromValue(lastMedia.sourceIsVip)));
     put(result, RecentFiles, QJsonValue::fromVariant(QVariant::fromValue(recentFiles)));
+    put(result, QStringLiteral("video.history"), QJsonArray::fromVariantList(videoHistory));
     put(result, RecentMax, QJsonValue::fromVariant(QVariant::fromValue(recentFilesMaxCount)));
     put(result, RecordingMode, QJsonValue::fromVariant(QVariant::fromValue(recording.mode)));
+    put(result, RecordingFormat, recording.format);
     put(result, RecordingWidth, QJsonValue::fromVariant(QVariant::fromValue(recording.width)));
     put(result, RecordingHeight, QJsonValue::fromVariant(QVariant::fromValue(recording.height)));
     put(result, RecordingFps, QJsonValue::fromVariant(QVariant::fromValue(recording.fps)));
@@ -190,6 +255,32 @@ QJsonObject Oran7AppConfig::toJson() const {
     put(result, RecordingSignal, QJsonValue::fromVariant(QVariant::fromValue(recording.signalingUrl)));
     put(result, RecordingSignalUser, QJsonValue::fromVariant(QVariant::fromValue(recording.signalingUser)));
     put(result, RecordingSignalPassword, QJsonValue::fromVariant(QVariant::fromValue(recording.signalingPassword)));
+    put(result, AudioVersion, QJsonValue::fromVariant(QVariant::fromValue(audio.version)));
+    put(result, AudioEnabled, QJsonValue::fromVariant(QVariant::fromValue(audio.enabled)));
+    put(result, AudioPreset, QJsonValue::fromVariant(QVariant::fromValue(audio.presetId)));
+    put(result, AudioPreamp, QJsonValue::fromVariant(QVariant::fromValue(audio.preampDb)));
+    put(result, AudioOutput, QJsonValue::fromVariant(QVariant::fromValue(audio.outputGainDb)));
+    put(result, AudioCeiling, QJsonValue::fromVariant(QVariant::fromValue(audio.limiterCeilingDb)));
+    QJsonArray audioBands;
+    for (double gain : audio.bandGainsDb) audioBands.append(gain);
+    put(result, AudioBands, audioBands);
+    QJsonArray customPresets;
+    for (const auto& item : audio.customPresets)
+        customPresets.append(QJsonValue::fromVariant(item));
+    put(result, AudioCustom, customPresets);
+    put(result, AudioHighPass, QJsonValue::fromVariant(QVariant::fromValue(audio.highPassHz)));
+    put(result, AudioLowPass, QJsonValue::fromVariant(QVariant::fromValue(audio.lowPassHz)));
+    put(result, AudioBassBoost, QJsonValue::fromVariant(QVariant::fromValue(audio.bassBoostDb)));
+    put(result, AudioBassFreq, QJsonValue::fromVariant(QVariant::fromValue(audio.bassFreqHz)));
+    put(result, AudioStereoWidth, QJsonValue::fromVariant(QVariant::fromValue(audio.stereoWidth)));
+    put(result, AudioCrossfeed, QJsonValue::fromVariant(QVariant::fromValue(audio.crossfeed)));
+    put(result, AudioCompressor, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorEnabled)));
+    put(result, AudioCompThreshold, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorThresholdDb)));
+    put(result, AudioCompRatio, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorRatio)));
+    put(result, AudioCompAttack, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorAttackMs)));
+    put(result, AudioCompRelease, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorReleaseMs)));
+    put(result, AudioCompKnee, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorKneeDb)));
+    put(result, AudioCompMakeup, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorMakeupDb)));
     result[SchemaVersion] = kVersion;
     return result;
 }

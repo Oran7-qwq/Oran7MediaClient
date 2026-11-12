@@ -41,6 +41,8 @@ src/qml/
 
 ## 页面与路由
 
+视频空间 V0 已于 2026-11-11 接入。VideoPlayerStack 保留路由入口，Oran7VideoLibraryPage 管浏览态，Oran7VideoPlaybackToolbar 管播放操作。视频渲染实例在浏览／播放切换和全屏期间复用，直播请求按对象和代际取消。阶段范围与验收见 [[VIDEO - 视频空间改版方案]]。
+
 - 容器：`RightPage.qml` 内 `MainStackView`（`StackView`），`initialItem` 是**动态创建**的 `VideoPlayerStack`。
 - 页面枚举：`BasicConfig.videoPlayerPage/localMusicPage/searchMusicPage/screenCapturePage` + `getUrl()`。
 - `pageManager.navigateTo(url, name)`：先扫栈内同 `pageName` 的页 → `pop(existing, Immediate)`，否则 `push(Immediate)`。**没有转场动画，也没有真正的返回栈**；`popPage()` 定义了但无人调用。

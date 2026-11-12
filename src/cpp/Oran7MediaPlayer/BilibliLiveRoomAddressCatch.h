@@ -32,6 +32,7 @@ signals:
     void avliStrAdrChanged();
 
 private:
+    QVariant requestRoomStreams(qint64 roomId);
     // 获取可用的流
     QVariant getAvailableStreams(const QJsonObject &data_obj);
 

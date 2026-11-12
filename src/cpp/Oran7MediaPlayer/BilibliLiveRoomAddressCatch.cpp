@@ -4,11 +4,40 @@
 
 QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
 {
+    const auto roomId = room_id.toLongLong();
+    if (roomId <= 0) {
+        emit urlsError();
+        return {};
+    }
+    auto* manager = new QNetworkAccessManager(this);
+    QNetworkRequest request(QUrl(QStringLiteral("https://api.live.bilibili.com/room/v1/Room/room_init?id=%1").arg(roomId)));
+    request.setTransferTimeout(15000);
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36");
+    request.setRawHeader("Referer", "https://live.bilibili.com");
+    auto* reply = manager->get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, manager] {
+        const auto json = QJsonDocument::fromJson(reply->readAll()).object();
+        const auto data = json.value(QStringLiteral("data")).toObject();
+        const auto realId = data.value(QStringLiteral("room_id")).toVariant().toLongLong();
+        const bool ready = reply->error() == QNetworkReply::NoError
+            && json.value(QStringLiteral("code")).toInt(-1) == 0 && realId > 0
+            && data.value(QStringLiteral("live_status")).toInt() == 1;
+        reply->deleteLater();
+        manager->deleteLater();
+        if (ready) requestRoomStreams(realId);
+        else emit urlsError();
+    });
+    return {};
+}
+
+QVariant BilibiliRoomAddressCatch::requestRoomStreams(qint64 roomId)
+{
     QNetworkAccessManager *manager = new QNetworkAccessManager(this);
     QUrl url("https://api.live.bilibili.com/xlive/web-room/v2/index/getRoomPlayInfo");
 
     QUrlQuery query;
-    query.addQueryItem("room_id", QString::number(room_id.toInt()));
+    query.addQueryItem("room_id", QString::number(roomId));
     query.addQueryItem("protocol", "0,1");     // 0:http_stream, 1:http_hls
     query.addQueryItem("format", "0,1,2");     // 0:flv, 1:ts, 2:fmp4
     query.addQueryItem("codec", "0,1");        // 0:avc, 1:hevc
@@ -18,6 +47,7 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
     url.setQuery(query);
 
     QNetworkRequest request(url);
+    request.setTransferTimeout(15000);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
     request.setHeader(QNetworkRequest::UserAgentHeader,
                       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
@@ -37,7 +67,7 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
 
     QNetworkReply *reply = manager->get(request);
 
-    connect(reply, &QNetworkReply::finished, [reply, this]() {
+    connect(reply, &QNetworkReply::finished, this, [reply, manager, this]() {
         if (reply->error() == QNetworkReply::NoError)
         {
             QByteArray data = reply->readAll();
@@ -87,6 +117,7 @@ QVariant BilibiliRoomAddressCatch::getRoomInfo(QVariant room_id)
             emit urlsError();
         }
         reply->deleteLater();
+        manager->deleteLater();
     });
     return QVariant();
 }

@@ -33,7 +33,7 @@ function(oran7_register_checks suite)
     endforeach()
 endfunction()
 
-foreach(suite IN ITEMS network state track-model ncm transport library lyrics resolver playback
+foreach(suite IN ITEMS network state track-model ncm transport library lyrics resolver playback audio-dsp video-workspace
         facade render-bridge render-sync capture-bridge config recording-workspace playlist settings-animation
         startup capture-recovery capture-conversion recording pure qml-module logging credentials theme localization)
     add_subdirectory("${suite}")

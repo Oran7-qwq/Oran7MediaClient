@@ -13,6 +13,7 @@ Button {
     property bool primary: false
     property bool destructive: false
     property string symbol: ""
+    property real cornerRadius: 7
     implicitHeight: 36
     implicitWidth: Math.max(72, contentItem.implicitWidth + leftPadding + rightPadding)
     leftPadding: 14; rightPadding: 14
@@ -29,7 +30,7 @@ Button {
         elide: Text.ElideRight
     }
     background: Rectangle {
-        radius: 7
+        radius: root.cornerRadius
         color: root.primary ? (root.down ? Qt.darker(root.accentColor, 1.12) : root.hovered ? Qt.lighter(root.accentColor, 1.08) : root.accentColor)
             : root.checked ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.14) : root.down ? Qt.darker(root.hoverColor, 1.12) : root.hovered ? root.hoverColor : root.surfaceColor
         border.width: 1

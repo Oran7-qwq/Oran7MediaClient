@@ -13,10 +13,16 @@ ComboBox {
     property bool popupStartsAtTop: false
     property var colorSamples: []
     property var subtitles: []
+    /*! @note 需要显示右侧操作按钮的模型下标（自定义预设等） */
+    property var itemActionIndices: []
+    /*! @note 点击某项右侧操作按钮时触发，index 为模型下标 */
+    signal itemActionTriggered(int index)
     property color accentColor: Oran7Theme.Oran7MainGUI.themeColor
     readonly property color ink: Oran7MainUiSetting.textColor
     readonly property color surface: Oran7MainUiSetting.itemBackColor
     property bool popupTracked: false
+    // 独立编辑窗口中的子菜单关闭后，把焦点登记交还给宿主。
+    property var popupOwner: null
     font.family: Oran7MainUiSetting.fontFamily
     font.pixelSize: 13
     hoverEnabled: true
@@ -27,7 +33,7 @@ ComboBox {
         if (!popupTracked) return
         popupTracked = false
         if (Oran7MainUiSetting.activeSettingsPopup === popup)
-            Oran7MainUiSetting.activeSettingsPopup = null
+            Oran7MainUiSetting.activeSettingsPopup = popupOwner && popupOwner.visible ? popupOwner : null
         Oran7MainUiSetting.activeOtherItemCount = Math.max(0, Oran7MainUiSetting.activeOtherItemCount - 1)
     }
     onVisibleChanged: if (!visible) popup.close()
@@ -106,10 +112,33 @@ ComboBox {
             }
             Item {
                 id: selectedMark
-                width: 20; height: 20; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                width: 20; height: 20; anchors.right: itemAction.left; anchors.verticalCenter: parent.verticalCenter
                 visible: control.currentIndex === option.index
                 Rectangle { x: 3; y: 10; width: 5; height: 2; radius: 1; rotation: 45; color: control.accentColor }
                 Rectangle { x: 6; y: 8; width: 10; height: 2; radius: 1; rotation: -45; color: control.accentColor }
+            }
+            Item {
+                id: itemAction
+                readonly property bool shown: control.itemActionIndices.indexOf(option.index) >= 0
+                width: shown ? 26 : 0; height: 26
+                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                visible: shown
+                Text {
+                    anchors.centerIn: parent
+                    text: "⋯"
+                    color: control.ink
+                    font.pixelSize: 16
+                    opacity: itemActionMouse.containsMouse ? 1 : 0.65
+                }
+                MouseArea {
+                    id: itemActionMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    preventStealing: true
+                    cursorShape: Qt.PointingHandCursor
+                    onPressed: function(mouse) { mouse.accepted = true }
+                    onClicked: control.itemActionTriggered(option.index)
+                }
             }
         }
         background: Rectangle {
@@ -139,7 +168,8 @@ ComboBox {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         transformOrigin: Item.Top
         onAboutToShow: {
-            if (Oran7MainUiSetting.activeSettingsPopup && Oran7MainUiSetting.activeSettingsPopup !== menu)
+            if (Oran7MainUiSetting.activeSettingsPopup && Oran7MainUiSetting.activeSettingsPopup !== menu
+                    && Oran7MainUiSetting.activeSettingsPopup !== control.popupOwner)
                 Oran7MainUiSetting.activeSettingsPopup.close()
             Oran7MainUiSetting.activeSettingsPopup = menu
             if (!control.popupTracked) {

@@ -1,5 +1,5 @@
 /*
- * HuskarUI
+ * Oran7ThemeFunctions
  *
  * Copyright (C) mengps (MenPenS) (MIT License)
  * https://github.com/mengps/HuskarUI

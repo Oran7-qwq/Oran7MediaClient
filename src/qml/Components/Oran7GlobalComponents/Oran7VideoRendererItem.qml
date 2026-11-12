@@ -11,6 +11,8 @@ Rectangle {
     property bool openVideoInfo: false
 
     property int renderObject: Client.VideoPlayerRender
+    property int scaleMode: Client.Fit
+    onScaleModeChanged: Client.setScaleMode(root.renderObject, root.scaleMode)
     property Item videoTextureItem: null
 
     // 弹幕覆盖层：直播播放时置 true，外部通过 danmakuLayer.spawn/showSuperChat 投递内容
@@ -33,23 +35,6 @@ Rectangle {
         anchors.fill: parent
         clip: false
 
-        Oran7BlurCard{
-            id: blurCard
-            // 直接跟随 D3D11VideoItem 的位置和尺寸
-            x: root.videoTextureItem ? root.videoTextureItem.x : 0
-            y: root.videoTextureItem ? root.videoTextureItem.y : 0
-            width: root.videoTextureItem ? root.videoTextureItem.width : 0
-            height: root.videoTextureItem ? root.videoTextureItem.height : 0
-            blurSource: root.videoTextureItem
-            blurEnabled: false
-            // blurSource 是 C++ QSGRenderNode 视频 item，mapToItem() 会混入
-            // LeftPage/TopBar 等窗口级偏移到 sourceRect。强制使用 local 坐标。
-            forceLocalSourceRect: true
-            z: 10
-            themeColor: "#04FFFFFF"
-            visible: root.videoTextureItem !== null
-        }
-
         Oran7DanmakuLayer {
             id: danmakuLayer
             // 跟随 D3D11VideoItem（其几何永远铺满 host，即整个视频渲染区域）
@@ -61,53 +46,6 @@ Rectangle {
             active: root.danmakuEnabled
         }
     }
-    // ========= 诊断：裸 ShaderEffectSource（不经过 MultiEffect）=========
-    // 验证 QSGRenderNode offscreen 捕获是否正确。
-    // 如果这个小窗里的视频被压缩，说明问题在 C++ render node 的 offscreen 路径。
-    // 如果正常，说明问题在 Oran7BlurCard 的 sourceRect / padding / MultiEffect。
-    //
-    // 测试完毕后删除此块。
-    ShaderEffectSource {
-        id: debugCapture
-
-        sourceItem: root.videoTextureItem
-        sourceRect: root.videoTextureItem
-            ? Qt.rect(0, 0, root.videoTextureItem.width, root.videoTextureItem.height)
-            : Qt.rect(0, 0, 0, 0)
-
-        width: 320
-        height: 180
-
-        live: true
-        recursive: false
-        z: 100
-        visible: false/*root.videoTextureItem !== null*/
-        opacity: 0.8
-
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: 10
-
-        Rectangle {
-            anchors.fill: parent
-            color: "transparent"
-            border.color: "red"
-            border.width: 2
-        }
-
-        Text {
-            text: "DEBUG: raw ShaderEffectSource\nsourceRect=(0,0," +
-                  (root.videoTextureItem ? root.videoTextureItem.width : 0) + "," +
-                  (root.videoTextureItem ? root.videoTextureItem.height : 0) + ")"
-            color: "red"
-            font.pixelSize: 11
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.margins: 4
-        }
-    }
-    // ========= END 诊断块 =========
-
     Connections{
         target:Client
         function onVideoRenderInfoUpdated(info)
@@ -138,6 +76,9 @@ Rectangle {
                 qsTranslate("Oran7Ui", "源帧格式: ") + root.videoInfo.srcFormatName +"\n" +
                 qsTranslate("Oran7Ui", "渲染尺寸: ") + (root.videoInfo.renderWidth || root.videoInfo.renderHeight ? (root.videoInfo.renderWidth + "x" +root.videoInfo.renderHeight ) : "N/A") + "\n" +
                 qsTranslate("Oran7Ui", "渲染帧格式: ") + root.videoInfo.dxgiFormatName +"\n" +
+                qsTranslate("Oran7Ui", "色彩信息: ") + (root.videoInfo.bitDepth || 8) + "-bit / " +
+                    (root.videoInfo.colorPrimaries || "unknown") + " / " + (root.videoInfo.colorTransfer || "unknown") + "\n" +
+                qsTranslate("Oran7Ui", "输出色彩: ") + (root.videoInfo.outputColorMode || "SDR") + "\n" +
                 qsTranslate("Oran7Ui", "是否启用硬解: ") + root.videoInfo.isFromHardWare +"\n" +
                 qsTranslate("Oran7Ui", "解码设备: ") + root.videoInfo.decodeDevice +"\n" +
                 qsTranslate("Oran7Ui", "渲染设备: ") + root.videoInfo.renderDevice +"\n" +
@@ -150,11 +91,13 @@ Rectangle {
 
     function tryAttach() {
         if (!videoHost) return false
+        // 挂载/重挂载先恢复绘制模式，不能依赖设置面板是否已经创建。
+        Client.setScaleMode(root.renderObject, root.scaleMode)
         console.log("--->Client.attachVideoItem() : ",videoHost)
-        Client.attachVideoItem(root.renderObject,videoHost)
-        // 获取 C++ 创建的 D3D11VideoItem 引用，供 Oran7BlurCard 等组件采集
+        var attached = Client.attachVideoItem(root.renderObject,videoHost)
+        // 借用 C++ 渲染项，供覆盖层同步画布几何
         root.videoTextureItem = Client.videoItem(root.renderObject)
-        return true
+        return attached
     }
 
     //在onVisibleChanged或外部beagining of play video 时调用
@@ -189,11 +132,7 @@ Rectangle {
     }
 
     Component.onCompleted: {
-        //console.log("Component onCompleted")
-        if (!videoHost) return false
-        //console.log("--->Client.attachVideoItem() : ",videoHost)
-        Client.attachVideoItem(root.renderObject,videoHost)
-        root.videoTextureItem = Client.videoItem(root.renderObject)
+        if (!tryAttach()) retryTimer.start()
     }
     Component.onDestruction: {
         if (attachTimer) attachTimer.stop()

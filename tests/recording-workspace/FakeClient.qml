@@ -9,6 +9,7 @@ QtObject {
     property bool attachAllowed: false
     property var captureValues: ({outputIndex: 0, fps: 60, drawMouse: true, debugLog: false})
     property QtObject capture: QtObject {
+        property string fileFormat: "mp4"
         property bool recordingBusy: false
         property string recordingState: "Idle"
         property string recordingError: ""
@@ -19,8 +20,8 @@ QtObject {
         signal errorOccurred(string err)
         function restartPreview() { return !recordingBusy }
         function start() { root.previewStarts++ }
-        function recordingSettings() { return {mode: 0, outputDirectory: "", filePrefix: "Oran7", width: 0, height: 0, fps: 60, bitrateKbps: 40000, audioEnabled: true} }
-        function applyRecordingSettings(values) { return {ok: true, msg: "已保存"} }
+        function recordingSettings() { return {mode: 0, format: fileFormat, outputDirectory: "", filePrefix: "Oran7", width: 0, height: 0, fps: 60, bitrateKbps: 40000, audioEnabled: true} }
+        function applyRecordingSettings(values) { if (values.format !== undefined) fileFormat = values.format; return {ok: true, msg: "已保存"} }
         function startRecording() { return true }
         function stopRecording() {}
     }

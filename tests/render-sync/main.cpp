@@ -54,7 +54,9 @@ static void mailboxChecks()
     Oran7VideoInfo info;
     info.srcSize = QSize(16, 12);
     info.decodeDevice = "synthetic";
+    check(mailbox.releaseSerial() == 0, "media submission does not request resource retirement");
     mailbox.clear();
+    check(mailbox.releaseSerial() == 1, "clear independently marks retained resources for frame-end release");
     mailbox.publish(latest.epoch, info);
     check(!mailbox.drain().infoChanged, "old frame information rejected after clear");
     check(mailbox.take().clear, "clear command survives without media frame");
@@ -188,6 +190,12 @@ int main(int argc, char** argv)
     image = render();
     image.save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR) + "/qrhi-clear.png");
     check(image.pixelColor(64, 48).red() < 5, "stop clears queued frame and GPU target");
+    image = render();
+    check(image.pixelColor(64, 48).red() < 5, "frame-end resource retirement preserves black on subsequent frames");
+    item->setVisible(false);
+    item->renderBlackFrame();
+    render();
+    item->setVisible(true);
     item->submitFrame(cpuFrame(32, 24, Qt::blue));
     image = render();
     check(image.pixelColor(64, 48).blue() > 245, "resume with new source dimensions rebuilds texture bindings");

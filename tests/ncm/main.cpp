@@ -123,6 +123,13 @@ int main(int argc,char** argv) {
     likedPrefix();push("/api/v6/playlist/detail",R"({"playlist":{"trackIds":[{"id":1}]}})");push("/api/song/detail","",503);
     bool noDetails=false;try {ncm::fetchLikedSongsHandler({});}catch(const std::exception&){noDetails=true;}
     check(noDetails,"全部详情失败不能用空结果覆盖缓存");
+    for (int mode=4;mode<=6;++mode) {
+        push("/weapi/v1/radio/get",R"({"code":200,"data":[{"id":1099511627776,"name":"FM","ar":[{"name":"artist"}],"al":{"picUrl":"cover"},"dt":60000}]})");
+        const auto fm=ncm::roamSongsHandler({{"recommendationMode",mode},{"cookie","fixture"}}).toList();
+        const auto payload=QJsonDocument::fromJson(blockingSent.last().body).object();
+        check(fm.size()==1 && fm[0].toMap().value("songId").toLongLong()==(qint64(1)<<40),"FM 无种子请求保留 64 位歌曲 ID");
+        check(payload.value("mode").toString()==(mode==4?"DEFAULT":mode==5?"FAMILIAR":"EXPLORE") && !payload.contains("songId"),"FM 取向独立路由，未借用心动参数");
+    }
     check(fixtures.isEmpty(),"全部 HTTP fixture 被准确消费");
     std::printf("PASS: %d NCM mapper/request/API/handler checks\n",checks);
 }

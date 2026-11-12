@@ -130,7 +130,7 @@ class Oran7ScreenCaptureController : public QObject
     /** 录制输出模式 */
     enum class RecordMode
     {
-        MuxerToMp4 = 0, // 写 MP4 文件（默认，原行为）
+        MuxerToMp4 = 0, // 本地 MP4 / FLV 文件；保留旧枚举名与数值兼容。
         WhipPush = 1,   // WHIP/WebRTC 推流到媒体服务器
     };
     Q_ENUM(RecordMode)

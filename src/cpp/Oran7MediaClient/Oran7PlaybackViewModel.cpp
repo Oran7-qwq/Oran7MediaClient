@@ -4,6 +4,7 @@
 #include "Oran7CloudMusicService.h"
 #include <QRandomGenerator>
 #include <algorithm>
+#include <QSet>
 
 Oran7PlaybackViewModel::Oran7PlaybackViewModel(Oran7TrackLibrary& tracks,
     Oran7PlaybackState& playback, Oran7CloudMusicService& cloud)
@@ -15,22 +16,48 @@ Oran7PlaybackViewModel::Oran7PlaybackViewModel(Oran7TrackLibrary& tracks,
     connect(&cloud, &Oran7CloudMusicService::likedStatusChanged, this, [this] {
         if (!m_waitingForLikes || m_cloud.likedFetching()) return;
         m_waitingForLikes = false;
+        emit recommendationStatusChanged();
         if (m_cloud.likedLoaded()) requestRoam(m_waiting);
-        else if (m_waiting) { m_waiting = false; emit stopRequested(); }
+        else if (m_waiting) {
+            m_recommendationError = QStringLiteral("喜欢列表加载失败，请重试推荐");
+            emit recommendationStatusChanged();
+            m_waiting = false; emit stopRequested();
+        }
     });
     connect(&playback, &Oran7PlaybackState::modeChanged, this, [this] {
-        if (m_playback.mode() != 3) clearRoam();
+        clearRoam();
+        if (!recommendationActive()) {
+            m_orderMode = m_playback.mode();
+            emit orderModeChanged();
+            if (m_owner == "recommendation") {
+                m_owner = !m_model ? QString() : (m_model == m_tracks.local() || m_model == m_tracks.integrated() ? "local" : "search");
+                m_enabled = bool(m_model);
+                emit ownerChanged();
+            }
+        }
+        emit recommendationStatusChanged();
     });
     connect(&cloud, &Oran7CloudMusicService::sessionChanged, this, [this] {
         ++m_commandRevision; clearRoam(); m_failures = 0;
     });
     connect(&cloud, &Oran7CloudMusicService::roamReady, this,
         [this](quint64 request, const QVariantList& songs) {
-            if (!m_enabled || m_playback.mode() != 3 || request != m_roamRequest) return;
+            if (!m_enabled || !recommendationActive() || request != m_roamRequest) return;
             m_roamRequest = 0;
+            m_recommendationError.clear();
+            emit recommendationStatusChanged();
             QVariantList accepted;
             accepted.reserve(songs.size());
-            for (const auto& song : songs) if (acceptsRoam(song)) accepted.append(song);
+            QSet<qint64> seen;
+            for (const auto& song : m_roam) seen.insert(song.toMap().value("songId").toLongLong());
+            seen.insert(m_playback.currentTrack().songId);
+            for (const auto& song : songs) {
+                const auto id = song.toMap().value("songId").toLongLong();
+                if (id > 0 && !seen.contains(id) && acceptsRoam(song)) {
+                    accepted.append(song); seen.insert(id);
+                    if (accepted.size() >= 20) break;
+                }
+            }
             if (accepted.isEmpty()) {
                 // 连续三批为空即停止补取，不放回已喜欢歌曲、不无限刷推荐接口。
                 ++m_filteredBatches;
@@ -41,14 +68,46 @@ Oran7PlaybackViewModel::Oran7PlaybackViewModel(Oran7TrackLibrary& tracks,
             const int keepFrom = std::max(0, m_roamIndex - 2);
             m_roam = m_roam.mid(keepFrom); m_roamIndex -= keepFrom;
             m_roam.append(accepted);
+            m_tracks.replaceRecommendations(m_roam);
             if (m_waiting) { m_waiting = false; nextRoam(); }
         });
     connect(&cloud, &Oran7CloudMusicService::roamFailed, this, [this](quint64 request) {
         if (request != m_roamRequest) return;
         m_roamRequest = 0;
+        m_recommendationError = QStringLiteral("推荐加载失败，请检查登录和网络后重试");
+        emit recommendationStatusChanged();
         // 预取失败不打断当前歌曲；耗尽后才能停止。
         if (m_waiting) { m_waiting = false; emit stopRequested(); }
     });
+}
+bool Oran7PlaybackViewModel::recommendationActive() const { return m_playback.mode() >= 3 && m_playback.mode() <= 6; }
+bool Oran7PlaybackViewModel::selectRecommendation(int mode)
+{
+    if (m_closed || (mode != 0 && (mode < 3 || mode > 6))) return false;
+    if (!mode) { ++m_commandRevision; m_playback.setMode(m_orderMode); return true; }
+    if (!m_cloud.loggedIn()) {
+        m_recommendationError = QStringLiteral("请先登录网易云音乐");
+        emit recommendationStatusChanged(); return false;
+    }
+    if (mode == 3 && m_playback.currentTrack().songId <= 0) {
+        m_recommendationError = QStringLiteral("心动模式需要先选择一首网易云歌曲");
+        emit recommendationStatusChanged(); return false;
+    }
+    m_cloud.syncSession();
+    const auto command = ++m_commandRevision;
+    clearRoam();
+    m_recommendationError.clear();
+    m_playback.setMode(mode);
+    m_enabled = true; m_musicSuppressed = false; m_failures = 0;
+    m_owner = "recommendation";
+    emit ownerChanged();
+    if (command != m_commandRevision) return false;
+    emit musicActivated();
+    if (command != m_commandRevision) return false;
+    emit recommendationActivated();
+    if (command != m_commandRevision) return false;
+    requestRoam(true);
+    return true;
 }
 bool Oran7PlaybackViewModel::acceptsRoam(const QVariant& song) const
 {
@@ -61,6 +120,7 @@ void Oran7PlaybackViewModel::prunePendingRoam()
     for (int i = m_roamIndex; i < m_roam.size(); ++i)
         if (acceptsRoam(m_roam.at(i))) kept.append(m_roam.at(i));
     m_roam = std::move(kept);
+    m_tracks.replaceRecommendations(m_roam);
 }
 void Oran7PlaybackViewModel::setRoamFilterLiked(bool enabled)
 {
@@ -96,8 +156,23 @@ void Oran7PlaybackViewModel::toggleCurrent()
 }
 bool Oran7PlaybackViewModel::activate(Oran7TrackListModel* model, int index)
 {
+    if (model == m_tracks.recommendations()) {
+        if (m_closed || !recommendationActive() || index < 0 || index >= model->count()) return false;
+        const auto id = model->get(index).value("songId").toLongLong();
+        for (int row = 0; row < m_roam.size(); ++row) {
+            if (m_roam[row].toMap().value("songId").toLongLong() != id) continue;
+            const auto command = ++m_commandRevision;
+            m_roamIndex = row + 1; m_waiting = false; m_failures = 0;
+            emit musicActivated();
+            if (command != m_commandRevision) return false;
+            playTrack(m_roam[row].toMap(), false);
+            return true;
+        }
+        return false;
+    }
     if (m_closed || !owns(model) || index < 0 || index >= model->count()) return false;
     const auto command = ++m_commandRevision;
+    if (recommendationActive()) m_playback.setMode(m_orderMode);
     clearRoam(); m_failures = 0; m_enabled = true;
     m_musicSuppressed = false;
     m_owner = model == m_tracks.local() || model == m_tracks.integrated() ? "local" : "search";
@@ -128,24 +203,32 @@ void Oran7PlaybackViewModel::clearRoam()
 {
     m_cloud.cancelRoam(); m_roamRequest = 0; m_waiting = false;
     m_roam.clear(); m_roamIndex = 0;
+    m_tracks.replaceRecommendations({});
     m_waitingForLikes = false; m_filteredBatches = 0;
+    emit recommendationStatusChanged();
 }
 void Oran7PlaybackViewModel::cancel(bool leaveMusic)
 {
     ++m_commandRevision;
     clearRoam(); m_failures = 0;
-    if (leaveMusic) { m_musicSuppressed = true; m_enabled = false; m_model = nullptr; m_trackId.clear(); m_owner.clear(); emit ownerChanged(); }
+    if (leaveMusic) {
+        if (recommendationActive()) m_playback.setMode(m_orderMode);
+        m_musicSuppressed = true; m_enabled = false; m_model = nullptr; m_trackId.clear(); m_owner.clear(); emit ownerChanged();
+    }
 }
 void Oran7PlaybackViewModel::requestRoam(bool waiting)
 {
     m_waiting = waiting;
     if (m_roamRequest) return;
     if (m_filteredBatches >= 3) {
+        m_recommendationError = QStringLiteral("暂无符合过滤条件的推荐，请调整过滤设置后重试");
+        emit recommendationStatusChanged();
         if (waiting) { m_waiting = false; emit stopRequested(); }
         return;
     }
-    if (m_roamFilterLiked && !m_cloud.likedLoaded()) {
+    if ((m_roamFilterLiked || (m_owner == "recommendation" && m_playback.mode() == 3)) && !m_cloud.likedLoaded()) {
         m_waitingForLikes = true;
+        emit recommendationStatusChanged();
         m_cloud.fetchLiked();
         // 拒绝提交/读取失败没有后续异步通知，结束本次等待。
         if (m_waitingForLikes && !m_cloud.likedFetching()) {
@@ -154,7 +237,10 @@ void Oran7PlaybackViewModel::requestRoam(bool waiting)
         }
         return;
     }
-    m_roamRequest = m_cloud.requestRoam(m_playback.currentTrack().songId);
+    m_recommendationError.clear();
+    m_roamRequest = m_cloud.requestRoam(m_playback.currentTrack().songId, m_playback.mode());
+    if (!m_roamRequest) m_recommendationError = QStringLiteral("推荐加载失败，请检查登录和网络后重试");
+    emit recommendationStatusChanged();
     if (!m_roamRequest && waiting) { m_waiting = false; emit stopRequested(); }
 }
 void Oran7PlaybackViewModel::nextRoam()
@@ -199,8 +285,8 @@ void Oran7PlaybackViewModel::advance(int direction)
     if (!m_enabled) return;
     ++m_commandRevision;
     m_failures = 0;
-    if (m_owner == "search" && !m_cloud.loggedIn()) { emit stopRequested(); return; }
-    if (m_owner == "search" && m_playback.mode() == 3) {
+    if ((m_owner == "search" || m_owner == "recommendation") && !m_cloud.loggedIn()) { emit stopRequested(); return; }
+    if ((m_owner == "search" || m_owner == "recommendation") && recommendationActive()) {
         if (direction > 0) nextRoam();
         else if (m_roamIndex > 0 && !m_roam.isEmpty()) {
             m_roamIndex = std::max(0, m_roamIndex - 2);
@@ -223,8 +309,8 @@ void Oran7PlaybackViewModel::resolveFailed(qint64 songId)
 {
     if (!m_enabled || songId != m_playback.currentTrack().songId) return;
     ++m_commandRevision;
-    if (m_owner == "search" && !m_cloud.loggedIn()) { emit stopRequested(); return; }
-    const bool roam = m_owner == "search" && m_playback.mode() == 3;
+    if ((m_owner == "search" || m_owner == "recommendation") && !m_cloud.loggedIn()) { emit stopRequested(); return; }
+    const bool roam = (m_owner == "search" || m_owner == "recommendation") && recommendationActive();
     const int limit = roam ? 32 : (m_model ? m_model->count() : 0);
     if (++m_failures >= limit || limit <= 1) { clearRoam(); emit stopRequested(); return; }
     if (roam) { nextRoam(); return; }

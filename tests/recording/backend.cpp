@@ -14,6 +14,7 @@ static int checks=0, videos=0, audios=0, captures=0, muxers=0, publishers=0;
 static bool videoFailure=false,audioFailure=false,muxerFailure=false,whipFailure=false;
 static bool lastLiveStreaming=false;
 static QStringList order;
+static QString lastFormat;
 static void check(bool ok,const char* message){if(!ok){std::fprintf(stderr,"FAIL: %s\n",message);std::exit(1);}++checks;}
 Oran7VideoEncoder::Oran7VideoEncoder(){++videos;}
 Oran7VideoEncoder::~Oran7VideoEncoder(){stop();--videos;}
@@ -32,7 +33,7 @@ bool Oran7WasapiAudioWorker::isRunning()const{return _running.load();}
 bool Oran7WasapiAudioWorker::getPcmFrame(AVFrame**,int){QThread::msleep(5);return false;}
 Oran7Mp4Muxer::Oran7Mp4Muxer(){++muxers;}
 Oran7Mp4Muxer::~Oran7Mp4Muxer(){close();--muxers;}
-bool Oran7Mp4Muxer::open(const char*,int,int,AVRational,std::shared_ptr<Oran7VideoEncoder>&,std::shared_ptr<Oran7AudioEncoder>&){_opened=!muxerFailure;return _opened;}
+bool Oran7Mp4Muxer::open(const char*,int,int,AVRational,std::shared_ptr<Oran7VideoEncoder>&,std::shared_ptr<Oran7AudioEncoder>&,const char* format){lastFormat=QString::fromUtf8(format);_opened=!muxerFailure;return _opened;}
 void Oran7Mp4Muxer::close(){if(_opened){order<<"muxClose";_opened=false;}}
 Oran7WhipPublisher::Oran7WhipPublisher(){++publishers;}
 Oran7WhipPublisher::~Oran7WhipPublisher(){--publishers;}
@@ -45,7 +46,7 @@ static std::shared_ptr<Oran7RecordingFeed> source(){auto feed=std::make_shared<O
 static void noLeaks(){check(videos==0&&audios==0&&captures==0&&muxers==0&&publishers==0,"all preparation/runtime resources reclaimed");}
 int main(int argc,char** argv){
  QCoreApplication app(argc,argv);QTemporaryDir dir;check(dir.isValid(),"temporary outputs");
- Oran7RecordingConfig c;c.fps=60;c.bitrateKbps=40000;c.filePrefix="中文录制";c.outputDirectory=dir.path();c.audioEnabled=true;
+ Oran7RecordingConfig c;c.format="mp4";c.fps=60;c.bitrateKbps=40000;c.filePrefix="中文录制";c.outputDirectory=dir.path();c.audioEnabled=true;
  check(Oran7RecordingBackend::validate(c,true).isEmpty(),"MP4 options valid");
  for(const QVariantMap bad:{QVariantMap{{"fps",0}},QVariantMap{{"bitrateKbps",99}},QVariantMap{{"width",1279},{"height",720}},QVariantMap{{"width",1280}},QVariantMap{{"filePrefix","../escape"}},QVariantMap{{"fps","60"}},QVariantMap{{"bearerToken","x\r\ny"}},QVariantMap{{"whipUrl","file:///test"}},QVariantMap{{"signalingUrl","https://example.test"}},QVariantMap{{"outputDirectory","relative"}},QVariantMap{{"width",QVariant::fromValue(qint64(1)<<40)}}}){
   auto changed=c;check(!Oran7RecordingBackend::apply(bad,&changed).isEmpty(),"invalid draft rejected");check(changed.fps==c.fps&&changed.width==c.width,"invalid draft cannot partially mutate settings");
@@ -65,6 +66,10 @@ int main(int argc,char** argv){
   check(!Oran7RecordingBackend::run(c,f,cancel,cb).isEmpty()&&started==before&&!f->snapshot().encoder,"preparation failure never reports recording");noLeaks();*failure=false;
  }
  check(QDir(dir.path()).entryList(QDir::Files).size()==2,"uncommitted MP4 output removed on failure");
+ auto flv=c;check(Oran7RecordingBackend::apply({{"format","flv"}},&flv).isEmpty(),"FLV selected independently from output mode");
+ cancel=false;check(Oran7RecordingBackend::run(flv,source(),cancel,cb).isEmpty()&&output.endsWith(".flv")&&lastFormat=="flv", "FLV creates correct extension and passes explicit muxer format");noLeaks();
+ check(!lastLiveStreaming && Oran7RecordingBackend::settings(flv).value("format")=="flv", "FLV retains local H264/AAC encoder policy and settings roundtrip");
+ auto invalidFormat=flv;check(!Oran7RecordingBackend::apply({{"format","avi"}},&invalidFormat).isEmpty()&&invalidFormat.format=="flv", "unsupported format rejected atomically");
  cancel=true;check(Oran7RecordingBackend::run(c,source(),cancel,cb).isEmpty(),"pre-cancelled setup exits cleanly");noLeaks();
  auto closed=source();closed->close();cancel=false;check(!Oran7RecordingBackend::run(c,closed,cancel,cb).isEmpty(),"stopped capture cannot start recording");
  c.mode=1;check(!Oran7RecordingBackend::validate(c,true).isEmpty(),"WHIP requires endpoint");c.whipUrl="http://127.0.0.1/whip";whipFailure=true;

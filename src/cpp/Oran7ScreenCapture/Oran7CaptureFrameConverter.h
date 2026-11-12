@@ -32,6 +32,7 @@ class Oran7CaptureFrameConverter
     Oran7PreviewResult preview(const AVFrame* source);
     Frame recording(const AVFrame* source, int width, int height);
     void beginRecording(); // 新录制重新尝试 GPU 转换。
+    void endRecording(); // 归还空闲软件缓冲，编码器持有的在途帧自行延寿。
   private:
     struct Oran7Resources;
     std::unique_ptr<Oran7Resources> m_impl;

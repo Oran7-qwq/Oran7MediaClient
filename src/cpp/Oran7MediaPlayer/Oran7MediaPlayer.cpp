@@ -1,5 +1,6 @@
 #include "oran7mediaplayer.h"
 #include "Oran7FFplayerCore.h"      // 前向声明后需在此补齐 Oran7FFplayerCore 完整定义
+#include "Audio/Oran7AudioParameterQueue.h"
 
 #include "ffmsg.h"
 #include "FFMsgQueue.h"
@@ -318,4 +319,10 @@ void Oran7MediaPlayer::AddVideoRefreshCallback(std::function<int (const Frame *,
 void Oran7MediaPlayer::oran7mp_setD3D11Device(ID3D11Device *dev)
 {
     ffplayer_->setD3D11Device(dev);
+}
+
+void Oran7MediaPlayer::oran7mp_setAudioParameterQueue(std::shared_ptr<Oran7AudioParameterQueue> queue)
+{
+    if (ffplayer_)
+        ffplayer_->setAudioParameterQueue(std::move(queue));
 }

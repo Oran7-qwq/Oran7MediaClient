@@ -3,6 +3,8 @@
 #include <cstring>
 #include <QSGRendererInterface>
 #include <dxgi1_2.h>
+#include <qfloat16.h>
+#include "Oran7HdrWindowOutput.h"
 extern "C"
 {
 #include <libavutil/hwcontext.h>
@@ -16,6 +18,17 @@ QShader loadShader(const QString& path)
 {
     QFile file(path);
     return file.open(QIODevice::ReadOnly) ? QShader::fromSerialized(file.readAll()) : QShader{};
+}
+bool importTexture(std::unique_ptr<QRhiTexture>& wrapper, ID3D11Texture2D* texture)
+{
+    // Qt 6.7.3 的失败分支仍可能拥有 native 指针；额外引用防止失败销毁借用纹理。
+    texture->AddRef();
+    const bool created = wrapper && wrapper->createFrom({quint64(texture), 0});
+    if (created || !wrapper || !wrapper->nativeTexture().object)
+        texture->Release();
+    if (!created)
+        wrapper.reset();
+    return created;
 }
 // FFmpeg 同设备帧遵守其递归上下文锁；跨设备捕获帧遵守 keyed mutex。
 struct Oran7DecodeContextGuard
@@ -54,10 +67,22 @@ D3D11VideoRenderNode::D3D11VideoRenderNode(QQuickWindow* window, std::shared_ptr
     // 这里只推进 Qt 帧编号，不消费媒体帧。离屏/主画面各 pass 共用本次准备结果。
     m_frameConnection = QObject::connect(
         window, &QQuickWindow::beforeRendering, window, [this] { ++m_frameSerial; }, Qt::DirectConnection);
+    m_releaseSerial = m_mailbox->releaseSerial();
+    m_releaseConnection = QObject::connect(window, &QQuickWindow::afterFrameEnd, window, [this] {
+        const auto serial = m_mailbox->releaseSerial();
+        if (serial == m_releaseSerial) return;
+        // 停止后页面即使隐藏、不再 prepare，也不能长期占住整段视频的 CPU/GPU 缓冲。
+        // 必须等本帧命令已提交；在 afterRendering 释放会破坏仍未执行的多 pass 命令。
+        doReleaseResources();
+        m_blackFrame = true;
+        m_sourceSize = {};
+        m_releaseSerial = serial;
+    }, Qt::DirectConnection);
 }
 D3D11VideoRenderNode::~D3D11VideoRenderNode()
 {
     QObject::disconnect(m_frameConnection);
+    QObject::disconnect(m_releaseConnection);
     doReleaseResources();
 }
 void D3D11VideoRenderNode::setRect(const QRectF& rect)
@@ -93,8 +118,6 @@ bool D3D11VideoRenderNode::initD3D11Resources()
 
     m_dev = dev;
     m_dev->GetImmediateContext(&m_ctx);
-    m_dev.As(&m_videoDev);
-    m_ctx.As(&m_videoCtx);
 
     return bool(m_ctx);
 }
@@ -125,7 +148,7 @@ bool D3D11VideoRenderNode::ensureRgbaTarget(int w, int h, DXGI_FORMAT fmt)
     desc.Format = fmt;
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     desc.CPUAccessFlags = 0;
     desc.MiscFlags = 0;
 
@@ -140,183 +163,92 @@ bool D3D11VideoRenderNode::ensureRgbaTarget(int w, int h, DXGI_FORMAT fmt)
     return true;
 }
 
-bool D3D11VideoRenderNode::ensureVideoProcessor(int srcW, int srcH)
+bool D3D11VideoRenderNode::uploadCpuFrameToRgba(AVFrame* cur, bool rgbFallback)
 {
-    if (!m_videoDev || !m_videoCtx)
+    if (!cur || !m_dev || !m_ctx || cur->width <= 0 || cur->height <= 0)
         return false;
-    if (m_vp && m_processorSize == QSize(srcW, srcH))
-        return true;
-    m_vp.Reset();
-    m_vpEnum.Reset();
-    m_processorSize = QSize(srcW, srcH);
-
-    D3D11_VIDEO_PROCESSOR_CONTENT_DESC c{};
-    c.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
-    c.InputWidth = srcW;
-    c.InputHeight = srcH;
-    c.OutputWidth = srcW;
-    c.OutputHeight = srcH;
-    c.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
-
-    HRESULT hr = m_videoDev->CreateVideoProcessorEnumerator(&c, &m_vpEnum);
-    if (FAILED(hr))
+    const int w = cur->width, h = cur->height;
+    const auto source = AVPixelFormat(cur->format);
+    const auto* desc = av_pix_fmt_desc_get(source);
+    if (!desc)
         return false;
-
-    hr = m_videoDev->CreateVideoProcessor(m_vpEnum.Get(), 0, &m_vp);
-    return SUCCEEDED(hr);
-}
-
-bool D3D11VideoRenderNode::blitNv12ToRgba(ID3D11Texture2D* srcTex, int srcW, int srcH, int slice)
-{
-    if (!srcTex || !m_vp || !m_vpEnum || !m_videoCtx)
+    const bool planar = !(desc->flags & AV_PIX_FMT_FLAG_RGB) && !rgbFallback;
+    const bool highPrecision = m_color.bitDepth > 8 || m_color.transfer != 0;
+    const auto destination = planar ? (highPrecision ? AV_PIX_FMT_P016LE : AV_PIX_FMT_NV12)
+                                    : (highPrecision ? AV_PIX_FMT_RGBA64LE : AV_PIX_FMT_BGRA);
+    m_swsCtx = sws_getCachedContext(m_swsCtx, w, h, source, w, h, destination, SWS_BILINEAR, nullptr, nullptr, nullptr);
+    if (!m_swsCtx)
         return false;
-
-    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inDesc{};
-    inDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
-    inDesc.Texture2D.ArraySlice = slice;
-
-    ComPtr<ID3D11VideoProcessorInputView> inView;
-    HRESULT hr = m_videoDev->CreateVideoProcessorInputView(srcTex, m_vpEnum.Get(), &inDesc, &inView);
-    if (FAILED(hr))
-        return false;
-
-    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outDesc{};
-    outDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
-    outDesc.Texture2D.MipSlice = 0;
-
-    ComPtr<ID3D11VideoProcessorOutputView> outView;
-    hr = m_videoDev->CreateVideoProcessorOutputView(m_rgbaTex.Get(), m_vpEnum.Get(), &outDesc, &outView);
-    if (FAILED(hr))
+    // swscale 只整理像素/矩阵和范围，不承担 PQ/HLG 色调映射，避免提前截断高光。
+    int matrix = m_color.kr == 0.2627f ? SWS_CS_BT2020 : m_color.kr == 0.299f ? SWS_CS_ITU601 : SWS_CS_ITU709;
+    const int* table = sws_getCoefficients(matrix);
+    sws_setColorspaceDetails(m_swsCtx, table, m_color.fullRange, table, planar ? m_color.fullRange : 1, 0, 1 << 16,
+                             1 << 16);
+    if (!m_cpuFrame || m_cpuFrame->width != w || m_cpuFrame->height != h || m_cpuFrame->format != destination)
     {
-        WARNING_LOG << "CreateVPOutputView failed hr=" << hr;
-        return false;
-    }
-
-    RECT srcRect{0, 0, srcW, srcH};
-    RECT dstRect{0, 0, srcW, srcH};
-
-    m_videoCtx->VideoProcessorSetStreamSourceRect(m_vp.Get(), 0, TRUE, &srcRect);
-    m_videoCtx->VideoProcessorSetStreamDestRect(m_vp.Get(), 0, TRUE, &dstRect);
-
-    // ===== 色彩空间设置（修复饱和度偏低的问题）=====
-    // 输入流色彩空间：BT.709 + Limited Range (16-235)，这是网络直播流的标准
-    D3D11_VIDEO_PROCESSOR_COLOR_SPACE inputStreamColor{};
-    inputStreamColor.Usage = 0;         // 播放（非录制）
-    inputStreamColor.RGB_Range = 0;     // 不适用（输入是YUV）
-    inputStreamColor.YCbCr_Matrix = 1;  // 1 = BT.709（1080p标准）
-    inputStreamColor.YCbCr_xvYCC = 0;   // 不使用 xvYCC 扩展
-    inputStreamColor.Nominal_Range = 1; // 1 = Limited Range (16-235)
-    m_videoCtx->VideoProcessorSetStreamColorSpace(m_vp.Get(), 0, &inputStreamColor);
-
-    // 输出色彩空间：BT.709 + Full Range (0-255)，匹配显示器 sRGB
-    D3D11_VIDEO_PROCESSOR_COLOR_SPACE outputColorSpace{};
-    outputColorSpace.Usage = 0;
-    outputColorSpace.RGB_Range = 0;    // 0 = Full Range (0-255)
-    outputColorSpace.YCbCr_Matrix = 1; // BT.709
-    outputColorSpace.YCbCr_xvYCC = 0;
-    outputColorSpace.Nominal_Range = 0; // 0 = Full Range (0-255)
-    m_videoCtx->VideoProcessorSetOutputColorSpace(m_vp.Get(), &outputColorSpace);
-
-    D3D11_VIDEO_PROCESSOR_STREAM stream{};
-    stream.Enable = TRUE;
-    stream.pInputSurface = inView.Get();
-
-    hr = m_videoCtx->VideoProcessorBlt(m_vp.Get(), outView.Get(), 0, 1, &stream);
-    if (FAILED(hr))
-    {
-        WARNING_LOG << "VideoProcessorBlt failed hr=" << hr;
-        return false;
-    }
-    return SUCCEEDED(hr);
-}
-
-bool D3D11VideoRenderNode::uploadCpuFrameToRgba(AVFrame* cur)
-{
-    if (!cur || !m_dev || !m_ctx)
-        return false;
-
-    const int w = cur->width;
-    const int h = cur->height;
-    if (w <= 0 || h <= 0)
-        return false;
-
-    // 确保 RGBA 目标纹理存在且尺寸匹配
-    if (!ensureRgbaTarget(w, h, DXGI_FORMAT_B8G8R8A8_UNORM))
-        return false;
-
-    const AVPixelFormat srcFmt = static_cast<AVPixelFormat>(cur->format);
-
-    // sws 上下文缓存：仅在源尺寸或格式变化时重建
-    if (!m_swsCtx || m_lastSrcCpuFmt != srcFmt || m_swsSrcW != w || m_swsSrcH != h)
-    {
-        if (m_swsCtx)
-        {
-            sws_freeContext(m_swsCtx);
-            m_swsCtx = nullptr;
-        }
-
-        m_swsCtx = sws_getContext(w, h, srcFmt, w, h, AV_PIX_FMT_BGRA, SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
-        if (!m_swsCtx)
-        {
-            static bool logged = false;
-            if (!logged)
-            {
-                logged = true;
-                WARNING_LOG << "uploadCpuFrameToRgba: sws_getContext failed, srcFmt=" << av_get_pix_fmt_name(srcFmt);
-            }
+        m_cpuFrame.reset(av_frame_alloc());
+        if (!m_cpuFrame)
             return false;
+        m_cpuFrame->format = destination;
+        m_cpuFrame->width = w;
+        m_cpuFrame->height = h;
+        if (av_frame_get_buffer(m_cpuFrame.get(), 32) < 0)
+            return false;
+    }
+    if (!m_cpuFrame->data[0] ||
+        sws_scale(m_swsCtx, cur->data, cur->linesize, 0, h, m_cpuFrame->data, m_cpuFrame->linesize) != h)
+        return false;
+    m_yuv = planar;
+    m_yuv16 = planar && highPrecision;
+    if (planar)
+    {
+        const auto format = highPrecision ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
+        if (!ensureRgbaTarget(w, h, format))
+            return false;
+        D3D11_TEXTURE2D_DESC old{};
+        if (m_chromaTex)
+            m_chromaTex->GetDesc(&old);
+        const int cw = (w + 1) / 2, ch = (h + 1) / 2;
+        const auto uvFormat = highPrecision ? DXGI_FORMAT_R16G16_UNORM : DXGI_FORMAT_R8G8_UNORM;
+        if (!m_chromaTex || old.Width != UINT(cw) || old.Height != UINT(ch) || old.Format != uvFormat)
+        {
+            m_chromaTex.Reset();
+            D3D11_TEXTURE2D_DESC uv{};
+            uv.Width = cw;
+            uv.Height = ch;
+            uv.ArraySize = 1;
+            uv.MipLevels = 1;
+            uv.Format = uvFormat;
+            uv.SampleDesc.Count = 1;
+            uv.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            if (FAILED(m_dev->CreateTexture2D(&uv, nullptr, &m_chromaTex)))
+                return false;
+            m_importDirty = true;
         }
-        m_lastSrcCpuFmt = srcFmt;
-        m_swsSrcW = w;
-        m_swsSrcH = h;
-        INFO_LOG << "uploadCpuFrameToRgba: created sws ctx, fmt=" << av_get_pix_fmt_name(srcFmt) << " size=" << w << "x"
-                 << h;
-    }
-
-    // 分配临时 BGRA AVFrame 作为 sws 输出
-    AVFrame* bgraFrame = av_frame_alloc();
-    if (!bgraFrame)
-        return false;
-
-    bgraFrame->format = AV_PIX_FMT_BGRA;
-    bgraFrame->width = w;
-    bgraFrame->height = h;
-    if (av_frame_get_buffer(bgraFrame, 0) < 0)
-    {
-        av_frame_free(&bgraFrame);
-        return false;
-    }
-
-    sws_scale(m_swsCtx, cur->data, cur->linesize, 0, h, bgraFrame->data, bgraFrame->linesize);
-
-    // 上载到 D3D11 RGBA 纹理
-    // linesize[0] 可能与 w*4 不一致（av_frame_get_buffer 的默认对齐），需要做 pitch 适配
-    const int expectedStride = w * 4;
-    if (bgraFrame->linesize[0] == expectedStride)
-    {
-        D3D11_BOX box{};
-        box.right = UINT(w);
-        box.bottom = UINT(h);
-        box.back = 1;
-        m_ctx->UpdateSubresource(m_rgbaTex.Get(), 0, &box, bgraFrame->data[0], UINT(bgraFrame->linesize[0]), 0);
+        m_ctx->UpdateSubresource(m_rgbaTex.Get(), 0, nullptr, m_cpuFrame->data[0], m_cpuFrame->linesize[0], 0);
+        m_ctx->UpdateSubresource(m_chromaTex.Get(), 0, nullptr, m_cpuFrame->data[1], m_cpuFrame->linesize[1], 0);
     }
     else
     {
-        // pitch 不匹配：逐行拷贝到连续缓冲区后再上载
-        std::vector<uint8_t> packed(w * h * 4);
-        const uint8_t* src = bgraFrame->data[0];
-        for (int y = 0; y < h; ++y)
+        m_chromaTex.Reset();
+        if (!ensureRgbaTarget(w, h, highPrecision ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM))
+            return false;
+        if (highPrecision)
         {
-            memcpy(packed.data() + y * expectedStride, src + y * bgraFrame->linesize[0], expectedStride);
+            // 软解高位深 RGB 保留到 FP16；仅作为软解/不支持平面视图时的回退。
+            std::vector<qfloat16> pixels(size_t(w) * h * 4);
+            for (int y = 0; y < h; ++y)
+            {
+                const auto* row = reinterpret_cast<const uint16_t*>(m_cpuFrame->data[0] + y * m_cpuFrame->linesize[0]);
+                for (int x = 0; x < w * 4; ++x)
+                    pixels[size_t(y) * w * 4 + x] = qfloat16(float(row[x]) / 65535.0f);
+            }
+            m_ctx->UpdateSubresource(m_rgbaTex.Get(), 0, nullptr, pixels.data(), w * 8, 0);
         }
-        D3D11_BOX box{};
-        box.right = UINT(w);
-        box.bottom = UINT(h);
-        box.back = 1;
-        m_ctx->UpdateSubresource(m_rgbaTex.Get(), 0, &box, packed.data(), UINT(expectedStride), 0);
+        else
+            m_ctx->UpdateSubresource(m_rgbaTex.Get(), 0, nullptr, m_cpuFrame->data[0], m_cpuFrame->linesize[0], 0);
     }
-
-    av_frame_free(&bgraFrame);
+    m_sourceSize = QSize(w, h);
     return true;
 }
 
@@ -371,23 +303,34 @@ bool D3D11VideoRenderNode::uploadHardwareFrame(AVFrame* frame)
     if (frame->width <= 0 || frame->height <= 0 || UINT(frame->width) > desc.Width ||
         UINT(frame->height) > desc.Height || slice >= desc.ArraySize)
         return false;
-    if (!ensureRgbaTarget(frame->width, frame->height, DXGI_FORMAT_B8G8R8A8_UNORM))
+    const bool planar =
+        desc.Format == DXGI_FORMAT_NV12 || desc.Format == DXGI_FORMAT_P010 || desc.Format == DXGI_FORMAT_P016;
+    const bool rgb = desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM || desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+                     desc.Format == DXGI_FORMAT_R10G10B10A2_UNORM || desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT;
+    if (!planar && !rgb)
         return false;
-    bool uploaded = false;
-    if (desc.Format == DXGI_FORMAT_NV12 || desc.Format == DXGI_FORMAT_P010)
+    const auto format = desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ? DXGI_FORMAT_B8G8R8A8_UNORM : desc.Format;
+    // 编码尺寸可能带对齐边缘，采样时再按可见尺寸裁剪，不能把色度平面当 BGRA 复制。
+    if (!ensureRgbaTarget(int(desc.Width), int(desc.Height), format))
+        return false;
+    if (m_yuv != planar || m_chromaTex)
+        m_importDirty = true;
+    m_yuv = planar;
+    m_yuv16 = planar && desc.Format != DXGI_FORMAT_NV12;
+    m_chromaTex.Reset();
+    const D3D11_BOX box{0, 0, 0, desc.Width, desc.Height, 1};
+    m_ctx->CopySubresourceRegion(m_rgbaTex.Get(), 0, 0, 0, 0, source, D3D11CalcSubresource(0, slice, desc.MipLevels),
+                                 &box);
+    m_sourceSize = QSize(frame->width, frame->height);
+    m_currentDxgiFormat = desc.Format;
+    if (!frame->hw_frames_ctx)
     {
-        uploaded = ensureVideoProcessor(int(desc.Width), int(desc.Height)) &&
-                   blitNv12ToRgba(source, frame->width, frame->height, int(slice));
+        if (desc.Format == DXGI_FORMAT_P010 || desc.Format == DXGI_FORMAT_R10G10B10A2_UNORM)
+            m_color.bitDepth = 10;
+        else if (desc.Format == DXGI_FORMAT_P016 || desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT)
+            m_color.bitDepth = 16;
     }
-    else if (desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM || desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
-    {
-        const D3D11_BOX box{0, 0, 0, UINT(frame->width), UINT(frame->height), 1};
-        m_ctx->CopySubresourceRegion(m_rgbaTex.Get(), 0, 0, 0, 0, source,
-                                     D3D11CalcSubresource(0, slice, desc.MipLevels), &box);
-        uploaded = true;
-    }
-    if (uploaded)
-        m_currentDxgiFormat = desc.Format;
+    const bool uploaded = true;
     return uploaded;
 }
 
@@ -404,9 +347,32 @@ void D3D11VideoRenderNode::consumeFrame()
     auto* frame = packet.frame.get();
     const bool hardware = frame->format == AV_PIX_FMT_D3D11;
     m_sharedTextureBusy = false;
-    const bool uploaded = hardware ? uploadHardwareFrame(frame) : uploadCpuFrameToRgba(frame);
+    AVPixelFormat storage = AVPixelFormat(frame->format);
+    if (hardware && frame->hw_frames_ctx)
+        storage = AVPixelFormat(reinterpret_cast<AVHWFramesContext*>(frame->hw_frames_ctx->data)->sw_format);
+    const auto previousColor = m_color;
+    m_color = Oran7VideoColorSpace::fromFrame(frame, storage);
+    bool uploaded = hardware ? uploadHardwareFrame(frame) : uploadCpuFrameToRgba(frame);
+    if (uploaded)
+        uploaded = ensureImportedTexture();
+    if (!uploaded && !m_sharedTextureBusy)
+    {
+        // 平面视图/硬件导入不受支持时，保留原位深下载，不能回退为 8-bit HDR 直出。
+        Oran7VideoFrame software(av_frame_alloc());
+        AVFrame* fallback = frame;
+        if (hardware)
+        {
+            if (!software || !frame->hw_frames_ctx || av_hwframe_transfer_data(software.get(), frame, 0) < 0 ||
+                av_frame_copy_props(software.get(), frame) < 0)
+                fallback = nullptr;
+            else
+                fallback = software.get();
+        }
+        uploaded = fallback && uploadCpuFrameToRgba(fallback, true) && ensureImportedTexture();
+    }
     if (!uploaded)
     {
+        m_color = previousColor;
         if (!m_uploadFailureLogged && !m_sharedTextureBusy)
         {
             m_uploadFailureLogged = true;
@@ -415,8 +381,14 @@ void D3D11VideoRenderNode::consumeFrame()
         return;
     }
     m_blackFrame = false;
+    // 同一轮清屏之后已成功接收新帧，帧末不能把新图像当作旧资源释放。
+    m_releaseSerial = m_mailbox->releaseSerial();
     if (!hardware)
-        m_currentDxgiFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+    {
+        D3D11_TEXTURE2D_DESC desc{};
+        m_rgbaTex->GetDesc(&desc);
+        m_currentDxgiFormat = desc.Format;
+    }
     // 元数据仅在转换成功后整体发布，GUI 不读取节点/GPU 的可变字段。
     Oran7VideoInfo info;
     info.srcSize = QSize(frame->width, frame->height);
@@ -425,6 +397,17 @@ void D3D11VideoRenderNode::consumeFrame()
     info.renderSize = m_rect.size().toSize();
     info.dxgiFormat = m_currentDxgiFormat;
     info.dxgiFormatName = dxgiFormatName(info.dxgiFormat);
+    info.bitDepth = m_color.bitDepth;
+    info.colorTransfer = m_color.transferName;
+    info.colorPrimaries = m_color.primariesName;
+    info.colorMatrix = m_color.matrixName;
+    info.colorRange = m_color.fullRange ? "full" : "limited";
+    info.hdr = m_color.transfer != 0;
+    const bool hdrDisplay =
+        !m_window->property("_oran7_hdr_display").isValid() || m_window->property("_oran7_hdr_display").toBool();
+    info.outputColorMode = Oran7HdrWindowOutput::isActive(m_window) && hdrDisplay ? "scRGB HDR (FP16)"
+                           : info.hdr                                             ? "HDR -> SDR tone mapping"
+                                                                                  : "SDR";
     info.fps = packet.fps;
     info.isFromHardWare = hardware;
     info.decodeDevice = hardware ? QStringLiteral("d3d11va") : QStringLiteral("cpu");
@@ -442,15 +425,31 @@ bool D3D11VideoRenderNode::ensureImportedTexture()
     m_passes.clear();
     m_activePass = nullptr;
     m_rhiTex.reset();
+    m_rhiChroma.reset();
     D3D11_TEXTURE2D_DESC desc{};
     m_rgbaTex->GetDesc(&desc);
-    m_rhiTex.reset(m_rhi->newTexture(QRhiTexture::BGRA8, QSize(int(desc.Width), int(desc.Height)), 1));
-    QRhiTexture::NativeTexture native{};
-    native.object = quint64(m_rgbaTex.Get());
-    if (!m_rhiTex || !m_rhiTex->createFrom(native))
+    auto format = QRhiTexture::BGRA8;
+    if (m_yuv)
+        format = m_yuv16 ? QRhiTexture::R16 : QRhiTexture::R8;
+    else if (desc.Format == DXGI_FORMAT_R10G10B10A2_UNORM)
+        format = QRhiTexture::RGB10A2;
+    else if (desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT)
+        format = QRhiTexture::RGBA16F;
+    m_rhiTex.reset(m_rhi->newTexture(format, QSize(int(desc.Width), int(desc.Height)), 1));
+    if (!importTexture(m_rhiTex, m_rgbaTex.Get()))
     {
         m_rhiTex.reset();
         return false;
+    }
+    if (m_yuv)
+    {
+        const QSize size((int(desc.Width) + 1) / 2, (int(desc.Height) + 1) / 2);
+        m_rhiChroma.reset(m_rhi->newTexture(m_yuv16 ? QRhiTexture::RG16 : QRhiTexture::RG8, size, 1));
+        if (!importTexture(m_rhiChroma, m_chromaTex ? m_chromaTex.Get() : m_rgbaTex.Get()))
+        {
+            m_rhiChroma.reset();
+            return false;
+        }
     }
     m_importDirty = false;
     return true;
@@ -478,7 +477,9 @@ D3D11VideoRenderNode::Oran7RenderPass* D3D11VideoRenderNode::preparePass()
         {QRhiShaderResourceBinding::uniformBuffer(
              0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, pass->uniform.get()),
          QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, m_rhiTex.get(),
-                                                   m_sampler.get())});
+                                                   m_sampler.get()),
+         QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage,
+                                                   m_rhiChroma ? m_rhiChroma.get() : m_rhiTex.get(), m_sampler.get())});
     if (!pass->bindings->create())
         return nullptr;
     const auto vertexShader = loadShader(":/shaders/video.vert.qsb");
@@ -536,6 +537,7 @@ void D3D11VideoRenderNode::prepare()
     if (m_consumedSerial != m_frameSerial && m_passes.size() > 16)
         m_passes.clear();
     consumeFrame();
+    if (m_blackFrame && !m_rgbaTex) clearBlack();
     if (!ensureImportedTexture())
         return;
     if (!m_sampler)
@@ -579,6 +581,40 @@ void D3D11VideoRenderNode::prepare()
     std::memcpy(uniform.mvp, transform.constData(), sizeof(uniform.mvp));
     uniform.opacity = float(inheritedOpacity());
     uniform.black = m_blackFrame ? 1.0f : 0.0f;
+    uniform.mode[0] = m_yuv ? 1 : 0;
+    uniform.mode[1] = float(m_color.transfer);
+    uniform.mode[2] = m_color.bt2020 ? 1 : 0;
+    // 8-bit 离屏目标无法承载扩展值，单独做 SDR 映射，不能影响主 HDR pass。
+    bool floatTarget = false;
+    if (renderTarget()->resourceType() == QRhiResource::TextureRenderTarget)
+    {
+        const auto description = static_cast<QRhiTextureRenderTarget*>(renderTarget())->description();
+        const auto* texture = description.cbeginColorAttachments() != description.cendColorAttachments()
+                                  ? description.colorAttachmentAt(0)->texture()
+                                  : nullptr;
+        floatTarget = texture && texture->format() == QRhiTexture::RGBA16F;
+    }
+    else
+        floatTarget = Oran7HdrWindowOutput::isActive(m_window);
+    const bool hdrDisplay =
+        !m_window->property("_oran7_hdr_display").isValid() || m_window->property("_oran7_hdr_display").toBool();
+    uniform.mode[3] = floatTarget && Oran7HdrWindowOutput::isActive(m_window) && hdrDisplay ? 1 : 0;
+    const float unit = m_yuv16 ? 256.0f / 65535.0f : 1.0f / 255.0f;
+    uniform.range[0] = m_color.fullRange ? 0 : 16 * unit;
+    uniform.range[1] = m_color.fullRange ? 1 : 1 / (219 * unit);
+    uniform.range[2] = 128 * unit;
+    uniform.range[3] = m_color.fullRange ? 1 : 1 / (224 * unit);
+    uniform.coefficients[0] = m_color.kr;
+    uniform.coefficients[1] = m_color.kb;
+    uniform.coefficients[2] = m_color.peakNits;
+    uniform.coefficients[3] = qBound(80.0f, m_window->property("_oran7_sdr_white_nits").toFloat(), 1000.0f);
+    D3D11_TEXTURE2D_DESC textureDesc{};
+    m_rgbaTex->GetDesc(&textureDesc);
+    if (!m_sourceSize.isEmpty())
+    {
+        uniform.uvScale[0] = float(m_sourceSize.width()) / textureDesc.Width;
+        uniform.uvScale[1] = float(m_sourceSize.height()) / textureDesc.Height;
+    }
     updates->updateDynamicBuffer(m_activePass->uniform.get(), 0, sizeof(uniform), &uniform);
     commandBuffer()->resourceUpdate(updates);
 }
@@ -612,14 +648,13 @@ void D3D11VideoRenderNode::doReleaseResources()
     m_rhiTex.reset();
     sws_freeContext(m_swsCtx);
     m_swsCtx = nullptr;
-    m_lastSrcCpuFmt = AV_PIX_FMT_NONE;
-    m_swsSrcW = m_swsSrcH = 0;
-    m_vp.Reset();
-    m_vpEnum.Reset();
-    m_processorSize = {};
+    m_cpuFrame.reset();
+    m_yuv = false;
+    m_yuv16 = false;
+    m_color = {};
+    m_rhiChroma.reset();
+    m_chromaTex.Reset();
     m_rgbaTex.Reset();
-    m_videoCtx.Reset();
-    m_videoDev.Reset();
     m_ctx.Reset();
     m_dev.Reset();
     m_rhi = nullptr;

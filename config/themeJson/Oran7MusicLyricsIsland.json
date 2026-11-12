@@ -21,6 +21,9 @@
         "floatingClickThrough": false,
         "floatingAlwaysOnTop": true,
         "floatingOpacity": 0.9,
+        "floatingLyricsHeight": 52,
+        "floatingPositionVersion": 0,
+        "floatingCenterX": 0,
         "floatingX": -1,
         "floatingY": -1
     }

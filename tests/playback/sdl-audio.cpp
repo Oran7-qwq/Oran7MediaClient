@@ -131,6 +131,21 @@ int main(int argc, char** argv)
     const auto afterScope = callbacks.load();
     SDL_Delay(20);
     check(callbacks.load() == afterScope, "RAII destruction joins callbacks");
+
+    {
+        // A0-3：F32 设备协商；dummy 驱动只验证打开/回调，不验证实际听感。
+        SDL_AudioSpec f32Wanted = wanted;
+        f32Wanted.format = AUDIO_F32SYS;
+        SDL_AudioSpec f32Obtained{};
+        Oran7SdlAudioDevice f32Device;
+        check(f32Device.open(f32Wanted, f32Obtained, 0), "open managed F32 device");
+        check(f32Obtained.format == AUDIO_F32SYS, "F32 format negotiated");
+        const auto beforeF32 = callbacks.load();
+        f32Device.setPaused(false);
+        waitForCallbacks(callbacks, beforeF32);
+        f32Device.close();
+    }
+
     SDL_Quit();
     std::printf("PASS: %d SDL audio lifetime checks\n", checks);
 }

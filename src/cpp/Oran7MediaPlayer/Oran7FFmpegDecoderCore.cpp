@@ -77,6 +77,9 @@ void Oran7FFmpegDecoderCore::decoder_abort(FrameQueue *fq)
 
 void Oran7FFmpegDecoderCore::decoder_destroy()
 {
+    // 中断可能发生在 EAGAIN 留包期间；队列清空并不拥有这个已取出的包。
+    av_packet_unref(&pkt_);
+    packet_pending_ = 0;
     if(avctx_)avcodec_free_context(&avctx_);
 }
 
@@ -250,6 +253,15 @@ int Oran7FFmpegDecoderCore::get_video_frame(AVFrame *frame)
         }
         else
         {
+            // 缺省帧字段由流上下文补齐；保留逐帧 HDR 元数据及原始 10/12-bit 格式。
+            if (frame->color_primaries == AVCOL_PRI_UNSPECIFIED)
+                frame->color_primaries = avctx_->color_primaries;
+            if (frame->color_trc == AVCOL_TRC_UNSPECIFIED)
+                frame->color_trc = avctx_->color_trc;
+            if (frame->colorspace == AVCOL_SPC_UNSPECIFIED)
+                frame->colorspace = avctx_->colorspace;
+            if (frame->color_range == AVCOL_RANGE_UNSPECIFIED)
+                frame->color_range = avctx_->color_range;
             //**硬件加速检测，缓存转移，格式转换操作**//
             if(frame->format==s_hw_pix_fmt)
             {

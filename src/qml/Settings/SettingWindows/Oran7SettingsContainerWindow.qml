@@ -35,6 +35,8 @@ ApplicationWindow {
     property var closingPanels: []
     readonly property var panels: [mainUiSettingLoader.item, mediaPlayerSettingLoader.item, musicPlayListSettingLoader.item]
     property bool displayAllowed: true
+    // 主窗口显式借入账号浮层；设置容器不依赖音乐页或其业务会话。
+    property var activeMainPopup: null
     property bool requestedVisible: displayAllowed && Oran7MainUiSetting.openSettingWin
     property bool enable__dwmBlur__: true
 
@@ -385,6 +387,10 @@ ApplicationWindow {
     Connections {
         target: globalEventFilter
         function onEscapeKeyPressed() {
+            if (root.activeMainPopup) {
+                root.activeMainPopup.close()
+                return
+            }
             if (Oran7MainUiSetting.activeSettingsPopup) {
                 Oran7MainUiSetting.activeSettingsPopup.close()
                 return

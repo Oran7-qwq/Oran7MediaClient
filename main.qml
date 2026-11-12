@@ -13,6 +13,7 @@ import "./src/qml/Components/Oran7GlobalComponents"
 import "./src/qml/Settings/SettingWindows"
 
 import Client 1.0
+import D3D11VideoItem 1.0
 import Oran7NetEaseAuth 1.0
 import Oran7Network 1.0
 import Oran7UI.Impl 1.0
@@ -28,6 +29,8 @@ ApplicationWindow {
     title: "Oran7MediaClient"
     minimumWidth: 990
     minimumHeight: 564
+
+    Oran7HdrWindowOutput { window: mainWindow }
 
     readonly property bool startupManaged: typeof Oran7Startup !== "undefined" && Oran7Startup !== null
     readonly property bool startupReleased: !startupManaged || Oran7Startup.finished
@@ -106,6 +109,8 @@ ApplicationWindow {
         dwmEnabled: mainWindow.backgroundDwmApplied
         nativeReady: mainWindow.backgroundNativeReady
         prepareActive: !mainWindow.startupManaged || Oran7Startup.preparingMain
+        // 启动仍允许隐藏预热；正常运行后隐藏/最小化不再后台解码视频背景。
+        playbackAllowed: !mainWindow.startupReleased || (mainWindow.visible && mainWindow.visibility !== Window.Minimized)
         baseColor: Oran7Theme.isDark ? "#171a22" : "#e9ebef"
         videoUrl: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundVideo)
             ? "file:///" + Oran7Theme.Oran7MainGUI.backgroundVideo : "qrc:/image/background.mp4"
@@ -126,6 +131,8 @@ ApplicationWindow {
     // --- MainWindow 性能监测：最右上角网络延迟，FPS 放在其左侧 ---
     Text {
         id: netLatencyText
+        opacity: rightRectangle.networkLatencyOpacity
+        visible: opacity > 0
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: 5
@@ -142,8 +149,10 @@ ApplicationWindow {
 
     Text {
         id: fpsText
+        opacity: rightRectangle.videoControlsOpacity
+        visible: opacity > 0
         anchors.top: parent.top
-        anchors.right: netLatencyText.left
+        anchors.right: netLatencyText.visible ? netLatencyText.left : parent.right
         anchors.margins: 5
         z: 99
         color: "#74ccd6"
@@ -212,6 +221,8 @@ ApplicationWindow {
         windowAgent:__windowAgent
         showWinTitle:false
         showWinIcon:false
+        windowButtonsOpacity: rightRectangle.videoControlsOpacity
+        onWindowButtonsHoveredChanged: rightRectangle.wakeVideoControls()
     }
 
     //====================== <Main ui> ========================//
@@ -294,6 +305,7 @@ ApplicationWindow {
         RightPage {
             id: rightRectangle
             captionExpanded: openCaptionBtn.openIngState
+            windowButtonsHovered: __captionBar.windowButtonsHovered
 
             anchors.left: leftRectangle.right
             anchors.leftMargin: openCaptionBtn.openIngState ? 7 : 0
@@ -331,10 +343,11 @@ ApplicationWindow {
 
         // ====== 桌面歌词悬浮窗（独立于主窗口） ======
         // 无边框置顶的顶层 Window，复用 Oran7LyricsIsland 歌词渲染核心；
-        // 状态/位置由 Oran7MusicLyricsWindow 主题持久化，启动时自动回读。
+        // 状态/位置由 Oran7MusicLyricsIsland 主题持久化，启动时自动回读。
         Oran7LyricsFloatingWindow {
             id: lyricsFloatingWindow
             displayAllowed: mainWindow.startupReleased
+            lyricsHeight: Oran7Theme.Oran7MusicLyricsIsland.floatingLyricsHeight ?? 52
             Connections {
                 target: bottomPage
                 function onFloatingLyricsClicked() {
@@ -584,13 +597,6 @@ ApplicationWindow {
             fullscreenColor: "#f8c7c7"/*"transparent"*/
             maxTiltAngle: 30
             animDuration: 500
-            onStateChanged: {
-                if (state === "fullscreenState") {
-                    oran7Brief.start_gradientLayerColorAnimation = true;
-                } else {
-                    oran7Brief.start_gradientLayerColorAnimation = false;
-                }
-            }
             //嵌入子项到内部contentArea区域
             //复用主窗口的共享背景源（视频/静态图一体），保证动态背景全局只解码一份
             ShaderEffectSource {
@@ -604,9 +610,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 blurSource: animatedWindowWarperbackgoundImage
                 themeColor: "#04FFFFFF"
-                Oran7AuthorBriefItem {
-                    id: oran7Brief
-                }
+                Oran7AuthorBriefItem {}
                 Rectangle {
                     id:windowContentCloseBtnRectangle
                     anchors.top: parent.top;
@@ -672,6 +676,7 @@ ApplicationWindow {
     // --- Setting windows ---
     Oran7SettingsContainerWindow {
         displayAllowed: mainWindow.startupReleased
+        activeMainPopup: BasicConfig.activeMusicAccountPopup
         id: settingsContainer
 
         // 监听设置窗口请求恢复焦点的信号

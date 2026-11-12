@@ -85,14 +85,18 @@ updated: 2026-10-24
 | `playMusic(source)` / `playVideo(source)` | 本地音频/视频入口 |
 | `playNetworkSong(songId, fallbackUrl, isVip)` | 网络音乐或带兜底地址的音乐；同一播放器目标可暂停/恢复 |
 | `stopPlayback()` | 主动停止并取消待解析/延迟起播请求 |
+| `togglePlayback()` | 切换当前已创建播放器的播放／暂停状态，视频控制栏据此发出明确命令 |
 | `seekTo(seconds)` / `setVolume(volume)` / `setPlayMode(mode)` | 进度单位为秒；音量 0～100；模式 0～3 |
 | `playNext()` / `playPrevious()` | 发出通知，由 QML 决定目标 |
 | `mediaSource()` / `currentSongId()` / `currentIsVip()` | 查询实际播放器目标、选中歌曲身份 |
 | `scanLocalMusic(directory)` / `importLocalMusic(files)` / `removeLocalMusic(files)` | 曲库扫描、导入、删除 |
 | `focusLocalMusic(path)` | 本地音乐焦点；排序由 tracks.local.moveTrack 直接同步曲库 |
 | `Client.tracks` | 统一集合入口；整合保存/恢复由 C++ 协调，沿用原配置键 |
+| `Client.videoHistory` | Client unique_ptr 持有的视频／直播记录模型，提供 rememberLocal、rememberRoom、remove；启动读取 video.history，保存与 shutdown 刷盘 |
 | `restoreConfiguration(engine)` / `saveConfiguration(engine)` | C++ 启动/退出门面；配置管理器先加载，调用方最终落盘 |
 | `shutdown()` | 取消后台任务并关闭播放器/采集服务，可重复调用 |
+
+Oran7VideoHistory 通过自身持有的 Oran7VideoThumbnailCache 提供本地视频 thumbnail role。缓存工作在后台队列执行，GUI 回调按文件身份更新对应行，退出先取消提帧。缓存目录与配置分离，详见 [[VIDEO - 视频空间改版方案]]。
 
 渲染/录屏命令：`attachVideoItem(RenderObject, host)`、`setScaleMode(RenderObject, ScaleMode)`、`renderBlackFrame(RenderObject) -> bool`、`videoItem(RenderObject)`、`screenCapture()`、`screenCaptureMonitors()`、`screenCaptureSettings()`、`applyScreenCaptureSettings(...)`、`screenCaptureRecording()`。渲染创建、源尺寸及设备绑定留在桥内，Client 不再公开无调用的转发接口。
 

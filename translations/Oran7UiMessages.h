@@ -4,9 +4,15 @@
 // 动态状态/模型保留源文案，显示时再翻译；供 lupdate 提取，不参与业务编译。
 // 新增动态文案时同时登记这里，不能翻译协议值、文件路径或用户内容。
 static const char* const Oran7DynamicUiMessages[] = {
+    QT_TRANSLATE_NOOP("Oran7Ui", "喜欢列表加载失败，请重试推荐"),
+    QT_TRANSLATE_NOOP("Oran7Ui", "推荐加载失败，请检查登录和网络后重试"),
+    QT_TRANSLATE_NOOP("Oran7Ui", "请先登录网易云音乐"),
+    QT_TRANSLATE_NOOP("Oran7Ui", "心动模式需要先选择一首网易云歌曲"),
+    QT_TRANSLATE_NOOP("Oran7Ui", "暂无符合过滤条件的推荐，请调整过滤设置后重试"),
     QT_TRANSLATE_NOOP("Oran7Ui", "不支持的界面语言"),
     QT_TRANSLATE_NOOP("Oran7Ui", "中文"),
     QT_TRANSLATE_NOOP("Oran7Ui", "从网易云搜索"),
+    QT_TRANSLATE_NOOP("Oran7Ui", "从 QQ 音乐搜索"),
     QT_TRANSLATE_NOOP("Oran7Ui", "保存失败"),
     QT_TRANSLATE_NOOP("Oran7Ui", "切换主题"),
     QT_TRANSLATE_NOOP("Oran7Ui", "字体设置保存失败"),
@@ -76,4 +82,7 @@ static const char* const Oran7DynamicUiMessages[] = {
     QT_TRANSLATE_NOOP("Oran7Ui", "恢复配置失败"),
     QT_TRANSLATE_NOOP("Oran7Ui", "SQLite 驱动不可用"),
     QT_TRANSLATE_NOOP("Oran7Ui", "主界面缺少几何初始化接口"),
+    QT_TRANSLATE_NOOP("Oran7Ui", "开发者模式设置保存失败"),
+    QT_TRANSLATE_NOOP("Oran7Ui", "录制格式须为 MP4 或 FLV"),
+    QT_TRANSLATE_NOOP("Oran7Ui", "无法打开录制输出文件"),
 };

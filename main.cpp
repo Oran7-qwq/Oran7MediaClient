@@ -1,6 +1,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include "D3d11Videoitem.h"
+#include "Oran7HdrWindowOutput.h"
 #include <QQuickWindow>
 #include <QQuickStyle>
 #include <QQuickImageProvider>
@@ -14,6 +15,8 @@
 #include "Oran7GlobalEventFilter.h"
 #include "Oran7AppConfigManager.h"
 #include "Oran7MediaClient.h"
+#include "Oran7AudioEffects.h"
+#include "Oran7EqualizerModel.h"
 #include "Oran7ApplicationContext.h"
 #include "BilibliLiveRoomAddressCatch.h"
 #include "BilibiliDanmakuClient.h"
@@ -54,7 +57,7 @@ extern "C"
     __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
-// 全局未处理异常处理器：崩溃时自动生成 minidump，便于定位崩溃位置
+/*!  全局未处理异常处理器 */
 LONG WINAPI Oran7CrashHandler(EXCEPTION_POINTERS* ep)
 {
     static const wchar_t* dumpPath = L"Oran7MediaClient_crash.dmp";
@@ -216,6 +219,7 @@ int main(int argc, char* argv[])
         qmlRegisterType<BilibiliRoomAddressCatch>("BilibiliRoomAddressCatch", 1, 0, "BilibiliRoomAddressCatch");
         qmlRegisterType<BilibiliDanmakuClient>("BilibiliDanmakuClient", 1, 0, "BilibiliDanmakuClient");
         qmlRegisterType<D3D11VideoItem>("D3D11VideoItem", 1, 0, "D3D11VideoItem");
+        qmlRegisterType<Oran7HdrWindowOutput>("D3D11VideoItem", 1, 0, "Oran7HdrWindowOutput");
         qmlRegisterType<Oran7LyricsModel>("LyricsModel", 1, 0, "LyricsModel");
         qmlRegisterType<Oran7SoundEffect>("Oran7Sound", 1, 0, "Oran7SoundEffect");
 
@@ -282,11 +286,16 @@ int main(int argc, char* argv[])
         qmlRegisterUncreatableType<Oran7TrackListModel>("Client", 1, 0, "Oran7TrackListModel",
                                                         QStringLiteral("曲目列表由 Client 持有"));
         qmlRegisterUncreatableType<Oran7CloudMusicService>("Client", 1, 0, "Oran7CloudMusicService", "由 Client 持有");
+        qmlRegisterUncreatableType<Oran7VideoHistory>("Client", 1, 0, "Oran7VideoHistory", "由 Client 持有");
         qmlRegisterUncreatableType<Oran7PlaybackViewModel>("Client", 1, 0, "Oran7PlaybackViewModel", "由 Client 持有");
         qmlRegisterUncreatableType<Oran7TrackLibrary>("Client", 1, 0, "Oran7TrackLibrary",
                                                       QStringLiteral("曲目集合由 Client 持有"));
         qmlRegisterUncreatableType<Oran7PlaybackState>("Client", 1, 0, "Oran7PlaybackState",
                                                        QStringLiteral("播放状态由 Oran7MediaClient 持有"));
+        qmlRegisterUncreatableType<Oran7EqualizerModel>("Client", 1, 0, "Oran7EqualizerModel",
+                                                        QStringLiteral("均衡器模型由 Client.audioEffects 持有"));
+        qmlRegisterUncreatableType<Oran7AudioEffects>("Client", 1, 0, "Oran7AudioEffects",
+                                                      QStringLiteral("音效由 Client 持有"));
 
         qmlRegisterSingletonType<Oran7MediaClient>("Client", 1, 0, "Client",
                                                    [client](QQmlEngine* engine, QJSEngine* scriptEngine) -> QObject*
@@ -339,19 +348,17 @@ int main(int argc, char* argv[])
 
 ConfigRET Config_AppConfigManager_Load(QQmlApplicationEngine& engine)
 {
-    try
-    {
+    try{
         /*! @brief must be first loaded*/
         Oran7AppConfigManager::ins().loadConfig();
 
         if (!Oran7ApplicationContext::instance().client()->restoreConfiguration(engine))
             throw std::runtime_error("无法创建媒体客户端缓存目录");
         Oran7BilibiliAuthManager::instance().loadCookies(); //*加载B站认证Cookie
-        NcmSession::instance().load();                      //*加载网易云登录Cookie
-        Oran7NetworkMonitor::instance().start(); //*启动网络延迟监测（联网且延迟<180ms 时自动校验 Cookie）
+        NcmSession::instance().load();                                    //*加载网易云登录Cookie
+        Oran7NetworkMonitor::instance().start();                  //*启动网络延迟监测（联网且延迟<180ms 时自动校验 Cookie）
     }
-    catch (std::exception& e)
-    {
+    catch (std::exception& e){
         return Config_ERROR;
     }
     return Config_SUCCESSED;
@@ -359,15 +366,13 @@ ConfigRET Config_AppConfigManager_Load(QQmlApplicationEngine& engine)
 
 ConfigRET Config_AppConfigManager_Save(QQmlApplicationEngine& engine)
 {
-    try
-    {
+    try{
         Oran7ApplicationContext::instance().client()->saveConfiguration(engine);
         Oran7BilibiliAuthManager::instance().saveCookies(); //*保存B站认证Cookie
         if (!Oran7AppConfigManager::ins().saveConfig())
             return Config_ERROR;
     }
-    catch (std::exception& e)
-    {
+    catch (std::exception& e){
         return Config_ERROR;
     }
     return Config_SUCCESSED;

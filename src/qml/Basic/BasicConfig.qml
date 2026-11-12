@@ -16,6 +16,8 @@ Item {
     // 自动重新登录挂起标记：Cookie 失效时置 true 并跳搜索页打开登录弹窗；
     // 若搜索页尚未实例化（首次跳转），由 SearchMusicStack.Component.onCompleted 消费后清 false
     property bool pendingNeteaseLoginPopup: false
+    // 主页面账号浮层的借用句柄，ESC 优先关闭浮层，避免同时打开下拉设置。
+    property var activeMusicAccountPopup: null
 
     //use for BilibiliLoginPopup open
     signal openBilibiliLoginPopup
@@ -29,6 +31,7 @@ Item {
     signal pushVideoPlayerStackInto_RightPageMainStackView
     //use in RightPage.qml mainStackView for push MyFavoriteMusicStack into ----at LeftPage
     signal pushSearchMusicStackInto_RightPageMainStackView
+    signal pushQQMusicStackInto_RightPageMainStackView
     //use in RightPage.qml mainStackView for push LocakMusicStack into ----at LeftPage
     signal pushLocalMusicStackInto_RightPageMainStackView
     //use in RightPage.qml mainStackView for push screenCaptureStack into ----at LeftPage
@@ -70,7 +73,7 @@ Item {
     //当前播放由哪个列表发起（"search"=搜索结果列表, "local"=本地音乐页列表），
     //自动切歌只在该列表内推进，避免跨列表切错歌
     readonly property string currentPlaylistOwner: Client.musicQueue.owner
-    // 播放模式：0=顺序播放 1=单曲循环 2=随机播放 3=网易云漫游（心动模式，BottomPage 播放模式图标轮换控制）
+    // 0=顺序，1=单曲，2=随机；3=心动，4=私人漫游，5=熟悉，6=探索（推荐菜单独立控制）。
     readonly property int playMode: Client.playback.mode
     // 修改模式统一调用 Client.setPlayMode()。
     // SearchMusicStack 是否处于聚焦(当前显示)状态：仅聚焦时模式轮转才允许切入网易云漫游(3)
@@ -126,6 +129,7 @@ Item {
     readonly property int localMusicPage: 1
     readonly property int searchMusicPage: 2
     readonly property int screenCapturePage: 3
+    readonly property int qqMusicPage: 4
 
     function getUrl(pageType) {
         switch (pageType) {
@@ -133,6 +137,8 @@ Item {
             return "qrc:/src/qml/RightPage/MainStackView/VideoPlayerStack.qml";
         case root.searchMusicPage:
             return "qrc:/src/qml/RightPage/MainStackView/SearchMusicStack.qml";
+        case root.qqMusicPage:
+            return "qrc:/src/qml/RightPage/MainStackView/Oran7QQMusicStack.qml";
         case root.localMusicPage:
             return "qrc:/src/qml/RightPage/MainStackView/LocalMusicStack.qml";
         case root.screenCapturePage:
@@ -164,6 +170,7 @@ Item {
     Connections {
         target: Client.musicQueue
         function onMusicActivated() { root.globalPlayingFocus = root.globalPlayer_MusicPlayerIndex; }
+        function onRecommendationActivated() { root.pushSearchMusicStackInto_RightPageMainStackView(); }
     }
     // 模型和身份索引由 C++ 持有；保留界面调用入口，避免在 QML 重复保存数据。
     function isIntegrated(songId, url, filepath) {

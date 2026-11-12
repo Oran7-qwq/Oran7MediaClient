@@ -1,5 +1,6 @@
 #pragma once
 #include "Oran7PlaybackState.h"
+#include "../Oran7Config/Oran7AppConfig.h"
 #include <QMap>
 #include <QVariant>
 #include <functional>
@@ -30,6 +31,8 @@ public:
     void saveIntegratedMusic(const QVariantList& list);
     int volume() const;
     void saveVolume(int volume);
+    Oran7AudioConfig audio() const;
+    void saveAudio(const Oran7AudioConfig& audio);
     bool roamFilterLiked() const;
     bool saveRoamFilterLiked(bool enabled);
     void loadWindowSize(QQmlApplicationEngine& engine);

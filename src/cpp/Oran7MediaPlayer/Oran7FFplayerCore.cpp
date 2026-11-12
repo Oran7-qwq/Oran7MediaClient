@@ -1,7 +1,11 @@
 #include "Oran7FFplayerCore.h"
+#include "Oran7VideoRefreshScheduler.h"
 
 #include <string.h>
 #include <atomic>
+#include <cmath>
+#include <QScopeGuard>
+#include <mutex>
 #include <d3d10_1.h>  // for ID3D10Multithread
 #include <d3d11.h>       // ID3D11Device
 #include <wrl/client.h>  // ComPtr
@@ -10,6 +14,8 @@
 #include "ffmsg.h"
 #include "Oran7GlobalHelper.h"
 #include "Sonic.h"       // 变速实现，第三方库
+#include "Audio/Oran7AudioParameterQueue.h"
+#include "Audio/Oran7AudioProcessor.h"
 #include "Oran7BilibiliAuthManager.h"
 #include "NcmSession.h"
 #include "SDL2/SDL_audio.h"
@@ -18,7 +24,11 @@
 /* Calculate actual buffer size keeping in mind not cause too frequent audio callbacks */
 #define SDL_AUDIO_MAX_CALLBACKS_PER_SEC 30
 /* polls for possible required screen refresh at least this often, should be less than 1/fps */
-#define REFRESH_RATE 0.01  // 每帧休眠10ms
+#define REFRESH_RATE 0.01  // 空闲时最大轮询间隔；有帧时按下一帧 PTS 唤醒。
+namespace {
+std::mutex sdlLifecycleMutex;
+constexpr Uint32 sdlSubsystems = SDL_INIT_AUDIO | SDL_INIT_TIMER;
+}
 /* no AV sync correction is done if below the minimum AV sync threshold */
 #define AV_SYNC_THRESHOLD_MIN 0.04  // 40ms
 /* AV sync correction is done if above the maximum AV sync threshold */
@@ -59,6 +69,14 @@ enum AVPixelFormat Oran7FFplayerCore::get_hw_format(AVCodecContext *ctx,const en
             return *p;
     }
     av_log(NULL,AV_LOG_ERROR,"[AV_LOG_ERROR:]Failed to get HW surface format.\n");
+    // 驱动不支持当前 Main10/高位深配置时，让 FFmpeg 选择提供的软解格式。
+    // 软解帧仍保留原位深，由统一 QRhi 路径处理，不能强行要求 NV12。
+    for (p = pix_fmts; *p != AV_PIX_FMT_NONE; ++p)
+    {
+        const auto* descriptor = av_pix_fmt_desc_get(*p);
+        if (descriptor && !(descriptor->flags & AV_PIX_FMT_FLAG_HWACCEL))
+            return *p;
+    }
     return AV_PIX_FMT_NONE;
 }
 
@@ -344,6 +362,7 @@ int Oran7FFplayerCore::read_thread()
             ret = -1;
             throw std::runtime_error("Failed to open file '"+std::string(input_filename_)+"' that video stream or audio stream not exist.");
         }
+        max_frame_duration = (ic->iformat->flags & AVFMT_TS_DISCONT) ? 10.0 : 3600.0;
         //*根据推测是否要启动视频刷新线程*//
         if(video_stream>=0)
         {
@@ -358,7 +377,6 @@ int Oran7FFplayerCore::read_thread()
         }
 
         //*be init use by video_refresh for Synchronize audio calculate*//
-        max_frame_duration = (ic->iformat->flags & AVFMT_TS_DISCONT) ? 10.0 : 3600.0;
 
         ffp_notify_msg(this, FFP_MSG_PREPARED);
         INFO_LOG<<("Notify ffplayer message of ( FFP_MSG_PREPARED )");
@@ -410,6 +428,8 @@ int Oran7FFplayerCore::read_thread()
                             packet_queue_flush(&videoq);
                             packet_queue_put(&videoq, &flush_pkt);
                         }
+                        // A0：通知音频回调丢弃旧 serial 的待输出 PCM/Sonic/DSP 历史。
+                        audio_discontinuity_.fetch_add(1, std::memory_order_release);
                         seek_req = 0;
                         eof = 0;
                         ffp_notify_msg(this, FFP_MSG_SEEK_COMPLETE);
@@ -495,10 +515,11 @@ int Oran7FFplayerCore::read_thread()
  */
 int Oran7FFplayerCore::video_refresh_thread()
 {
+    Oran7VideoRefreshScheduler scheduler;
     double remaining_time = 0.0;
     while (!abort_request.load())
     {
-        if (remaining_time > 0.0)
+        if (remaining_time > 0.0 && !scheduler.wait(remaining_time))
             av_usleep((int)(int64_t)(remaining_time * 1000000.0));
         remaining_time = REFRESH_RATE;
         video_refresh(&remaining_time);
@@ -519,40 +540,30 @@ void Oran7FFplayerCore::video_refresh(double *remaining_time)
     Frame *lastvp = NULL;
     double last_duration, duration, delay;
 
-    static int64_t run_times = 0;
-    run_times+=1;
     //av_log(NULL, AV_LOG_INFO,"video_refresh run_times: %d\n",(int)run_times);
 
     // 判断有没有视频画面
     if(video_st)
     {
-#if 1
-        //====================
-        //性能调试：
-        static int64_t last_check_time = 0;
-        int64_t current_time = av_gettime_relative();
-        if (current_time - last_check_time > 10*1000000)// 10秒
+        // 常规播放不输出定时性能采样，避免零新增丢帧时持续刷日志。
+        if (Oran7GlobalHelper::developerMode())
         {
-            last_check_time = current_time;
-            av_log(NULL, AV_LOG_INFO,
-                   "[AV_LOG_INFO:]--->VideoQ: packets:%d-bytes:%d, FrameQ: %d ,AlreadyDropFrame: %d\n",
-                   videoq.nb_packets, videoq.size,
-                   pictq.size,frame_drops_late);
+            int64_t current_time = av_gettime_relative();
+            if (!m_lastVideoReportUs)
+                m_lastVideoReportUs = current_time;
+            if (current_time - m_lastVideoReportUs >= 3000000)
+            {
+                INFO_LOG << "[PlaybackPerf] late_drop_interval=" << frame_drops_late - m_lastReportedDrops
+                         << "late_drop_total=" << frame_drops_late;
+                m_lastReportedDrops = frame_drops_late;
+                m_lastVideoReportUs = current_time;
+            }
         }
-        //=====================
-        //运行频率调试：
-        // 每20秒打印一次刷新次数
-        static int64_t last_check_time2 = 0;
-        int64_t current_time2 = av_gettime_relative();
-        if (current_time2 - last_check_time2 > 20*1000000)// 20秒
+        else
         {
-            last_check_time2 = current_time2;
-            //av_log(NULL, AV_LOG_INFO,":-->Video_refresh times 1 seconds of :%d\n",(int)run_times/20);
-            run_times = 0;
+            m_lastVideoReportUs = 0;
+            m_lastReportedDrops = frame_drops_late;
         }
-        //=====================
-#endif
-        static int discard_pkt_num=0;
         while(1)
         {
             if (frame_queue_nb_remaining(&pictq) == 0)
@@ -563,7 +574,6 @@ void Oran7FFplayerCore::video_refresh(double *remaining_time)
                     Video_EOF=true;
                     check_play_finished();  // 纯视频流无法从音频回调触发
                 }
-                av_log(NULL, AV_LOG_WARNING,"[AV_LOG_WARNING:]-->Video frame queue now remaining of frame is Empty! InRunTime:%d\n\n",(int)run_times);
                 *remaining_time = FFMIN(*remaining_time, 0.01); // 10ms
                 return;
             }
@@ -573,14 +583,13 @@ void Oran7FFplayerCore::video_refresh(double *remaining_time)
             if(vp->serial!=videoq.serial)
             {
                 frame_queue_next(&pictq);   // 当前vp帧出队列，在内部已调用av_frame_unref
-                INFO_LOG<<"VideoRefresh:Discard video frame because serial not same.-->vp->serial:"<<vp->serial<<"-video.pkt_serial_:"<<viddec.pkt_serial_;
-                discard_pkt_num++;
+                ++m_videoDiscardedSerial;
                 continue;
             }
-            if(discard_pkt_num!=0)
+            if(m_videoDiscardedSerial!=0)
             {
-                INFO_LOG<<"VideoRefresh discard video frame num:"<<discard_pkt_num;
-                discard_pkt_num=0;
+                INFO_LOG<<"VideoRefresh discard old serial frames:"<<m_videoDiscardedSerial;
+                m_videoDiscardedSerial=0;
             }
             if (lastvp->serial != vp->serial)
             {
@@ -600,7 +609,6 @@ void Oran7FFplayerCore::video_refresh(double *remaining_time)
             if (time <  last_frame_timer + delay)
             {
                 *remaining_time = FFMIN( last_frame_timer + delay - time, *remaining_time);
-                if (*remaining_time < 0.001) *remaining_time = 0.001;
                 // INFO_LOG<<"time :"<<time;
                 // INFO_LOG<<"last_frame_timer: "<<last_frame_timer;
                 // INFO_LOG<<"delay :"<<delay;
@@ -620,12 +628,11 @@ void Oran7FFplayerCore::video_refresh(double *remaining_time)
             {
                 Frame *nextvp = frame_queue_peek_next(&pictq);
                 duration = vp_duration(vp, nextvp);
-                if (!step && (framedrop == 0 || (framedrop && get_master_sync_type() != AV_SYNC_VIDEO_MASTER))
+                if (!step && (framedrop > 0 || (framedrop && get_master_sync_type() != AV_SYNC_VIDEO_MASTER))
                     && time > last_frame_timer + duration)
                 {
                     frame_drops_late++;
                     frame_queue_next(&pictq);
-                    INFO_LOG<<"Frame Drop. in RunTime:"<<run_times;
                     continue;
                 }
 
@@ -667,7 +674,6 @@ void Oran7FFplayerCore::video_refresh(double *remaining_time)
             SDL_UnlockMutex(pictq.mutex);
 
             // 锁外回调：renderRef 作为 copy_frame 传出去,--->renderRef 的释放权交给渲染侧
-            int64_t last_current_time = av_gettime_relative();
 
             if (video_refresh_callback_ && vp)
             {
@@ -677,17 +683,16 @@ void Oran7FFplayerCore::video_refresh(double *remaining_time)
             else
                 if (renderRef) av_frame_free(&renderRef);
 
-            int64_t next_current_time = av_gettime_relative();
-
-            if(last_current_time - last_check_time >= 10 * 1000000)
-            {
-                last_check_time = last_current_time;
-                //INFO_LOG<<"video_refresh_callback by "<<next_current_time -  last_current_time<<" us.";
-            }
         }
         else
             WARNING_LOG<< "Attention video_refresh_callback_ function is NULL !!";
         // std::cout << "[Queue] Before next: size=" << pictq.size << std::endl;
+        // 已显示当前帧：按下一帧真实 PTS 安排唤醒，不能固定再睡 10ms。
+        // VFR 文件优先使用相邻 PTS；队列暂空时使用解码器提供的时长估计。
+        const double nextDuration = frame_queue_nb_remaining(&pictq) > 1
+            ? vp_duration(vp, frame_queue_peek_next(&pictq)) : vp->duration / pf_playback_rate;
+        *remaining_time = Oran7VideoRefreshScheduler::remaining(
+            av_gettime_relative() / 1000000.0, last_frame_timer + nextDuration);
         frame_queue_next(&pictq);
         // std::cout << "[Queue] After next: size=" << pictq.size << std::endl;
     }
@@ -808,11 +813,16 @@ int Oran7FFplayerCore::stream_open(const char *file_name)
 
     try
     {
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER))
         {
-            av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
-            av_log(NULL, AV_LOG_FATAL, "(Did you set the DISPLAY variable?)\n");
-            return -1;
+            std::lock_guard<std::mutex> lock(sdlLifecycleMutex);
+            // 画面由 QRhi 负责，无须创建 SDL 视频子系统。每实例持有并归还自己的引用。
+            if (!m_sdlInitialized) {
+                if (SDL_InitSubSystem(sdlSubsystems)) {
+                    av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
+                    return -1;
+                }
+                m_sdlInitialized = true;
+            }
         }
         // 初始化Frame帧队列
         if (frame_queue_init(&pictq, &videoq, VIDEO_PICTURE_QUEUE_SIZE_DEFAULT,1) < 0)
@@ -890,6 +900,15 @@ void Oran7FFplayerCore::stream_close()
     frame_queue_destory(&pictq);
     frame_queue_destory(&sampq);
 
+    // 解码器及帧队列已退出，释放本实例单独持有的硬解设备引用。
+    av_buffer_unref(&hw_device_ctx_buffer_ref);
+    if (audio_speed_convert) {
+        sonicDestroyStream(audio_speed_convert);
+        audio_speed_convert = nullptr;
+    }
+    av_channel_layout_uninit(&audio_src.ch_layout);
+    av_channel_layout_uninit(&audio_tgt.ch_layout);
+
     if(input_filename_)
     {
         free(input_filename_);
@@ -897,6 +916,11 @@ void Oran7FFplayerCore::stream_close()
     }
     destory_clock(&audclk);
     destory_clock(&vidclk);
+    if (m_sdlInitialized) {
+        std::lock_guard<std::mutex> lock(sdlLifecycleMutex);
+        SDL_QuitSubSystem(sdlSubsystems);
+        m_sdlInitialized = false;
+    }
 }
 
 /**
@@ -974,6 +998,12 @@ void Oran7FFplayerCore::setD3D11Device(ID3D11Device *dev)
     }
 }
 
+void Oran7FFplayerCore::setAudioParameterQueue(std::shared_ptr<Oran7AudioParameterQueue> queue)
+{
+    // 必须在 prepare 前注入；音频线程只读该成员，不在回调里替换所有权。
+    audio_parameter_queue_ = std::move(queue);
+}
+
 bool Oran7FFplayerCore::create_hw_device_ctx_from_qt_device()
 {
     if (!m_qtDevice) return false;
@@ -1000,6 +1030,7 @@ bool Oran7FFplayerCore::create_hw_device_ctx_from_qt_device()
     }
 
     // 保存到成员 hw_device_ctx_buffer_ref
+    av_buffer_unref(&hw_device_ctx_buffer_ref);
     hw_device_ctx_buffer_ref = hw;
     return true;
 }
@@ -1014,7 +1045,8 @@ int Oran7FFplayerCore::stream_component_open(int stream_index)
 {
     AVCodecContext *avctx;
     const AVCodec *codec;
-    AVChannelLayout av_ch_layout;
+    AVChannelLayout av_ch_layout{};
+    const auto releaseLayout = qScopeGuard([&] { av_channel_layout_uninit(&av_ch_layout); });
     int sample_rate;
     //int nb_channels;            //desperate
     //int64_t channel_layout;//desperate
@@ -1060,7 +1092,7 @@ int Oran7FFplayerCore::stream_component_open(int stream_index)
         {
         case AVMEDIA_TYPE_AUDIO:
             //**OPEN DECODER**//
-            ret = avcodec_open2(avctx, codec, NULL) < 0;
+            ret = avcodec_open2(avctx, codec, NULL);
             if(ret <0)
             {
                 throw std::runtime_error("Faild to open Audio decoder.");
@@ -1082,7 +1114,11 @@ int Oran7FFplayerCore::stream_component_open(int stream_index)
                 throw std::runtime_error("Failed to open SLD_AudioDevice.");
             }
             audio_hw_buf_size = ret;//SDL音频缓冲区的大小(字节为单位)
-            audio_src = audio_tgt;   //暂且将数据源参数等同于目标输出参数
+            audio_src = audio_tgt;
+            // AVChannelLayout 可能含堆内存，源/目标必须独立拥有，不能浅拷贝后分别释放。
+            audio_src.ch_layout = {};
+            if (av_channel_layout_copy(&audio_src.ch_layout, &audio_tgt.ch_layout) < 0)
+                throw std::runtime_error("Failed to copy audio channel layout.");
             /* 初始化audio_buf相关参数 */
             audio_buf_size  = 0;
             audio_buf_index = 0;
@@ -1136,7 +1172,7 @@ int Oran7FFplayerCore::stream_component_open(int stream_index)
                 }
             }
             //**OPEN DECODER**//
-            ret = avcodec_open2(avctx, codec, NULL) < 0;
+            ret = avcodec_open2(avctx, codec, NULL);
             if(ret <0)
             {
                 throw std::runtime_error("Faild to open Video decoder.");
@@ -1191,6 +1227,10 @@ void Oran7FFplayerCore::stream_component_close(int stream_index)
         // 释放audio buf
         av_freep(&audio_buf1);
         audio_buf1_size = 0;
+        av_freep(&audio_sonic_buf);
+        audio_sonic_buf_size = 0;
+        av_freep(&audio_dsp_buf);
+        audio_dsp_buf_size = 0;
         audio_buf = NULL;
         break;
     case AVMEDIA_TYPE_VIDEO:
@@ -1205,6 +1245,8 @@ void Oran7FFplayerCore::stream_component_close(int stream_index)
 
         INFO_LOG << "joinable=" << (video_refresh_thread_ && video_refresh_thread_->joinable());
         safe_join(video_refresh_thread_, "video_refresh_thread");
+        delete video_refresh_thread_;
+        video_refresh_thread_ = nullptr;
 
         viddec.decoder_destroy();
 
@@ -1248,9 +1290,14 @@ int Oran7FFplayerCore::audio_resample_frame(Oran7FFplayerCore *is)
 {
     int data_size, resampled_data_size;
     //int64_t dec_channel_layout; //desperate
-    AVChannelLayout dec_channel_layout;
+    AVChannelLayout dec_channel_layout{};
     // 定义输入和输出的 AVChannelLayout
-    AVChannelLayout in_ch_layout, out_ch_layout;
+    AVChannelLayout in_ch_layout{}, out_ch_layout{};
+    const auto releaseLayouts = qScopeGuard([&] {
+        av_channel_layout_uninit(&dec_channel_layout);
+        av_channel_layout_uninit(&in_ch_layout);
+        av_channel_layout_uninit(&out_ch_layout);
+    });
     int wanted_nb_samples;
     Frame *af;
     int ret = 0;
@@ -1441,8 +1488,21 @@ int Oran7FFplayerCore::audio_resample_frame(Oran7FFplayerCore *is)
         }
         else
         {
-            // 未经重采样，则将指针指向frame中的音频数据
-            is->audio_buf = af->frame->data[0]; // s16交错模式data[0], fltp data[0] data[1]
+            // A0：未经重采样时不再借用解码帧。frame_queue_next 之后帧可能被复用，
+            // 这里复制到稳定的 audio_buf1，保证回调消费期间指针有效。
+            if (data_size <= 0)
+            {
+                ret = -1;
+                throw std::runtime_error("Invalid audio frame size.");
+            }
+            av_fast_malloc(&is->audio_buf1, &is->audio_buf1_size, data_size);
+            if (!is->audio_buf1)
+            {
+                ret = AVERROR(ENOMEM);
+                throw std::runtime_error("Failed to allocate stable audio buffer.");
+            }
+            memcpy(is->audio_buf1, af->frame->data[0], data_size);
+            is->audio_buf = is->audio_buf1;
             resampled_data_size = data_size;
         }
         if (!isnan(af->pts))
@@ -1476,6 +1536,31 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
     Oran7FFplayerCore *is = (Oran7FFplayerCore *)opaque;
     int audio_size, len1;
     is->audio_callback_time = av_gettime_relative();
+
+    // A0：每块音频只取一次最新参数；seek 代际变化时清理旧 PCM、Sonic 积压和 DSP 历史。
+    if (is->audio_processor_)
+    {
+        Oran7AudioParameters parameters;
+        if (is->audio_parameter_queue_
+            && is->audio_parameter_queue_->popLatest(&parameters))
+        {
+            is->audio_processor_->setParameters(parameters);
+        }
+
+        const std::uint32_t discontinuity =
+            is->audio_discontinuity_.load(std::memory_order_acquire);
+        if (discontinuity != is->audio_seen_discontinuity_)
+        {
+            is->audio_seen_discontinuity_ = discontinuity;
+            is->audio_processor_->reset();
+            // 丢弃旧 serial 尚未输出的 PCM；下一轮循环重新从采样队列取帧。
+            is->audio_buf_index = static_cast<int>(is->audio_buf_size);
+            is->audio_buf = NULL;
+            if (is->audio_speed_convert)
+                sonicFlushStream(is->audio_speed_convert);
+        }
+    }
+
     // 现在设置是每次需要2048个采样点
     // len = 8192
     // len 4096
@@ -1503,8 +1588,9 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
             {
                 // 静音的逻辑
                 /* if error, just output silence */
+                // 静音长度按协商格式计算：frame_size 是一帧（每声道 1 个采样）的字节数。
                 is->audio_buf = NULL;
-                is->audio_buf_size = is->audio_tgt.frame_size * SDL_AUDIO_MIN_BUFFER_SIZE / is->audio_tgt.frame_size;
+                is->audio_buf_size = is->audio_tgt.frame_size * SDL_AUDIO_MIN_BUFFER_SIZE;
                 if(is->eof )
                 {
                     is->Audio_EOF=true;//音频播放结束
@@ -1565,31 +1651,60 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
                 num_samples =  sonicSamplesAvailable(is->audio_speed_convert);
                 //目前只支持2通道的
                 out_size = (num_samples) * av_get_bytes_per_sample(is->audio_tgt.fmt) * is->audio_tgt.channels;
-                av_fast_malloc(&is->audio_buf1, &is->audio_buf1_size, out_size);
+                // A0：Sonic 输出使用独立缓冲，避免与输入（可能是 audio_buf1）重叠。
+                av_fast_malloc(&is->audio_sonic_buf, &is->audio_sonic_buf_size, out_size);
+                if (!is->audio_sonic_buf)
+                {
+                    av_log(NULL, AV_LOG_ERROR, "Failed to allocate sonic output buffer\n");
+                    is->audio_buf_size = 0;
+                    continue;
+                }
                 if(out_ret)
                 {
                     // 从流中读取处理好的数据
                     if(is->audio_tgt.fmt == AV_SAMPLE_FMT_FLT)
                     {
                         sonic_samples = sonicReadFloatFromStream(is->audio_speed_convert,
-                                                                 (float *)is->audio_buf1,
+                                                                 (float *)is->audio_sonic_buf,
                                                                  num_samples);
                     }
                     else  if(is->audio_tgt.fmt == AV_SAMPLE_FMT_S16) {
                         sonic_samples = sonicReadShortFromStream(is->audio_speed_convert,
-                                                                 (short *)is->audio_buf1,
+                                                                 (short *)is->audio_sonic_buf,
                                                                  num_samples);
                     }
                     else
                     {
                         INFO_LOG<< "[ERROR]sonic unspport fmt: " << is->audio_tgt.fmt;
                     }
-                    is->audio_buf = is->audio_buf1;
+                    is->audio_buf = is->audio_sonic_buf;
                     // std::cout << "mdy num_samples: " << num_samples<<std::endl;
                     // std::cout << "orig audio_buf_size: " << is->audio_buf_size<<std::endl;
                     is->audio_buf_size = sonic_samples * is->audio_tgt.channels * av_get_bytes_per_sample(is->audio_tgt.fmt);
                     //                    LOG(INFO) << "mdy audio_buf_size: " << audio_buf_size;
                     is->audio_buf_index = 0;
+                }
+            }
+
+            // A0-3：DSP 放在变速之后，处理的是最终输出块；仅 F32 设备启用。
+            if (is->audio_processor_ && is->audio_processor_->enabled()
+                && is->audio_tgt.fmt == AV_SAMPLE_FMT_FLT
+                && is->audio_buf && is->audio_buf_size > 0)
+            {
+                const int frameSize = is->audio_tgt.frame_size;
+                const int frames = static_cast<int>(is->audio_buf_size) / frameSize;
+                if (frameSize > 0 && frames > 0)
+                {
+                    const int bytes = frames * frameSize;
+                    av_fast_malloc(&is->audio_dsp_buf, &is->audio_dsp_buf_size, bytes);
+                    if (is->audio_dsp_buf)
+                    {
+                        is->audio_processor_->process(
+                            reinterpret_cast<const float *>(is->audio_buf),
+                            reinterpret_cast<float *>(is->audio_dsp_buf), frames);
+                        is->audio_buf = is->audio_dsp_buf;
+                        is->audio_buf_size = static_cast<unsigned int>(bytes);
+                    }
                 }
             }
         }
@@ -1599,16 +1714,10 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
         if (len1 > len)
             len1 = len;
 
-        if (is->audio_buf && is->audio_volume == SDL_MIX_MAXVOLUME)
-            memcpy(stream, (uint8_t *)is->audio_buf + is->audio_buf_index, len1);
-        else
-        {
-            /*First slience then be mix Audio if have data*/
-            memset(stream,0,len1);
-            if(is->audio_buf)
-                SDL_MixAudioFormat(stream, (uint8_t *)is->audio_buf + is->audio_buf_index,
-                                   AUDIO_S16SYS, len1, is->audio_volume.load());
-        }
+        // 音量在 float/整数域按样本斜坡应用；source 为空时输出静音。
+        is->applyVolumeToStream(stream,
+                                is->audio_buf ? (uint8_t *)is->audio_buf + is->audio_buf_index : nullptr,
+                                len1);
         len -= len1;            // 读了多少数据后，len要减少相应的长度
         stream += len1;     // stream 拷贝的位置也发生偏移
         /* 更新is->audio_buf_index，指向audio_buf中未被拷贝到stream的数据（剩余数据）的起始位置 */
@@ -1627,6 +1736,61 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
 }
 
 /**
+ * @brief Oran7FFplayerCore::applyVolumeToStream
+ * 按 audio_tgt.fmt 在 float 或 S16 域应用音量斜坡；不分配、不加锁。
+ * 目标约 20ms 达到，避免拖动音量条时的 zipper 噪声。
+ */
+void Oran7FFplayerCore::applyVolumeToStream(Uint8 *stream, const Uint8 *source, int bytes) noexcept
+{
+    if (!stream || bytes <= 0)
+        return;
+
+    const float target = static_cast<float>(audio_volume.load(std::memory_order_relaxed))
+                       / static_cast<float>(SDL_MIX_MAXVOLUME);
+    audio_volume_ramp_.setTarget(target);
+
+    const int frameSize = audio_tgt.frame_size;
+    if (!source || frameSize <= 0 || audio_tgt.channels <= 0)
+    {
+        memset(stream, 0, bytes);
+        return;
+    }
+
+    const bool isFloat = audio_tgt.fmt == AV_SAMPLE_FMT_FLT;
+    if (!isFloat && audio_tgt.fmt != AV_SAMPLE_FMT_S16)
+    {
+        // 未预期的设备格式：宁可静音，也不把 S16 缓冲当 float 解释。
+        memset(stream, 0, bytes);
+        return;
+    }
+
+    const int frames = bytes / frameSize;
+    const int processedBytes = frames * frameSize;
+    if (frames <= 0)
+    {
+        memset(stream, 0, bytes);
+        return;
+    }
+
+    const int samples = frames * audio_tgt.channels;
+    if (isFloat)
+    {
+        audio_volume_ramp_.applyFloat(reinterpret_cast<float *>(stream),
+                                      reinterpret_cast<const float *>(source),
+                                      samples);
+    }
+    else
+    {
+        audio_volume_ramp_.applyS16(reinterpret_cast<short *>(stream),
+                                    reinterpret_cast<const short *>(source),
+                                    samples);
+    }
+
+    if (processedBytes < bytes)
+        memset(stream + processedBytes, 0, bytes - processedBytes);
+}
+
+/**
  * @brief Oran7FFplayerCore::audio_open
  * @param wanted_channel_layout
  * @param wanted_nb_channels
@@ -1637,10 +1801,10 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
 int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wanted_nb_channels, int wanted_sample_rate, AudioParams *audio_hw_params)
 {
     (void)wanted_channel_layout;//--->Discard
+    audio_processor_.reset(); // 重新协商格式时丢弃旧处理器状态
     SDL_AudioSpec wanted_spec{}, spec{};
     // 音频参数设置SDL_AudioSpec
     wanted_spec.freq = wanted_sample_rate;          // 采样频率
-    wanted_spec.format = AUDIO_S16SYS;              // 采样点格式
     wanted_spec.channels = wanted_nb_channels;  // 通道数
     wanted_spec.silence = 0;                                    // 是否静音
     //    wanted_spec.samples = 2048;       // 23.2ms -> 46.4ms 每次读取的采样数量，多久产生一次回调和 samples
@@ -1649,34 +1813,71 @@ int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wan
     wanted_spec.callback = &Oran7FFplayerCore::sdl_audio_callback; // 回调函数
     wanted_spec.userdata = this;
 
-    /* SDL_OpenAudioDevice */
-    //打开音频设备SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE
-    if (!m_audioDevice.open(wanted_spec, spec, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE))
+    const int allowedChanges = SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE;
+    auto openDevice = [&](SDL_AudioFormat format, AVSampleFormat avFormat) -> bool
     {
-        INFO_LOG<<"[ERROR]Failed to open audio device(SDL_GetError()): "<<std::string(SDL_GetError());
+        wanted_spec.format = format;
+        if (!m_audioDevice.open(wanted_spec, spec, allowedChanges))
+            return false;
+        // 未允许格式变更时，SDL 应按请求格式打开；若实际格式不同则走回退，不把 S16 缓冲当 float 用。
+        if (spec.format != format)
+        {
+            m_audioDevice.close();
+            return false;
+        }
+        audio_hw_params->fmt = avFormat;
+        return true;
+    };
+
+    // A0-3：优先 F32；失败时关闭并重试 S16。两条路径都由 audio_tgt.fmt 驱动。
+    bool opened = openDevice(AUDIO_F32SYS, AV_SAMPLE_FMT_FLT);
+    if (!opened)
+    {
+        INFO_LOG << "[audio_open] F32 device unavailable, retry S16: " << SDL_GetError();
+        opened = openDevice(AUDIO_S16SYS, AV_SAMPLE_FMT_S16);
+    }
+    if (!opened)
+    {
+        INFO_LOG << "[ERROR]Failed to open audio device(SDL_GetError()): " << std::string(SDL_GetError());
         return -1;
     }
-    // wanted_spec是期望的参数，spec是实际的参数，wanted_spec和spec都是SDL中的结构。
-    // 此处audio_hw_params是FFmpeg中的参数，输出参数供上级函数使用
-    // audio_hw_params保存的参数，就是在做重采样的时候要转成的格式。
-    audio_hw_params->fmt = AV_SAMPLE_FMT_S16;
+
     audio_hw_params->freq = spec.freq;
-    av_channel_layout_default(&audio_hw_params->ch_layout,spec.channels);
-    audio_hw_params->channels =  spec.channels;
+    av_channel_layout_default(&audio_hw_params->ch_layout, spec.channels);
+    audio_hw_params->channels = spec.channels;
     /* audio_hw_params->frame_size这里只是计算一个采样点占用的字节数 */
     audio_hw_params->frame_size = av_samples_get_buffer_size(NULL, audio_hw_params->channels,
                                                              1,
                                                              audio_hw_params->fmt, 1);
     // 1秒需要的字节数
     audio_hw_params->bytes_per_sec = av_samples_get_buffer_size(NULL, audio_hw_params->channels,
-                                                                audio_hw_params->freq,      // 44100
+                                                                audio_hw_params->freq,
                                                                 audio_hw_params->fmt, 1);
-    if (audio_hw_params->bytes_per_sec <= 0 || audio_hw_params->frame_size <= 0) {
+    if (audio_hw_params->bytes_per_sec <= 0 || audio_hw_params->frame_size <= 0)
+    {
         av_log(NULL, AV_LOG_ERROR, "av_samples_get_buffer_size failed\n");
         m_audioDevice.close();
         return -1;
     }
-    // 如2帧数据，一帧就是1024个采样点， 1024*2*2 * 2 = 8192字节 (1024采样点，2通道，每个采样点2字节(AV_SAMPLE_FMT_S16)，2帧)
+
+    // A0：参数队列存在时创建处理器；F32 设备上才会在回调里调用 process()。
+    if (audio_parameter_queue_)
+    {
+        audio_processor_ = std::make_unique<Oran7AudioProcessor>();
+        const int maxFrames = FFMAX(1, static_cast<int>(spec.samples));
+        if (!audio_processor_->prepare(audio_hw_params->freq,
+                                       audio_hw_params->channels,
+                                       maxFrames))
+        {
+            audio_processor_.reset();
+        }
+    }
+
+    // 打开时直接从当前音量开始，避免一次可听见的淡入。
+    audio_volume_ramp_.prepare(spec.freq);
+    audio_volume_ramp_.reset(static_cast<float>(audio_volume.load(std::memory_order_relaxed))
+                             / static_cast<float>(SDL_MIX_MAXVOLUME));
+
     return spec.size;	/* SDL内部缓存的数据字节, samples * channels *byte_per_sample */
 }
 
@@ -1686,6 +1887,9 @@ int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wan
 void Oran7FFplayerCore::audio_close()
 {
     m_audioDevice.close();
+    // 设备关闭会停止回调；此后才能安全释放处理器状态。
+    // 参数队列保留，重新打开格式时再创建处理器。
+    audio_processor_.reset();
 
     INFO_LOG<<"SDL Audio deviceo be closed.";
 }

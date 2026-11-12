@@ -29,7 +29,7 @@ Window {
         property bool asyncApply: false
         property var applied: ({})
         property var capture: ({outputIndex: 4, fps: 60, drawMouse: true, debugLog: false})
-        property var options: ({mode: 1, outputDirectory: "", filePrefix: "中文录像", width: 0,
+        property var options: ({mode: 1, format: "mp4", outputDirectory: "", filePrefix: "中文录像", width: 0,
             height: 0, fps: 60, bitrateKbps: 40000, audioEnabled: true,
             whipUrl: "https://example.test/whip", bearerToken: "retained", roomId: "room"})
         signal screenCaptureApplyFinished(bool ok, string msg)

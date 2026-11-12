@@ -19,6 +19,13 @@ target_include_directories(media_checks PRIVATE "${CAP}" "${ROOT}/src/cpp/Global
 target_link_libraries(media_checks PRIVATE Qt6::Core Oran7Core
  "${FFMPEG_ROOT_DIR}/lib/avutil.lib" "${FFMPEG_ROOT_DIR}/lib/avcodec.lib" "${FFMPEG_ROOT_DIR}/lib/avformat.lib" "${FFMPEG_ROOT_DIR}/lib/swresample.lib" ole32)
 add_executable(http_checks http.cpp)
+add_executable(recording_throughput_checks throughput.cpp "${CAP}/Oran7VideoEncoder.cpp"
+    "${CAP}/Oran7AudioEncoder.cpp" "${CAP}/Oran7Mp4Muxer.cpp")
+set_target_properties(recording_throughput_checks PROPERTIES AUTOMOC OFF)
+target_include_directories(recording_throughput_checks PRIVATE "${CAP}"
+    "${ROOT}/src/cpp/GlobalSingleton" "${FFMPEG_ROOT_DIR}/include")
+get_target_property(recordingLibraries media_checks LINK_LIBRARIES)
+target_link_libraries(recording_throughput_checks PRIVATE ${recordingLibraries})
 set_target_properties(http_checks PROPERTIES AUTOMOC OFF OUTPUT_NAME whip_local_http_checks)
 target_include_directories(http_checks PRIVATE "${CAP}" "${ROOT}/src/cpp/GlobalSingleton" "${FFMPEG_ROOT_DIR}/include")
 target_link_libraries(http_checks PRIVATE Qt6::Core Qt6::Gui Qt6::Network

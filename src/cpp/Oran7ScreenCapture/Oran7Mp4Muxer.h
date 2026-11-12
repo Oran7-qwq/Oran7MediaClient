@@ -4,30 +4,33 @@
 #include "Oran7VideoEncoder.h"
 #include "Oran7AudioEncoder.h"
 
-extern "C"{
+extern "C"
+{
 #include <libavformat/avformat.h>
 #include <libavcodec/bsf.h>
 }
 
+// 兼容已有类名；共享本地 MP4 / FLV 文件封装与有界包消费链路。
 class Oran7Mp4Muxer
 {
-public:
+  public:
     Oran7Mp4Muxer();
     ~Oran7Mp4Muxer();
 
-    bool open(const char* filePath, int width, int height,
-              AVRational frameRate,
-              std::shared_ptr<Oran7VideoEncoder>& _video_encoder,
-              std::shared_ptr<Oran7AudioEncoder>& audio_encoder);
+    bool open(const char* filePath, int width, int height, AVRational frameRate,
+              std::shared_ptr<Oran7VideoEncoder>& _video_encoder, std::shared_ptr<Oran7AudioEncoder>& audio_encoder,
+              const char* format = "mp4");
     void close();
     void drainRemaining();
-    bool isRunning(){return this->_running.load();}
+    bool isRunning() { return this->_running.load(); }
 
     using ErrorCallback = std::function<void(const std::string&)>;
-    void setErrorCallback(ErrorCallback cb) { _onError =std::move(cb); }
-private:
+    void setErrorCallback(ErrorCallback cb) { _onError = std::move(cb); }
+
+  private:
     void muxLoop();
     void flush();
+    bool writePacket(AVPacket* packet, AVStream* stream, AVRational sourceTimeBase);
 
     std::atomic<bool> _running{false};
     std::thread _thread;

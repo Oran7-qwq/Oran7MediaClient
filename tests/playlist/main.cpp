@@ -59,7 +59,7 @@ static void checkRoamFiltering() {
         check(*batches==exhausted,"exhausted filter cannot create an unbounded recommendation retry loop");
         roam.setRoamFilterLiked(false); *batchMode=0;
         roam.advance(1); batchGate->release(); until([&]{return emitted>playing+1;});
-        check(current.value("songId").toLongLong()==50001,"pass-through strategy accepts liked songs after disabling");
+        check(current.value("songId").toLongLong()==1,"disabling the liked filter accepts a liked song while avoiding queued duplicates");
         roam.cancel(); roam.setRoamFilterLiked(true); *batchMode=2;
         // 取消是协作式；同时释放仍可能运行的旧预取与新请求，旧结果必须被代际丢弃。
         roam.advance(1); batchGate->release(2);
@@ -102,6 +102,44 @@ static void checkRoamLikedReadiness() {
         }
         queue.shutdown(); service.shutdown(); gate->release(); Oran7Async::waitForDone();
     }
+}
+static void checkRecommendationModes() {
+    Oran7TrackLibrary tracks; Oran7PlaybackState state;
+    tracks.replaceSearchResults({song(8)});
+    auto gate=std::make_shared<QSemaphore>();
+    auto modeSeen=std::make_shared<std::atomic_int>(0);
+    Oran7CloudMusicService cloud(tracks,{
+        [] { return QVariantMap{{"isLoggedIn",true},{"cookie","fixture-fm"}}; },
+        [gate,modeSeen](const QString& operation,const QVariantMap& args)->QVariant {
+            if (operation=="fetchLikedSongs") return QVariantMap{{"playlistId",99},{"songs",QVariantList{song(9)}}};
+            const int mode=args.value("recommendationMode").toInt();
+            *modeSeen=mode;
+            if (!gate->tryAcquire(1,1500)) return {};
+            return QVariantList{song(mode*100+1),song(mode*100+1),song(mode*100+2),song(mode*100+3)};
+        },[](qint64){},[](qint64,bool){} });
+    Oran7PlaybackViewModel queue(tracks,state,cloud);
+    int plays=0;
+    QObject::connect(&queue,&Oran7PlaybackViewModel::trackRequested,[&](const QVariantMap& fields,bool) {
+        ++plays; state.selectTrack(*Oran7Track::fromVariantMap(fields));
+    });
+    check(!queue.selectRecommendation(3),"heart mode rejects a missing seed without starting a request");
+    check(queue.selectRecommendation(4),"private FM starts without a current song or liked playlist seed");
+    until([&]{return *modeSeen==4;});
+    gate->release(); until([&]{return plays==1;});
+    check(state.currentTrack().songId==401 && tracks.recommendations()->count()==3 && tracks.search()->get(0).value("songId")==8,
+          "recommendations deduplicate into their own model without overwriting search");
+    queue.advance(1); check(state.currentTrack().songId==402,"FM next consumes the shared recommendation queue");
+    queue.advance(-1); check(state.currentTrack().songId==401,"FM previous replays queue history");
+    check(queue.activate(tracks.recommendations(),2) && state.currentTrack().songId==403,"direct recommendation selection follows the queue index");
+    check(queue.selectRecommendation(5),"familiar mode switches providers");
+    check(queue.selectRecommendation(6),"exploration supersedes an in-flight recommendation");
+    gate->release(4); until([&]{return state.currentTrack().songId==601;});
+    check(state.mode()==6 && queue.owner()=="recommendation","only the latest mode can publish and play its batch");
+    check(queue.activate(tracks.search(),0) && state.mode()==0 && state.currentTrack().songId==8,
+          "manual search selection exits recommendation and restores ordinary order");
+    const auto stoppedPlays=plays; gate->release(4); QTest::qWait(40);
+    check(plays==stoppedPlays && tracks.recommendations()->count()==0,"canceled prefetch cannot steal focus or revive a cleared queue");
+    queue.shutdown(); cloud.shutdown(); gate->release(8); Oran7Async::waitForDone();
 }
 int main(int argc,char**argv) {
     QCoreApplication app(argc,argv);
@@ -178,5 +216,6 @@ int main(int argc,char**argv) {
     cloud.shutdown(); gate->release(8); Oran7Async::waitForDone();
     checkRoamFiltering();
     checkRoamLikedReadiness();
+    checkRecommendationModes();
     std::printf("PASS: %d policy checks\n",count);
 }

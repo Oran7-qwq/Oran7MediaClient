@@ -90,14 +90,15 @@ bool Oran7CloudMusicService::toggleLike(const QVariantMap& track)
     return true;
 }
 void Oran7CloudMusicService::cancelRoam() { ++m_roamRevision; m_roamTask.cancel(); }
-quint64 Oran7CloudMusicService::requestRoam(qint64 seed)
+quint64 Oran7CloudMusicService::requestRoam(qint64 seed, int mode)
 {
-    if (!updateSession() || seed <= 0) return 0;
+    if (mode < 3 || mode > 6 || !updateSession() || (mode == 3 && seed <= 0)) return 0;
     cancelRoam();
     const auto revision = m_roamRevision, session = m_session;
     const auto cookie = m_cookie;
     auto args = m_hooks.credentials();
     args.insert("songId", seed); args.insert("playlistId", m_playlistId);
+    args.insert("recommendationMode", mode);
     Oran7Hooks worker; worker.request = m_hooks.request;
     m_roamTask = Oran7Async::run(this,
         [worker, args] { return requestValue(worker, QStringLiteral("roamSongs"), args); },

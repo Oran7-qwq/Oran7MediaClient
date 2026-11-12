@@ -11,6 +11,19 @@ import Client 1.0
 
 Oran7SettingsPanel {
     id: root
+    property var equalizerEditor: null
+    function openEqualizer() {
+        if (equalizerEditor) { equalizerEditor.requestActivate(); return }
+        const component = Qt.createComponent(Qt.resolvedUrl("../../Components/Oran7GlobalComponents/Oran7EqualizerWindow.qml"))
+        if (component.status !== Component.Ready) { console.warn(component.errorString()); return }
+        equalizerEditor = component.createObject(root, {effects: Client.audioEffects, transientParent: root.Window.window})
+        if (!equalizerEditor) return
+        const host = root.Window.window
+        equalizerEditor.x = host ? host.x + (host.width - equalizerEditor.width) / 2 : 80
+        equalizerEditor.y = host ? host.y + (host.height - equalizerEditor.height) / 2 : 80
+        equalizerEditor.commitRequested.connect(function() { Client.saveAudioEffects() })
+        equalizerEditor.showEditor()
+    }
     width: Oran7Theme.Oran7MainGUI.settingWinItemDefalutWidth
     x: root.savedNormalX
 
@@ -506,6 +519,16 @@ Oran7SettingsPanel {
                         }
                         //<<--- 悬浮歌词窗（桌面歌词）
                         Oran7SettingItem{text:qsTranslate("Oran7Ui", "悬浮");fontBold:true;showTag:false}
+                        Oran7NumSettingGroup {
+                            title: qsTranslate("Oran7Ui", "悬浮窗歌词高度")
+                            value: Oran7Theme.Oran7MusicLyricsIsland.floatingLyricsHeight ?? 52
+                            sliderValueFrom: 40
+                            sliderValueTo: 96
+                            stepSize: 1
+                            onCommitted: (value) => {
+                                Oran7Theme.saveComponentToken("Oran7MusicLyricsIsland", "floatingLyricsHeight", value)
+                            }
+                        }
                         // --- Floating-Enabled ---
                         Oran7SettingItem {
                             text: qsTranslate("Oran7Ui", "启用")
@@ -603,6 +626,233 @@ Oran7SettingsPanel {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+                // ~~~~~ AudioEffects ~~~~~
+                Oran7SettingItem{
+                    id: audioEffectsSetting
+                    objectName: "audioEffectsSettingsGroup"
+                    index: 4
+                    text: qsTranslate("Oran7Ui", "音效均衡器")
+                    fontBold: true
+                    gradientMaskEnabled: true
+
+                    enableMouseArea: true
+                    property bool expand: false
+                    onRightClicked: expand = !expand
+                    onLeftClicked: expand = !expand
+
+                    enableHoverHandler: true
+                }
+                Oran7ExpandItem{
+                    expand: audioEffectsSetting.expand
+                    Column{
+                        Oran7SettingItem {
+                            text: qsTranslate("Oran7Ui", "启用音效")
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                id: audioEffectsToggle
+                                objectName: "audioEffectsEnabledSwitch"
+                                checked: Client.audioEffects.enabled
+                                onSwitchToggleChanged: function (checked) {
+                                    Client.audioEffects.enabled = checked
+                                }
+                                Connections {
+                                    target: Client.audioEffects
+                                    function onEnabledChanged() {
+                                        audioEffectsToggle.checked = Client.audioEffects.enabled
+                                    }
+                                }
+                            }
+                        }
+
+                        Oran7OptionSettingGroup {
+                            objectName: "audioEffectsPresetGroup"
+                            title: qsTranslate("Oran7Ui", "预设")
+                            options: {
+                                const list = Client.audioEffects.presets.map(function (preset) {
+                                    return { label: preset.label, enabled: true }
+                                })
+                                if (Client.audioEffects.presetId === "custom")
+                                    list.push({ label: qsTranslate("Oran7Ui", "自定义"), enabled: false })
+                                return list
+                            }
+                            currentIndex: {
+                                if (Client.audioEffects.presetId === "custom")
+                                    return Client.audioEffects.presets.length
+                                const list = Client.audioEffects.presets
+                                for (let i = 0; i < list.length; ++i)
+                                    if (list[i].id === Client.audioEffects.presetId) return i
+                                return -1
+                            }
+                            onOptionSelected: function (index) {
+                                Client.audioEffects.applyPreset(Client.audioEffects.presets[index].id)
+                            }
+                        }
+
+                        Column {
+                            width: parent.width; spacing: 5; topPadding: 7; bottomPadding: 8
+                            Label { text: qsTranslate("Oran7Ui", "10 段均衡器"); color: Oran7MainUiSetting.textColor; font.pixelSize: 12 }
+                            Oran7PreferenceAction {
+                                width: parent.width
+                                text: qsTranslate("Oran7Ui", "打开面板")
+                                onClicked: root.openEqualizer()
+                            }
+                        }
+
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsBassGroup"
+                            title: qsTranslate("Oran7Ui", "低音增强 (dB)")
+                            value: Client.audioEffects.bassBoostDb
+                            sliderValueFrom: 0
+                            sliderValueTo: 12
+                            stepSize: 0.5
+                            valueDecimals: 1
+                            onMoved: function (value) { Client.audioEffects.bassBoostDb = value }
+                            onCommitted: function (value) { Client.audioEffects.bassBoostDb = value }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsHighPassGroup"
+                            title: qsTranslate("Oran7Ui", "高通滤波 (Hz)")
+                            value: Client.audioEffects.highPassHz
+                            sliderValueFrom: 20
+                            sliderValueTo: 200
+                            stepSize: 5
+                            valueDecimals: 0
+                            onMoved: function (value) { Client.audioEffects.highPassHz = value }
+                            onCommitted: function (value) { Client.audioEffects.highPassHz = value }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsLowPassGroup"
+                            title: qsTranslate("Oran7Ui", "低通滤波 (Hz)")
+                            value: Client.audioEffects.lowPassHz
+                            sliderValueFrom: 8000
+                            sliderValueTo: 20000
+                            stepSize: 100
+                            valueDecimals: 0
+                            onMoved: function (value) { Client.audioEffects.lowPassHz = value }
+                            onCommitted: function (value) { Client.audioEffects.lowPassHz = value }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsWidthGroup"
+                            title: qsTranslate("Oran7Ui", "立体声宽度")
+                            value: Client.audioEffects.stereoWidth
+                            sliderValueFrom: 0
+                            sliderValueTo: 2
+                            stepSize: 0.05
+                            valueDecimals: 2
+                            onMoved: function (value) { Client.audioEffects.stereoWidth = value }
+                            onCommitted: function (value) { Client.audioEffects.stereoWidth = value }
+                        }
+                        Oran7OptionSettingGroup {
+                            objectName: "audioEffectsCrossfeedGroup"
+                            title: qsTranslate("Oran7Ui", "交叉馈送")
+                            options: [
+                                { label: qsTranslate("Oran7Ui", "关闭"), enabled: true },
+                                { label: qsTranslate("Oran7Ui", "轻"), enabled: true },
+                                { label: qsTranslate("Oran7Ui", "标准"), enabled: true },
+                                { label: qsTranslate("Oran7Ui", "强"), enabled: true }
+                            ]
+                            currentIndex: Client.audioEffects.crossfeed
+                            onOptionSelected: function (index) {
+                                Client.audioEffects.crossfeed = index
+                            }
+                        }
+                        Oran7SettingItem {
+                            text: qsTranslate("Oran7Ui", "压缩器")
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                id: audioEffectsCompressorToggle
+                                objectName: "audioEffectsCompressorSwitch"
+                                checked: Client.audioEffects.compressorEnabled
+                                onSwitchToggleChanged: function (checked) {
+                                    Client.audioEffects.compressorEnabled = checked
+                                }
+                                Connections {
+                                    target: Client.audioEffects
+                                    function onCompressorEnabledChanged() {
+                                        audioEffectsCompressorToggle.checked = Client.audioEffects.compressorEnabled
+                                    }
+                                }
+                            }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsThresholdGroup"
+                            title: qsTranslate("Oran7Ui", "压缩阈值 (dB)")
+                            value: Client.audioEffects.compressorThresholdDb
+                            sliderValueFrom: -60
+                            sliderValueTo: 0
+                            stepSize: 1
+                            valueDecimals: 0
+                            enabled: Client.audioEffects.compressorEnabled
+                            onMoved: function (value) { Client.audioEffects.compressorThresholdDb = value }
+                            onCommitted: function (value) { Client.audioEffects.compressorThresholdDb = value }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsRatioGroup"
+                            title: qsTranslate("Oran7Ui", "压缩比率")
+                            value: Client.audioEffects.compressorRatio
+                            sliderValueFrom: 1
+                            sliderValueTo: 20
+                            stepSize: 0.5
+                            valueDecimals: 1
+                            enabled: Client.audioEffects.compressorEnabled
+                            onMoved: function (value) { Client.audioEffects.compressorRatio = value }
+                            onCommitted: function (value) { Client.audioEffects.compressorRatio = value }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsMakeupGroup"
+                            title: qsTranslate("Oran7Ui", "压缩补偿 (dB)")
+                            value: Client.audioEffects.compressorMakeupDb
+                            sliderValueFrom: -12
+                            sliderValueTo: 12
+                            stepSize: 0.5
+                            valueDecimals: 1
+                            enabled: Client.audioEffects.compressorEnabled
+                            onMoved: function (value) { Client.audioEffects.compressorMakeupDb = value }
+                            onCommitted: function (value) { Client.audioEffects.compressorMakeupDb = value }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsPreampGroup"
+                            title: qsTranslate("Oran7Ui", "前级增益 (dB)")
+                            value: Client.audioEffects.preampDb
+                            sliderValueFrom: -24
+                            sliderValueTo: 24
+                            stepSize: 0.5
+                            valueDecimals: 1
+                            onMoved: function (value) { Client.audioEffects.preampDb = value }
+                            onCommitted: function (value) { Client.audioEffects.preampDb = value }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsOutputGroup"
+                            title: qsTranslate("Oran7Ui", "输出增益 (dB)")
+                            value: Client.audioEffects.outputGainDb
+                            sliderValueFrom: -24
+                            sliderValueTo: 24
+                            stepSize: 0.5
+                            valueDecimals: 1
+                            onMoved: function (value) { Client.audioEffects.outputGainDb = value }
+                            onCommitted: function (value) { Client.audioEffects.outputGainDb = value }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "audioEffectsCeilingGroup"
+                            title: qsTranslate("Oran7Ui", "限幅上限 (dB)")
+                            value: Client.audioEffects.limiterCeilingDb
+                            sliderValueFrom: -24
+                            sliderValueTo: 0
+                            stepSize: 0.5
+                            valueDecimals: 1
+                            onMoved: function (value) { Client.audioEffects.limiterCeilingDb = value }
+                            onCommitted: function (value) { Client.audioEffects.limiterCeilingDb = value }
+                        }
+                        Oran7SettingItem {
+                            objectName: "audioEffectsReset"
+                            text: qsTranslate("Oran7Ui", "重置为平直")
+                            showTag: false
+                            enableMouseArea: true
+                            enableHoverHandler: true
+                            onLeftClicked: Client.audioEffects.reset()
                         }
                     }
                 }

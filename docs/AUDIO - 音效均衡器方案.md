@@ -1,12 +1,12 @@
 ---
-status: 📝 评审后修订，待实施
-updated: 2026-10-27
+status: ✅ A0/A1/A2 完成，A3 待实施
+updated: 2026-11-05
 ---
 
 # 音效与均衡器实施方案（AUDIO）
 
 > 首批只交付：默认关闭、可实时调节、可保存预设的 **10 段 EQ + 前级 + 输出保护**。
-> 当前只修订方案，不修改代码、不引入依赖、不启动主程序。A0 验收通过再做 A1，其余效果后续逐项选择。
+> A0～A2 已实施，A3 待实施。真实设备听感由用户验收；代理只运行隔离检查，不启动主程序。
 
 ## 1. 范围与实施顺序
 
@@ -50,7 +50,7 @@ updated: 2026-10-27
 - 解码和重采样块长不固定为 1024。DSP 必须接受任意有效帧数，必要时分成有界小块。
 - 既有回调已有队列锁、swr/Sonic 扩容及日志。新增 DSP 零分配，不等于整个回调已实时安全。
 - `audio_buf` 可能借用 AVFrame 或重采样缓冲，不能默认可原地修改。当前 Sonic 先复制输入再申请输出，不能仅凭别名断言正常路径必然 UAF；失败路径的所有权仍需拆清。
-- 现有 `audio_close()` 有关闭设备后再解锁设备的顺序。A0-a 必须审计并纠正，不能直接插入处理器销毁。
+- `audio_close()` 已由 `Oran7SdlAudioDevice` 收敛（关闭在内部加锁、Close 前不再 Lock；`tests/playback/sdl-audio.cpp` 覆盖旧顺序死锁）。A0-a 仍需复核 `decoder_abort → audio_close → decoder_destroy` 与回调停止的先后，并在关闭后再释放 DSP/Sonic/缓冲。
 
 ## 3. 分层、所有权与参数发布
 
@@ -138,10 +138,10 @@ A0 建议采用固定容量的 **SPSC 值队列**，每个播放器各一份：
 
 ### 预设与 UI
 
-- 首批只做 Flat、人声、低音、明亮四类纯 EQ 预设；每个定义十段增益、前级、输出增益和 ceiling，曲线在 A1 听感验收中确认。
-- 夜间压缩、交叉馈送、混响预设等对应效果完成后再加入，不展示无效功能。
-- 预设使用稳定 id；修改参数显示 Custom。自定义预设明确重名/覆盖交互，内置预设不可删除。
-- reset 恢复 Flat 参数但保留总开关状态；应用预设不擅自开启总开关。
+- 不提供系统内置预设；预设全部由用户通过「保存当前设置」创建，保存十段增益、前级、输出、ceiling 及 A2 字段。
+- 夜间压缩、交叉馈送、混响等效果通过通用参数调整，不再单独造预设。
+- 预设使用稳定 id；修改参数显示「自定义」。自定义预设可重命名/删除，内置预设已移除。
+- reset 恢复平直参数并清空当前预设标识，但保留总开关状态；应用预设不擅自开启总开关。
 - 新音效面板继承 Oran7SettingsPanel，沿用已有设置积木；十段区域在窄面板内横向滚动，不挤压标签与数值。
 - 主题、字体、中英翻译、菜单焦点/ESC/关闭时序沿用现有规则；新增 QML 入 qml.qrc，翻译只走显式维护目标。
 
@@ -158,7 +158,7 @@ A1 配置结构示意：
   "audio": {
     "version": 1,
     "enabled": false,
-    "preset_id": "flat",
+    "preset_id": "custom",
     "settings": {
       "preamp_db": 0.0,
       "band_gains_db": [0,0,0,0,0,0,0,0,0,0],
@@ -241,3 +241,267 @@ config/default.json、qml.qrc、translations/、CMakeLists.txt、设置容器
 项目自有类统一 Oran7 前缀，音效服务/处理器仅 EXE 编译，配置值仅 Core 编译；保持现有 URI、Client 门面和退役协议。实施后补 `docs/modules/Audio - 音效链.md` 及相应 ADR。
 
 关联：[[Player - 播放内核]]、[[ASYNC - 异步与线程]]、[[RUNTIME_STATE - 运行时状态]]、[[Config - 配置与持久化]]、[[UI - QML界面]]、[[BUILD - 构建与验证]]。
+
+## 10. A0 预准备（2026-11-05）
+
+> 本轮只做基线复核、接口/测试契约与实施顺序，不改 `src/`、不改 `main.cpp`、不启动主程序。
+
+### 10.1 基线复核结果
+
+| 方案假设（2026-10-27） | 2026-11-05 实际 | 结论 |
+|---|---|---|
+| `audio_close()` 关闭后再解锁设备 | 已改为 `Oran7SdlAudioDevice`（内部互斥、`closeLocked()` 只 `SDL_CloseAudioDevice`，不再 `LockAudioDevice`）；`tests/playback/sdl-audio.cpp` 用隔离子进程覆盖旧死锁 | **A0-a 的设备顺序已部分完成**；仍需复核回调停止与 DSP 释放先后 |
+| `audio_buf` 可能借用 AVFrame | `audio_resample_frame`：重采样时 `audio_buf = audio_buf1`（`:1439`）；未重采样时 `audio_buf = af->frame->data[0]`（`:1445`），随后 `frame_queue_next`（`:1453`） | **必须修**：借用的帧数据在回调消费前可能被复用；A0 统一复制到稳定 scratch |
+| Sonic 输出与输入别名 | 回调里 `av_fast_malloc(&audio_buf1, ...)` 作为输出（`:1568`），而 `audio_buf` 可能正指向 `audio_buf1`（`:1439`） | **必须修**：输入/输出缓冲彻底分离 |
+| 输出格式 S16 | `audio_open` 请求 `AUDIO_S16SYS`（`:1643`），`audio_hw_params->fmt = AV_SAMPLE_FMT_S16`（`:1662`） | A0-b 待做 |
+| 音量在 SDL 混音 | `SDL_MixAudioFormat(..., AUDIO_S16SYS, ...)`（`:1609`） | A0-b 移到 float 域并做斜坡 |
+| 无参数通道 | 全仓库无 `AudioParameter` / `AudioProcessor` / `audio_dsp` | A0 新增 |
+| seek 有清理 | `read_thread` 中 `packet_queue_flush(&audioq)`（`:405`） | 缺音频侧 serial/DSP 清理 |
+| 测试可复用 | `tests/playback/sdl-audio.cpp`（设备开关/死锁）、`native-io.cpp`（真实 FFmpeg 读取/退役）已存在 | 新增 `tests/audio-dsp`，并扩展 playback 的音频适配检查 |
+
+### 10.2 A0 必须先修的缺陷
+
+1. **借用帧生命周期**：无重采样时 `audio_buf` 指向解码帧，`frame_queue_next` 之后才消费，属于隐式悬空；A0 必须 `av_frame_ref` 或复制到 scratch。
+2. **Sonic 输入/输出别名**：`audio_buf1` 同时是重采样输出与 Sonic 输出，扩容时可能移动/释放正在读的输入。
+3. **静音路径尺寸计算**：`audio_buf_size = frame_size * SDL_AUDIO_MIN_BUFFER_SIZE / frame_size`（`:1507`）等价于固定字节数，切到 F32 后必须按协商格式重算。
+4. **格式假设**：`SDL_MixAudioFormat(AUDIO_S16SYS)`、`audio_tgt.channels * 2` 语义、`bytes_per_sec` 计算都要随 `audio_tgt.fmt` 走。
+5. **无 serial 清理**：连续 seek 时旧 PCM/Sonic/DSP 历史没有身份，不能只用 bool reset。
+6. **无声明的实时边界**：现有回调已有 swr/Sonic 分配与日志；A0 不改这部分，但要把新增 DSP 的零分配边界单独测出来。
+
+### 10.3 预准备接口（先定契约）
+
+A0 先落三个纯 C++ 组件，不依赖 Qt：
+
+```cpp
+// Oran7AudioParameters.h —— 固定大小、可平凡复制；不含 Qt/字符串/容器
+struct Oran7AudioParameters {
+    static constexpr int kBandCount = 10;
+    static constexpr int kVersion = 1;
+    int   version = kVersion;
+    std::uint32_t enabled = 0;          // 0/1；跨线程只用标准定宽类型
+    float preampDb = 0.0f;
+    float outputGainDb = 0.0f;
+    float limiterCeilingDb = -1.0f;
+    float bandGainsDb[kBandCount] = {};
+};
+
+// Oran7AudioParameterQueue.h —— 单生产者(GUI)/单消费者(音频线程)
+class Oran7AudioParameterQueue {
+public:
+    static constexpr int kCapacity = 8;
+    bool push(const Oran7AudioParameters& value);      // GUI；满返回 false
+    bool popLatest(Oran7AudioParameters* out);         // 音频；取最新完整快照
+    bool empty() const;
+private:
+    // 原子 head/tail + 固定槽位；槽位只在 acquire/release 下发布/回收
+};
+
+// Oran7AudioProcessor.h —— 每播放器独占；A0 只做旁路/增益/限幅骨架
+class Oran7AudioProcessor {
+public:
+    bool prepare(int sampleRate, int channels, int maxFrames); // 回调停用期间
+    // 输入只读，输出可写；允许 in==out 由实现拷贝保证
+    void process(const float* in, float* out, int frames);
+    void reset();                                             // 音频线程
+    void setParameters(const Oran7AudioParameters&);
+    bool enabled() const;
+    int latencyFrames() const { return 0; }                   // A0 无新增延迟
+};
+```
+
+接线（A0 只打通，不改变听感）：
+
+- `Oran7MediaPlayer::oran7mp_setAudioParameterQueue(std::shared_ptr<Oran7AudioParameterQueue>)`。
+- `Oran7FFplayerCore` 在 `audio_open()` 成功后 `processor->prepare(audio_tgt.freq, channels, maxFrames)`；回调里先处理、再 Sonic、再音量。
+- `Oran7PlaybackController::prepare()` 在 `oran7mp_prepare_async()` **之前**注入队列（`:115-124`）。
+- 队列为空/未注入时处理器整体旁路，行为与当前版本一致。
+
+### 10.4 实施顺序（每步可独立提交）
+
+| 步骤 | 内容 | 验证 |
+|---|---|---|
+| A0-1 | `Oran7AudioParameters` + `Oran7AudioParameterQueue` + 纯 C++ 测试 | `tests/audio-dsp`：满队列、合并、最后值可达、并发读写无撕裂 |
+| A0-2 | 稳定 PCM 所有权：借用帧复制到 scratch；Sonic 输入/输出分离；静音尺寸按格式计算 | `native-io` 回归；新增回调级检查：任意块长、零样本、失败路径静音 |
+| A0-3 | F32 协商 + S16 回退；float 音量斜坡；格式适配边界 | 扩展 `sdl-audio`：F32 dummy 设备、F32 失败回退 S16、不同采样率 |
+| A0-4 | 注入参数队列 + 旁路处理器 + serial reset（seek/切歌） | `tests/audio-dsp` 并发；连续 seek/切歌不残留旧 PCM |
+| A0-5 | 文档回填、全量 checks、听感验收 | `ctest --preset checks`；用户试听 |
+
+### 10.5 测试落点与命令
+
+```text
+tests/audio-dsp/                纯 DSP/队列：无 Qt、无 SDL、无设备
+tests/playback/sdl-audio.cpp    F32/S16 打开、关闭顺序（扩展）
+tests/playback/native-audio.cpp 新：真实 core + dummy SDL，回调级适配/生命周期
+```
+
+```bat
+cmake --preset checks
+cmake --build --preset checks
+ctest --preset checks
+```
+
+只编译 Release；不启动主程序、不采真实音频、不做打包验收。
+
+### 10.6 待确认
+
+| # | 问题 | 建议 |
+|---|---|---|
+| 1 | F32 打开失败是否回退 S16？ | 回退一次并记录；不影响关闭顺序 |
+| 2 | 借用帧是否一律复制？ | 是，统一 scratch；复制成本可测且低于悬空风险 |
+| 3 | 参数队列容量/补交 | 容量 8；GUI 满时保留最新值，16ms 定时器重试 |
+| 4 | A0 是否含音量斜坡？ | 含（A0-b），否则 A1 开 EQ 时仍有 zipper |
+| 5 | 关总开关的语义 | 旁路新增音效，但保留 A0 的格式/缓冲/音量改造 |
+
+### 10.7 A0-1 / A0-2 实施记录（2026-11-05）
+
+**A0-1 参数契约与队列**
+
+- 新增 `src/cpp/Oran7MediaPlayer/Audio/Oran7AudioParameters.h`：固定大小值对象（`version/revision/enabled/preampDb/outputGainDb/limiterCeilingDb/bandGainsDb[10]`），`static_assert` 可平凡复制、标准布局；跨线程只用定宽类型与 float。
+- 新增 `src/cpp/Oran7MediaPlayer/Audio/Oran7AudioParameterQueue.h`：SPSC、容量 8（2 的幂）、读写索引分缓存行；满时拒绝而不覆盖；`popLatest()` 一次取走当前可见槽位并返回最新完整快照；断言 32 位原子无锁。
+- 新增 `tests/audio-dsp/parameter-queue.cpp` 与 `tests/audio-dsp/CMakeLists.txt`，覆盖空/满/最新值/回绕/20 万次并发发布；`tests/CMakeLists.txt` 注册 `audio-dsp` 套件。
+- 结果：`audio_parameter_queue_checks` 通过（1/1），并发检查中 revision 单调、快照字段一致。
+
+**A0-2 PCM 所有权与 Sonic 缓冲**
+
+- `Oran7FFplayerCore::audio_resample_frame()` 无重采样路径不再借用 `af->frame->data[0]`，复制到稳定 `audio_buf1` 后再 `frame_queue_next`。
+- Sonic 输出改用独立 `audio_sonic_buf`，不再复用可能正被输入引用的 `audio_buf1`。
+- 静音长度改为 `audio_tgt.frame_size * SDL_AUDIO_MIN_BUFFER_SIZE`，清掉 `frame_size * MIN / frame_size` 的无效计算。
+- `stream_component_close()` 释放 `audio_sonic_buf`，避免切歌/关闭泄漏。
+- 结果：`oran7.playback` 3/3（playback/sdl-audio/native-io）通过；本轮未改输出格式与音量语义，正常播放听感应与改造前一致。
+
+**尚未做**
+
+- A0-3：F32/S16 协商、float 音量斜坡、格式适配边界。
+- 因此当前版本仍是 S16 输出、SDL 混音音量；处理器已接入但尚未进入采样路径。
+
+### 10.8 A0-4 实施记录（2026-11-05）
+
+- 新增 `src/cpp/Oran7MediaPlayer/Audio/Oran7AudioProcessor.h/.cpp`：每播放器独占的处理器骨架，`prepare/process/reset/setParameters` 契约固定；A0 只做旁路，零分配、零锁、零日志，`latencyFrames()==0`。
+- `Oran7FFplayerCore`：
+  - 增加 `setAudioParameterQueue()`、`audio_processor_`、`audio_parameter_queue_`；
+  - `audio_open()` 协商完成后创建并 `prepare(rate, channels, maxFrames)`；`audio_close()` 在设备关闭后释放处理器；
+  - 回调每块从队列取一次最新参数，并按 `audio_discontinuity_` 代际清理旧 PCM、Sonic 积压与处理器历史；
+  - `read_thread` 在 seek flush 后递增代际。
+- `Oran7MediaPlayer` 增加 `oran7mp_setAudioParameterQueue()` 门面转发。
+- `Oran7PlaybackController`：每个新播放器创建独立参数队列并在 `prepare_async` 前注入；新增 `publishAudioParameters()`/`audioParameterQueue()`。旧播放器退役后不再接收新参数。
+- 新增 `tests/audio-dsp/processor.cpp`：prepare 校验、旁路位精确、同址、启停快照、空指针/零帧、单声道、零分配。
+- 验证：
+  - `audio_parameter_queue_checks`、`audio_processor_checks` 通过（2/2）；
+  - `oran7.playback` 3/3 通过；
+  - Release `Oran7MediaClient` 目标编译通过。
+
+**A0-4 当时行为**：默认参数 `enabled=0`，且输出仍是 S16，处理器不会被调用；听感与改造前一致。`enabled=1` 在当时也不会改变声音——A0-3 完成后处理器才真正进入采样路径。
+
+### 10.9 A0-3 实施记录（2026-11-05）
+
+- `audio_open()` 优先请求 `AUDIO_F32SYS`，`audio_tgt.fmt = AV_SAMPLE_FMT_FLT`；打开失败或实际格式不符时关闭设备并重试 `AUDIO_S16SYS`。两条路径都由 `audio_tgt.fmt` 驱动，不再把 S16 缓冲当 float 使用。
+- 回调顺序按方案 §4.1：重采样 → Sonic（变速）→ DSP（仅 F32 且 `enabled`）→ 音量斜坡 → SDL。DSP 输出使用独立 `audio_dsp_buf`，不与 `audio_buf1`/`audio_sonic_buf` 复用。
+- 新增 `Oran7AudioVolumeRamp`（`Audio/Oran7AudioVolumeRamp.h/.cpp`）：采样级 20ms 线性斜坡，支持 float/S16、静音推进、S16 饱和；`applyFloat/applyS16` 零分配、零锁。
+- 删除 `SDL_MixAudioFormat` 音量路径；`audio_volume` 百分比语义不变（0…SDL_MIX_MAXVOLUME → 0…1），打开设备时直接落在当前音量，避免淡入。
+- `stream_component_close()` 释放 `audio_dsp_buf`。
+- 测试：
+  - 新增 `audio_volume_ramp_checks`（20ms 斜坡、S16 饱和、静音推进、非法输入）；
+  - `sdl_audio_checks` 增加 F32 dummy 设备协商检查；
+  - `native_io_checks` 通过真实 core + dummy SDL 验证 F32 路径；
+  - `oran7.audio-dsp` 3/3、`oran7.playback` 3/3 通过；Release `Oran7MediaClient` 编译通过。
+- 全量 CTest 仍为 41/42，唯一失败是既有的 `localization_checks`（工作区 QML 新文案未同步 TS），与音频链路无关。
+
+**A0 收尾状态**：F32 优先、S16 回退、音量斜坡、参数队列、旁路处理器、seek 代际清理均已接好；`enabled=0` 时处理器旁路，听感应与改造前一致。下一步进入 A1：10 段 EQ + 前级/输出增益 + 最终限幅 + 预设/面板/配置。
+
+### 10.10 A1 实施记录（2026-11-05）
+
+**DSP**
+
+- `Oran7AudioProcessor` 实现 10 段 RBJ peaking biquad（31Hz…16kHz，Q=1.41）、前级增益、输出增益、链接式样本峰值限幅；DF2T、double 系数/状态。
+- 参数按 32 帧控制块平滑：频段增益约 20ms 逼近，前级/输出逐样本一阶平滑；限幅 instant attack + 50ms release，声像共用增益。
+- `enabled=0` 或结构版本不支持时整体旁路；`channels > 8` 时旁路。
+- 仍不新增算法延迟，`latencyFrames()==0`。
+
+**状态与配置**
+
+- 新增 `Oran7AudioEffects`（GUI 权威：开关/预设/前级/输出/ceiling/10 段模型）与 `Oran7EqualizerModel`（固定十行，roles: frequency/gainDb/label）。
+- 新增 `Oran7AudioConfig` 与 `audio.*` 配置键：version/enabled/preset_id/preamp_db/output_gain_db/limiter_ceiling_db/band_gains_db/custom_presets。
+- `Oran7ConfigBinding` 增加 audio 读取/写回；`Oran7MediaClient` 在 restore/save 边界加载/保存，并暴露 `Client.audioEffects`。
+- 每个播放器独立队列；`Oran7PlaybackController` 在 `prepare_async` 前用 provider 注入当前完整参数，旧播放器退役后不再接收新值。
+- 参数发布失败时 GUI 每 16ms 重试，保证最终值送达。
+
+**UI**
+
+- 音乐播放器设置窗口新增独立 `Oran7SettingItem` + `Oran7ExpandItem`「音效均衡器」组合：
+  - 总开关、用户自定义预设（无内置预设）；
+  - 10 段竖条（`Oran7EqualizerBand`），-12…+12dB；
+  - 前级、输出、限幅上限；
+  - 重置为平直。
+- 新 QML 已加入 `qml.qrc`；文案使用 `qsTranslate("Oran7Ui", ...)`。
+
+**测试**
+
+- `audio_processor_checks`：平直位精确、1kHz +6dB 响应、限幅 ceiling、旁路、零分配。
+- `audio_effects_checks`：预设/夹取/自定义标记/配置往返。
+- `config_checks`：audio 分组往返与非法 bands 回退。
+- `oran7.audio-dsp` 4/4、`oran7.playback` 3/3、`oran7.config` 1/1 通过；Release 编译通过。
+
+**已知边界**
+
+- S16 回退设备上 EQ/限幅不生效（仅保留音量/旁路）；正常 Windows 设备优先 F32。
+- 自定义预设保存/重命名/删除已实现（A2 收尾补充）；AutoEQ 导入、频谱显示留到 A4。
+- 全量 CTest 仍只有既有的 `localization_checks` 失败（工作区 QML 新文案未同步 TS），与音频链路无关。
+
+### 10.11 A2 实施记录（2026-11-05）
+
+**DSP**
+
+- 新增高通（20–200Hz）、低通（8k–20kHz）二阶 Butterworth（Q=0.707）；默认 20Hz/20kHz 视为关闭。
+- 新增低音架（low-shelf，默认 120Hz，0–12dB）。
+- 新增立体声宽度（M/S，0…2；仅 stereo 生效）与交叉馈送（700Hz 低通 + 0.3ms 延迟，三档强度）。
+- 新增前馈链接式压缩器：threshold/ratio/attack/release/knee/makeup，软膝、声像共用增益；无 lookahead。
+- 处理顺序：前级 → 高通 → 低通 → 10 段 EQ → 低音架 → 宽度/交叉馈送 → 压缩 → 输出增益 → 限幅。
+- 频段/滤波频率/低音/宽度/交叉馈送按 20ms 平滑；压缩器 attack/release 系数在参数变化时重算。
+- `Oran7AudioParameters` 版本提升到 2；结构版本不匹配时旁路。
+
+**配置与 UI**
+
+- 新增 `audio.high_pass_hz/low_pass_hz/bass_boost_db/bass_freq_hz/stereo_width/crossfeed/compressor_*` 键，`Oran7AudioConfig.version=2`；旧 v1 配置按默认值补齐。
+- 音乐播放器设置「音效均衡器」组新增：低音增强、高通、低通、立体声宽度、交叉馈送、压缩器开关/阈值/比率/补偿。
+- 重置为平直同时复位滤波/宽度/交叉馈送/压缩器；预设仍只控制 EQ/前级/输出/ceiling，不覆盖 A2 字段。
+
+**测试**
+
+- `audio_processor_checks` 新增：高通 50Hz 衰减、低通 12kHz 衰减、60Hz 低音架提升、宽度 0 抵消纯侧信号、压缩器降低大声输入。
+- `audio_effects_checks` 新增：A2 字段往返、配置 version 2、reset 复位。
+- `config_checks` 覆盖 audio 分组（含新字段默认值）。
+- `oran7.audio-dsp` 4/4、`oran7.config` 1/1 通过；Release 编译通过。
+
+**已知边界**
+
+- 交叉馈送/宽度只在 stereo 生效；其他声道布局保留参数但不处理。
+- 压缩器无 lookahead，峰值可能轻微过冲，由最终限幅兜底。
+- 压缩器 attack/release/knee 暂未在 UI 暴露（配置保留字段，默认 10/150/3）。
+- S16 回退设备仍不运行 DSP。
+
+### 10.12 自定义预设管理（2026-11-05）
+
+- `Oran7AudioEffects::presets()` 只返回用户自定义项：`{id, label, custom}`；四个系统预设已完全移除。
+- 新增 `saveCurrentAsPreset(name)`、`suggestedPresetName()`、`renamePreset(id,name)`、`deletePreset(id)`；保存的是**完整设置快照**（EQ、前级/输出/ceiling、滤波、低音架、宽度/交叉馈送、压缩参数）。
+- 自定义项存 `audio.custom_presets`，`presetsChanged` 触发 Client 立即写回配置（不再等退出）。
+- 默认命名 `自定义1/2/3…`，自动跳过已用名称；id 使用 `custom-<UUID>`。
+- 删除当前正在使用的自定义预设时，`presetId` 回退为 `custom`（当前参数保留）。
+- EQ 窗口顶部操作行新增「保存」按钮（56px 宽），弹出输入框；预设下拉每项右侧新增 `⋯`，仅自定义项显示，点击打开重命名/删除弹窗。
+- 「归零」「保存」两个按钮改为短标签 + 56px 宽，去掉左侧徽标占位。
+- `audio_effects_checks` 覆盖保存、应用、重命名、删除、配置恢复；初始无预设。
+
+### 10.13 均衡器交互优化（2026-11-05）
+
+- 10 段 EQ 移至独立的 Oran7EqualizerWindow（760×428），从原设置组的“打开面板”进入；十段横向排布、清晰的频率/增益标签、预设、启用开关与仅频段归零。A2 及前级/输出/限幅设置继续使用原面板。
+- 修正竖向 Slider 的 visualPosition 重复反转：向上增强、向下衰减，手柄和零点填充使用同一坐标方向。
+- 窗口直接绑定现有 Client.audioEffects.equalizer，onMoved 即发布参数，不创建临时音效副本、不等关闭才生效。
+- Client 对音效修改防抖 400ms 写回配置；关闭编辑器及退出时提交尚未保存的修改，启动加载阶段不触发自动保存。实时参数发布不受落盘延时影响。
+- 窗口沿用取色器的焦点登记/ESC 关闭机制，淡出后释放计数并销毁，保存不需要额外“应用”按钮。
+- equalizer_ui_checks 使用生产 QML 和音效模型、替身主题、隔离窗口验证十列布局、上下拖动、松开前实时发布、配置快照、预设同步、最终提交与关闭焦点释放；不打开实际音频设备或主程序。
+
+**独立面板样式统一**
+
+- 设置页入口改为“标签 + 整行圆角框”，新增可复用的 Oran7PreferenceAction，基于 Oran7StudioButton，并与语言/字体选择器保持徽标、边框、间距和悬停色一致。
+- 均衡器内预设直接复用 Oran7PreferenceChoice，启用开关复用 Oran7SwitchToggleItem；归零和关闭使用自绘按钮。
+- Oran7PreferenceChoice 增加可选 popupOwner：子菜单打开时保留宿主窗口，关闭后交还焦点登记；默认空值不改变语言/字体/取色菜单的行为。ESC 优先关闭子菜单，宿主关闭时也安全清理菜单与焦点计数。
+- equalizer_ui_checks 额外覆盖真实菜单选预设、嵌套菜单 ESC 返回宿主、带打开菜单关闭窗口；实时参数和自动保存策略沿用上一版。

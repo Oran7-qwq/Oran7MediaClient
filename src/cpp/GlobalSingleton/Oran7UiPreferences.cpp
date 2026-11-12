@@ -1,5 +1,6 @@
 #include "Oran7UiPreferences.h"
 #include "Oran7AppConfigManager.h"
+#include "Oran7GlobalHelper.h"
 #include <QGuiApplication>
 #include <QFontDatabase>
 #include <QQmlEngine>
@@ -7,7 +8,9 @@
 Oran7UiPreferences::Oran7UiPreferences(Oran7AppConfigManager& config, QObject* parent)
     : QObject(parent), m_config(config)
 {
-    const auto saved = config.snapshot().appearance;
+    const auto snapshot = config.snapshot();
+    const auto saved = snapshot.appearance;
+    Oran7GlobalHelper::setDeveloperMode(snapshot.general.developerMode);
     m_language = saved.language;
     m_fontFamily = saved.fontFamily;
     m_fontPixelSize = saved.fontPixelSize;
@@ -22,6 +25,7 @@ Oran7UiPreferences::Oran7UiPreferences(Oran7AppConfigManager& config, QObject* p
 }
 Oran7UiPreferences::~Oran7UiPreferences()
 {
+    Oran7GlobalHelper::setDeveloperMode(false);
     if (m_installed)
         QCoreApplication::removeTranslator(&m_english);
 }
@@ -32,6 +36,29 @@ void Oran7UiPreferences::attachEngine(QQmlEngine* engine)
 QStringList Oran7UiPreferences::fontFamilies() const
 {
     return QFontDatabase::families();
+}
+bool Oran7UiPreferences::developerMode() const
+{
+    return Oran7GlobalHelper::developerMode();
+}
+bool Oran7UiPreferences::selectDeveloperMode(bool enabled)
+{
+    if (enabled == developerMode())
+        return true;
+    const auto previous = m_config.snapshot();
+    auto next = previous;
+    next.general.developerMode = enabled;
+    m_config.updateConfig(next);
+    if (!m_config.saveConfig())
+    {
+        m_config.updateConfig(previous);
+        return error(QStringLiteral("开发者模式设置保存失败"));
+    }
+    Oran7GlobalHelper::setDeveloperMode(enabled);
+    m_lastError.clear();
+    emit lastErrorChanged();
+    emit developerModeChanged();
+    return true;
 }
 bool Oran7UiPreferences::error(const QString& text)
 {

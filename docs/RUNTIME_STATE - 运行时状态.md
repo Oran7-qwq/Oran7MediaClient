@@ -26,6 +26,8 @@ updated: 2026-10-27
 
 | 事实 | 权威存储 | 镜像/副本 | 落盘 | 备注 |
 |---|---|---|---|---|
+| 本地录制容器格式 | 当前 `Oran7RecordingConfig.format`，会话启动取值快照 | 工作台 outputDraft 编辑草稿；保存后刷新 outputSaved | `recording.format`，默认 mp4，可选 flv | 格式独立于本地/WHIP mode；沿现有配置原子提交，不改变运行中的会话 |
+| 开发者模式 | Oran7Core 中的原子开关，经 `Oran7GlobalHelper::developerMode()` 跨线程读取 | `Oran7UiPreferences.developerMode` 只读投影；设置开关不缓存业务状态 | `general.developerMode`，默认 false | 仅 preferences 在启动恢复及保存成功后发布；保存失败不改运行状态；不再使用编译宏 |
 | 启动阶段/就绪门槛/错误与取消 | main 独占的 `Oran7StartupCoordinator` | Oran7Startup 上下文只读投影；QML 提交取消 | 不落盘；交接成功前不保存部分几何 |
 | 主窗预热透明度/渐变与原生呈现门槛 | `Oran7StartupCoordinator` | 保存原 opacity；show 前归零，实际帧后执行 320ms 交叉渐变并再等一帧 | 否 | 运行期不再接管 opacity；失败/取消/就绪撤销停止渐变；仅外部启动窗口显示加载画面 |
 | 启动/主窗身份 | 同一 QQmlApplicationEngine；load 持有启动窗、QObject parent 持有异步孵化主窗 | 协调器 QPointer；配置按 __Oran7Window__ 查 rootObjects/引擎直属子对象 | 原生 HWND/标题栏先在隐藏时初始化，再应用客户区几何，首帧后交接 |
@@ -39,12 +41,15 @@ updated: 2026-10-27
 | 当前音乐信息（入口路径/名/歌手/专辑/封面/标注时长/songId/VIP） | `Oran7PlaybackState::currentTrack`（Oran7Track 值） | BasicConfig.currentMedia* 只读绑定；currentSongId/currentIsVip 读取同一值 | `last_media_*` / last_used_file | 入口一次提交；恢复先更新快照；停止/视频期间保留音乐选择 |
 | 是否正在播放 | `Oran7PlaybackState::state` | BasicConfig.isPlaying 只读绑定 active；playing 表示内核已开始播放，active 额外包含 Opening | 不落盘 | QML 不再写该属性 |
 | 播放位置/总时长 | `Oran7PlaybackState::positionMs/durationMs` | 旧进度/歌词信号仍作兼容输出 | 不落盘 | GUI 更新，旧播放器时长消息按代际丢弃 |
-| 播放模式 | `Oran7PlaybackState::mode`（0/1/2/3） | BasicConfig.playMode 只读绑定 | 不落盘 | Client.setPlayMode 命令修改，队列策略由 Oran7PlaybackViewModel 持有 |
+| 播放模式 | `Oran7PlaybackState::mode`（0/1/2 顺序/单曲/随机；3 心动、4 私人漫游、5 熟悉、6 探索） | BasicConfig.playMode 只读绑定 | 不落盘 | 普通顺序经 Client.setPlayMode；推荐经 musicQueue.selectRecommendation；队列由 Oran7PlaybackViewModel 持有 |
 | 音量 | `Oran7PlaybackState::volume` | BasicConfig.playerVolume 只读绑定；保存配置直接读 PlaybackState，无额外镜像 | ✅ | Client.setVolume 统一校验 0～100，启动恢复立即同步，不依赖弹窗实例化 |
 | 当前播放器实例 | `Oran7PlaybackController::m_player`（unique_ptr，GUI 独占） | 内核 mp_state_、isPlaying 为原子；消息携带发生时状态 | 不落盘 | 退役时移动到后台闭包，GUI 不再访问；消息只带值经邮箱回传 |
 | 退役播放器与文件操作等待 | Controller 退役计数/whenPlayersReleased | 后台闭包独占 Native；等待回调只在 GUI 调用 | 否 | 全部退役实例释放后才删除文件；shutdown 清空等待回调 |
 | 播放队列归属（哪张列表在播） | `Oran7PlaybackViewModel` | Client.musicQueue.owner；BasicConfig 只读投影 | 不落盘 | C++ 借用模型/稳定 trackId，切歌时重定位 |
 | 本地曲库文件快照/顺序 | `Oran7LocalLibraryService::m_entries/m_order`（GUI 线程） | TrackLibrary.local，批量 tracksReady 快照 | `local_music_sort.*` | 后台只读值快照；最新结果完整提交，顺序与 UI 发布一致 |
+| 视频／直播观看记录 | `Oran7VideoHistory`（GUI 线程模型） | `Client.videoHistory`，本地与直播页签按来源展示 | `video.history` | 成功起播后记录，按身份去重并置顶，每类最多 50 条；直播只存房间号 |
+| 本地视频观看进度与恢复意图 | `Oran7VideoHistory` 观察 PlaybackState 的来源与状态 | positionMs、durationMs、completed roles | `video.history` 各本地条目 | 有效状态采集，5 秒节流；每次打开只恢复一次，用户 seek 撤销恢复 |
+| 直播房间展示资料／刷新状态 | `Oran7VideoHistory` 与内部 Oran7LiveRoomInfoService | title、anchorName、avatarUrl、thumbnail、liveStatus、roomInfoState roles | `video.history` 各直播条目 | 名称／图片地址持久化，实时状态重新查询；同房间去重、最多两路并发 |
 | "我整合的音乐" | `Oran7TrackLibrary::integrated()` | BasicConfig 只读借用；`config.json:integratedMusic.list` | ✅ | C++ 去重/批量/增删/排序自动持久化 |
 | 网易云收藏列表 | `Oran7TrackLibrary::liked()` | Oran7CloudMusicService 持有 loaded/fetching/dirty 与 30 秒 TTL | 不落盘 | 账号代际、并发去重、点赞共用 2 秒冷却 |
 | 网易云登录态 | `CookieStore`（`MUSIC_U` 非空） | `NcmSession.isLoggedIn/userName/csrfToken/cookieString` | `netease_auth.*` | `NcmSession::setLoggedIn()` 是空实现，只发信号 |

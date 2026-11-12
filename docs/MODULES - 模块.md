@@ -52,6 +52,7 @@ updated: 2026-10-24
 | `Oran7NetworkMonitor` | 单例 | `Oran7Network` | `:240-245` | Core |
 | `Oran7AsyncManager` | 单例 | `Oran7Async` | `:248-253` | Core |
 | `Oran7PlaybackState` | 不可创建类型；由 Client.playback 持有 | `Client` | `main.cpp` | Core |
+| `Oran7VideoHistory` | 不可创建模型；Client.videoHistory 借用 | `Client` | `main.cpp` | EXE |
 | `Client`（C++ `Oran7MediaClient`） | 单例 | `Client` | `main.cpp` | Core |
 | `globalEventFilter` | 上下文属性 | — | `:256-259` | Core |
 | `image://ncmqr` | ImageProvider | — | `:292-293` | Ncm |

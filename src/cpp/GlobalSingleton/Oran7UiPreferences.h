@@ -18,6 +18,7 @@ class ORAN7_UI_PREFERENCES_EXPORT Oran7UiPreferences : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString language READ language NOTIFY languageChanged)
+    Q_PROPERTY(bool developerMode READ developerMode NOTIFY developerModeChanged)
     Q_PROPERTY(QFont font READ font NOTIFY fontChanged)
     Q_PROPERTY(QString fontFamily READ fontFamily NOTIFY fontChanged)
     Q_PROPERTY(int fontPixelSize READ fontPixelSize NOTIFY fontChanged)
@@ -28,16 +29,19 @@ class ORAN7_UI_PREFERENCES_EXPORT Oran7UiPreferences : public QObject
     ~Oran7UiPreferences() override;
     void attachEngine(QQmlEngine* engine);
     QString language() const { return m_language; }
+    bool developerMode() const;
     QFont font() const;
     QString fontFamily() const { return m_fontFamily; }
     int fontPixelSize() const { return m_fontPixelSize; }
     QStringList fontFamilies() const;
     QString lastError() const { return m_lastError; }
     Q_INVOKABLE bool selectLanguage(const QString& language);
+    Q_INVOKABLE bool selectDeveloperMode(bool enabled);
     Q_INVOKABLE bool selectFont(const QString& family, int pixelSize);
     Q_INVOKABLE QString translate(const QString& source) const;
   signals:
     void languageChanged();
+    void developerModeChanged();
     void fontChanged();
     void lastErrorChanged();
 

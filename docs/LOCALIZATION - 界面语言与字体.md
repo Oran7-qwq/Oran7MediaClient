@@ -1,6 +1,12 @@
 # 界面语言与字体
 
-P2-6（2026-10-26）仅支持中文（zh_CN）与 English（en_US），默认中文。下拉式 GUI 的主界面设置（原 Oran7MainUiSettings）顶部的“语言与字体”独立折叠组提供语言、通用字体和基础字号选择，修改即保存、即时生效，启动时先恢复偏好再创建主 QML。
+## 通用基础设置（2026-11-12）
+
+原“语言与字体”展开分组标题改为“通用基础设置”，保留语言、字体与基础字号，追加 `Oran7SwitchToggleItem` 开发者模式开关。`Oran7UiPreferences` 提供只读 developerMode、developerModeChanged 与 selectDeveloperMode(bool)，成功保存后才发布，失败恢复配置快照，开关恢复后端绑定。
+
+`general.developerMode` 由 default.json 默认 false，归一化补齐缺键并拒绝非 bool 值；使用已有 schemaVersion=2，不改变 appearance 字段。运行期唯一原子开关位于 Oran7Core 的 GlobalHelper.cpp，EXE/插件及后台线程共享；仅 preferences 修改它，没有新增全局单例或 QML 副本。原 DEVELOPER_MODE 宏已删除，内存/播放诊断按运行时值读取，无需重启。偏好服务退出时清除运行状态，不覆盖已保存值。仅启用诊断，不改变播放策略、主题完整性校验、凭据保护或启动流程。
+
+P2-6（2026-10-26）仅支持中文（zh_CN）与 English（en_US），默认中文。下拉式 GUI 的主界面设置（原 Oran7MainUiSettings）顶部的“通用基础设置”（原“语言与字体”）独立折叠组提供语言、通用字体、基础字号和开发者模式选择，修改即保存、即时生效，启动时先恢复偏好再创建主 QML。
 
 ## 所有权与配置
 

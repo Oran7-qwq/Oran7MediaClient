@@ -11,6 +11,8 @@ Item{
 
     property color icon_defaultColor: "white"
     property color icon_hoverdColor: "white"
+    readonly property bool interacting: volumeSliderPopup.visible || volumeSliderMouseArea.volumeSliderMouseArea_isPressed
+    function closePopup() { volumeSliderPopup.close() }
 
     Image {
         id: volumeIamge

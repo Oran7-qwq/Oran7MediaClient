@@ -60,6 +60,7 @@ bool waitOpened(const std::atomic_bool& cancel, const std::function<bool()>& ope
 
 QString Oran7RecordingBackend::validate(const Oran7RecordingConfig& c, bool starting) {
     if (c.mode < 0 || c.mode > 1) return QStringLiteral("请选择有效的录制模式");
+    if (c.format != "mp4" && c.format != "flv") return QStringLiteral("录制格式须为 MP4 或 FLV");
     if (c.fps < 1 || c.fps > 240 || c.bitrateKbps < 100 || c.bitrateKbps > 200000)
         return QStringLiteral("帧率须为 1～240，码率须为 100～200000 kbps");
     if ((c.width == 0) != (c.height == 0) || c.width < 0 || c.height < 0 || c.width > 16384 || c.height > 16384
@@ -139,12 +140,12 @@ QString Oran7RecordingBackend::run(const Oran7RecordingConfig& c, std::shared_pt
     } else {
         const auto directory = c.outputDirectory.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::MoviesLocation) : c.outputDirectory;
         if (directory.isEmpty() || !QDir().mkpath(directory)) return QStringLiteral("无法创建录制输出目录");
-        output.setFileTemplate(QDir(directory).filePath(c.filePrefix + "-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + "-XXXXXX.mp4"));
+        output.setFileTemplate(QDir(directory).filePath(c.filePrefix + "-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + "-XXXXXX." + c.format));
         if (!output.open()) return QStringLiteral("无法创建录制文件");
         outputPath = output.fileName(); output.close();
         r.muxer = std::make_unique<Oran7Mp4Muxer>(); r.muxer->setErrorCallback(onError);
-        if (!r.muxer->open(outputPath.toUtf8().constData(), width, height, AVRational{1,c.fps}, r.video, r.audio))
-            return QStringLiteral("无法打开 MP4 输出文件");
+        if (!r.muxer->open(outputPath.toUtf8().constData(), width, height, AVRational{1,c.fps}, r.video, r.audio, c.format.toUtf8().constData()))
+            return QStringLiteral("无法打开录制输出文件");
     }
     if (cancelled.load()) return {};
     if (c.audioEnabled) {
@@ -189,11 +190,14 @@ QString Oran7RecordingBackend::run(const Oran7RecordingConfig& c, std::shared_pt
 }
 
 QVariantMap Oran7RecordingBackend::settings(const Oran7RecordingConfig& c) {
-    return {{"mode",c.mode},{"width",c.width},{"height",c.height},{"fps",c.fps},{"bitrateKbps",c.bitrateKbps},{"audioEnabled",c.audioEnabled},{"outputDirectory",c.outputDirectory},{"filePrefix",c.filePrefix},{"whipUrl",c.whipUrl},{"bearerToken",c.bearerToken},{"roomId",c.roomId},{"publisherId",c.publisherId},{"stunUrl",c.stunUrl},{"turnUrl",c.turnUrl},{"turnUser",c.turnUser},{"turnPassword",c.turnPassword},{"signalingUrl",c.signalingUrl},{"signalingUser",c.signalingUser},{"signalingPassword",c.signalingPassword}};
+    return {{"format",c.format},{"mode",c.mode},{"width",c.width},{"height",c.height},{"fps",c.fps},{"bitrateKbps",c.bitrateKbps},{"audioEnabled",c.audioEnabled},{"outputDirectory",c.outputDirectory},{"filePrefix",c.filePrefix},{"whipUrl",c.whipUrl},{"bearerToken",c.bearerToken},{"roomId",c.roomId},{"publisherId",c.publisherId},{"stunUrl",c.stunUrl},{"turnUrl",c.turnUrl},{"turnUser",c.turnUser},{"turnPassword",c.turnPassword},{"signalingUrl",c.signalingUrl},{"signalingUser",c.signalingUser},{"signalingPassword",c.signalingPassword}};
 }
 
 QString Oran7RecordingBackend::apply(const QVariantMap& values, Oran7RecordingConfig* config) {
+    if (values.contains("format") && values.value("format").metaType().id() != QMetaType::QString)
+        return QStringLiteral("录制格式须为 MP4 或 FLV");
     auto next = *config;
+    if (values.contains("format")) next.format = values.value("format").toString();
     if (values.contains("mode")) { const auto v = values.value("mode"); if ((v.metaType().id() != QMetaType::Int && v.metaType().id() != QMetaType::LongLong && v.metaType().id() != QMetaType::Double) || !std::isfinite(v.toDouble()) || std::floor(v.toDouble()) != v.toDouble() || v.toDouble() < std::numeric_limits<int>::min() || v.toDouble() > std::numeric_limits<int>::max()) return QStringLiteral("录制参数类型错误：mode"); next.mode = v.toInt(); }
     if (values.contains("width")) { const auto v = values.value("width"); if ((v.metaType().id() != QMetaType::Int && v.metaType().id() != QMetaType::LongLong && v.metaType().id() != QMetaType::Double) || !std::isfinite(v.toDouble()) || std::floor(v.toDouble()) != v.toDouble() || v.toDouble() < std::numeric_limits<int>::min() || v.toDouble() > std::numeric_limits<int>::max()) return QStringLiteral("录制参数类型错误：width"); next.width = v.toInt(); }
     if (values.contains("height")) { const auto v = values.value("height"); if ((v.metaType().id() != QMetaType::Int && v.metaType().id() != QMetaType::LongLong && v.metaType().id() != QMetaType::Double) || !std::isfinite(v.toDouble()) || std::floor(v.toDouble()) != v.toDouble() || v.toDouble() < std::numeric_limits<int>::min() || v.toDouble() > std::numeric_limits<int>::max()) return QStringLiteral("录制参数类型错误：height"); next.height = v.toInt(); }

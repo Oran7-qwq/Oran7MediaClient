@@ -359,7 +359,7 @@ Pane {
             Rectangle {
                 implicitWidth: formatBadge.implicitWidth + 16; implicitHeight: 24
                 radius: 5; color: root.groupColor; border.color: root.borderColor
-                Label { id: formatBadge; anchors.centerIn: parent; text: qsTranslate("Oran7Ui", "本地 MP4"); color: root.mutedTextColor; font.pixelSize: 11 }
+                Label { id: formatBadge; anchors.centerIn: parent; text: root.pageState.outputDraft.format === "flv" ? qsTranslate("Oran7Ui", "本地 FLV") : qsTranslate("Oran7Ui", "本地 MP4"); color: root.mutedTextColor; font.pixelSize: 11 }
             }
             Item { Layout.fillWidth: true }
             Oran7Action { text: qsTranslate("Oran7Ui", "还原设置"); enabled: !root.pageState.busy; onClicked: {
@@ -600,6 +600,15 @@ Pane {
                         opacity: enabled ? 1 : 0.5
                         Oran7SettingsGroup {
                             title: qsTranslate("Oran7Ui", "画质设置")
+                            Oran7FieldLabel { text: qsTranslate("Oran7Ui", "录制格式") }
+                            Oran7Choice {
+                                objectName: "recordingFileFormat"
+                                model: ["MP4", "FLV"]
+                                selectedRow: root.pageState.outputDraft.format === "flv" ? 1 : 0
+                                onActivated: function(index) {
+                                    root.pageState.editOutput("format", index === 1 ? "flv" : "mp4")
+                                }
+                            }
                             Oran7FieldLabel { text: qsTranslate("Oran7Ui", "输出尺寸") }
                             Oran7Choice {
                                 objectName: "recordingSizePreset"

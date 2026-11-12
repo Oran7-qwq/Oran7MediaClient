@@ -405,10 +405,12 @@ import "%2"
 Window {
     width:360;height:650;visible:true;color:"#20262e"
     property int localPageRequests: 0
+    property int qqPageRequests: 0
     function focusNavigation(name) { BasicConfig.focusCurrent_SelectedMenuModel(name) }
     Connections {
         target: BasicConfig
         function onPushLocalMusicStackInto_RightPageMainStackView() { localPageRequests++ }
+        function onPushQQMusicStackInto_RightPageMainStackView() { qqPageRequests++ }
     }
     LeftPage { width:simpleMode ? simpleModeWidth : defaultWidth;height:parent.height;color:"transparent" }
 })").arg(navigationFolder,basicFolder);
@@ -482,6 +484,131 @@ Window {
     check(navigation->property("itemHovered_index").toInt()==-1 &&
               navigation->property("itemSelected_index").toInt()==5 && hoverHighlight->opacity()<0.01,
           "hiding navigation clears transient hover and preserves page selection");
+    library.replaceRecommendations({songs[3],songs[7]});
+    QMetaObject::invokeMethod(&queue,"recommendationActivated");
+    QTest::qWait(40);
+    check(cloudList->property("currentPageIndex").toInt()==2 &&
+              cloudList->property("listModel").value<QObject*>()==library.recommendations(),
+          "recommendation navigation focuses its dedicated model without replacing liked or search");
+    const auto choiceSource=QString(R"(
+import QtQuick
+import Client 1.0
+import "%1"
+Window { width:500;height:500;visible:true;color:"#20262e"
+    Oran7RecommendationButton { x:340;y:450;queue:Client.musicQueue;mode:Client.playback.mode }
+})").arg(folder);
+    engine.loadData(choiceSource.toUtf8(),QUrl("qrc:/RecommendationFixture.qml"));
+    check(engine.rootObjects().size()==4,"production recommendation selector loads outside settings GUI");
+    auto* choiceWindow=qobject_cast<QQuickWindow*>(engine.rootObjects().last());
+    auto* choice=find(choiceWindow->contentItem(),"recommendationButton");
+    QTest::mouseClick(choiceWindow,Qt::LeftButton,Qt::NoModifier,QPoint(380,466));
+    QTest::qWait(260);
+    auto* menu=choice->findChild<QObject*>("recommendationPopup");
+    auto* fmOption=find(choiceWindow->contentItem(),"recommendationOption4");
+    check(menu && menu->property("visible").toBool() && fmOption,"recommendation menu opens with a personal FM option");
+    choiceWindow->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/recommendation-menu.png");
+    QTest::mouseClick(choiceWindow,Qt::LeftButton,Qt::NoModifier,fmOption->mapToScene(QPointF(70,25)).toPoint());
+    QTest::qWait(30);
+    check(menu->property("visible").toBool() && !queue.recommendationError().isEmpty(),
+          "unauthenticated recommendation shows feedback without changing mode or closing menu");
+    QTest::keyClick(choiceWindow,Qt::Key_Escape);
+    QTest::qWait(160);
+    check(!menu->property("visible").toBool(),"recommendation menu respects Escape dismissal");
+    // QQ 页面先接通界面；空服务不得触发网易云请求或伪造账号/曲库。
+    const auto neteaseSearchBeforeQQ=library.search()->serializedTracks();
+    const auto neteaseLikedBeforeQQ=library.liked()->serializedTracks();
+    const auto qqSource=QString(R"(
+import QtQuick
+import "%1"
+import "%2"
+Window {
+    width:1000;height:680;visible:true;color:"#303038"
+    property int searchRequests: 0
+    property int loginRequests: 0
+    property string lastQuery: ""
+    readonly property var activeAccountPopup: BasicConfig.activeMusicAccountPopup
+    Oran7QQMusicStack {
+        objectName:"qqMusicPage"; anchors.fill:parent
+        onSearchRequested: function(keywords) { searchRequests++; lastQuery=keywords }
+        onLoginRequested: loginRequests++
+    }
+})").arg(pages,basicFolder);
+    engine.loadData(qqSource.toUtf8(),QUrl("qrc:/QQMusicUiFixture.qml"));
+    check(engine.rootObjects().size()==5,"QQ music page loads without a QQ backend or extra QML module");
+    auto* qqWindow=qobject_cast<QQuickWindow*>(engine.rootObjects().last());
+    auto* qqPage=find(qqWindow->contentItem(),"qqMusicPage");
+    auto* qqList=find(qqPage,"qqMusicPlaylist");
+    auto* qqSearch=find(qqPage,"qqMusicSearchField");
+    auto* qqAccount=find(qqPage,"qqMusicAccountButton");
+    auto* qqPopup=qqPage->findChild<QObject*>("qqMusicLoginPopup");
+    QTest::qWait(180);
+    check(qqList && qqSearch && qqAccount && qqPopup
+        && !qqList->property("listModel").value<QObject*>()
+        && qqList->property("currentPageIndex").toInt()==0,
+        "QQ page starts on its own empty liked tab without borrowing NetEase data");
+    check(!find(qqPage,"qqMusicRefreshButton")->isEnabled(),"unconnected service cannot submit a refresh");
+    qqSearch->setProperty("text",QString::fromUtf8("  测试歌曲  "));
+    QMetaObject::invokeMethod(qqPage,"submitSearch");
+    check(qqList->property("currentPageIndex").toInt()==1
+        && qqWindow->property("searchRequests").toInt()==0
+        && !qqPage->property("_feedback").toString().isEmpty(),
+        "search switches tabs and gives honest feedback while the service is disconnected");
+    qqPage->setProperty("serviceConnected",true);
+    QMetaObject::invokeMethod(qqPage,"submitSearch");
+    check(qqWindow->property("searchRequests").toInt()==1
+        && qqWindow->property("lastQuery").toString()==QString::fromUtf8("测试歌曲"),
+        "connected UI emits a trimmed search intent through its own boundary");
+    qqPage->setProperty("searchBusy",true);
+    QMetaObject::invokeMethod(qqPage,"submitSearch");
+    check(qqWindow->property("searchRequests").toInt()==1,"busy search ignores duplicate submission");
+    qqPage->setProperty("searchBusy",false);
+    qqPage->setProperty("serviceConnected",false);
+    qqWindow->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/qq-music-page.png");
+    QTest::mouseClick(qqWindow,Qt::LeftButton,Qt::NoModifier,qqAccount->mapToScene(QPointF(20,19)).toPoint());
+    QTest::qWait(280);
+    auto* qqLoginStart=find(qqWindow->contentItem(),"qqMusicLoginStart");
+    check(qqPopup->property("visible").toBool() && qqLoginStart && !qqLoginStart->isEnabled()
+        && qqWindow->property("activeAccountPopup").value<QObject*>()==qqPopup
+        && qqWindow->property("loginRequests").toInt()==0,
+        "account button opens official-scan instructions without pretending login is available");
+    qqWindow->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/qq-music-login.png");
+    qqPage->setProperty("serviceConnected",true);
+    QTest::mouseClick(qqWindow,Qt::LeftButton,Qt::NoModifier,qqLoginStart->mapToScene(QPointF(40,20)).toPoint());
+    check(qqWindow->property("loginRequests").toInt()==1,"login click reaches QQ-specific intent");
+    QTest::keyClick(qqWindow,Qt::Key_Escape);
+    QTest::qWait(180);
+    check(!qqPopup->property("visible").toBool()
+        && !qqWindow->property("activeAccountPopup").value<QObject*>(),"QQ login popup closes on Escape and releases its borrowed handle");
+    qqWindow->setWidth(420);
+    QTest::qWait(50);
+    check(qqSearch->width()>60 && qqAccount->width()>=40
+        && qqAccount->mapToScene(QPointF(qqAccount->width(),0)).x()<=qqWindow->width(),
+        "QQ search and compact login control stay inside a narrow page");
+    qqWindow->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/qq-music-narrow.png");
+    Oran7TrackListModel qqFixtureLiked,qqFixtureSearch;
+    qqFixtureSearch.replaceTracks({QVariantMap{{"path","qqmusic://song/fixture"},{"title","fixture"}}});
+    qqPage->setProperty("likedModel",QVariant::fromValue(&qqFixtureLiked));
+    qqPage->setProperty("searchModel",QVariant::fromValue(&qqFixtureSearch));
+    QTest::qWait(50);
+    check(qqList->property("listModel").value<QObject*>()==&qqFixtureSearch,
+        "late-injected QQ search model updates the active tab");
+    QMetaObject::invokeMethod(qqList,"switchToPage",Q_ARG(QVariant,0));
+    check(qqList->property("listModel").value<QObject*>()==&qqFixtureLiked
+        && library.search()->serializedTracks()==neteaseSearchBeforeQQ
+        && library.liked()->serializedTracks()==neteaseLikedBeforeQQ,
+        "switching QQ tabs keeps independent source bindings and preserves NetEase models");
+    navigationWindow->show();
+    auto* qqNavigation=find(navigation,"navigationItem6");
+    check(qqNavigation,"QQ entry exists in the shared-slider navigation");
+    QTest::mouseClick(navigationWindow,Qt::LeftButton,Qt::NoModifier,
+        qqNavigation->mapToScene(QPointF(21,21)).toPoint());
+    QTest::qWait(400);
+    check(navigationWindow->property("qqPageRequests").toInt()==1
+        && navigation->property("itemSelected_index").toInt()==6,
+        "QQ navigation emits its own page request and moves the selected slider");
+    // 页面应先于被借用的模型释放。
+    qqPage->setProperty("likedModel",QVariant::fromValue<QObject*>(nullptr));
+    qqPage->setProperty("searchModel",QVariant::fromValue<QObject*>(nullptr));
     check(warnings.isEmpty(),"no undefined roles/anchors/binding loops");
     std::printf("PASS: %d production QML checks\n",count);
 }

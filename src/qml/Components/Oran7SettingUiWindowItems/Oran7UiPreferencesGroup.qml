@@ -20,7 +20,7 @@ Column {
         id: heading
         objectName: "uiPreferencesHeading"
         index: 3
-        text: qsTranslate("Oran7Ui", "语言与字体")
+        text: qsTranslate("Oran7Ui", "通用基础设置")
         fontBold: true
         gradientMaskEnabled: root.headingGradientEnabled
         enableMouseArea: true
@@ -98,6 +98,24 @@ Column {
                 onCommitted: function(value, thresholdPosition, ratio) {
                     if (!root.preferences.selectFont(root.preferences.fontFamily, Math.round(value)))
                         Qt.callLater(function() { fontSizeSetting.resetValueDisplay() })
+                }
+            }
+            Oran7SettingItem {
+                objectName: "developerModeSetting"
+                text: qsTranslate("Oran7Ui", "开发者模式")
+                fontPixelSize: 12
+                rowHeight: 27
+                enabled: !!root.preferences
+                Oran7SwitchToggleItem {
+                    id: developerSwitch
+                    objectName: "developerModeSwitch"
+                    checked: root.preferences ? root.preferences.developerMode : false
+                    onSwitchToggleChanged: function(checked) {
+                        if (root.preferences) root.preferences.selectDeveloperMode(checked)
+                        developerSwitch.checked = Qt.binding(function() {
+                            return root.preferences ? root.preferences.developerMode : false
+                        })
+                    }
                 }
             }
             Label {

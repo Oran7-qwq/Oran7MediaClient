@@ -1,11 +1,11 @@
 ---
 status: ✅ P2-7 代码实施完成，真实设备待验收
-updated: 2026-10-26
+updated: 2026-11-11
 ---
 
 # Render：QRhi 视频渲染与采集同步
 
-源码 `src/cpp/Oran7VideoGPURender/` 编译进 EXE。保留 D3D11VideoItem 的 QML 类型、Client 渲染接口、Direct3D11 后端、basic 渲染循环和透明窗口约束。HDR 为后续功能，本阶段继续使用 BGRA8 SDR 输出。
+源码 `src/cpp/Oran7VideoGPURender/` 编译进 EXE。保留 D3D11VideoItem 的 QML 类型、Client 渲染接口、Direct3D11 后端、basic 渲染循环和透明窗口约束。2026-11 已补充高位深、PQ/HLG 与主窗口 scRGB HDR 输出；旧 P2-7 的同步和所有权边界继续保留。
 
 ## 职责和所有权
 
@@ -29,7 +29,7 @@ updated: 2026-10-26
 GUI：update() → updatePaintNode（只同步几何、创建/标脏节点）
                          ↓
 QRhi 节点 prepare()：每个 Qt 帧最多取一次最新媒体帧
-  → D3D11 NV12/P010 转换、共享 BGRA 复制或 CPU BGRA 上传
+  → NV12/P010/P016 平面视图、共享 BGRA 复制或 CPU 高精度上传
   → 导入 QRhiTexture，准备顶点及各 pass 的 uniform/SRB/pipeline
   → commandBuffer()->resourceUpdate（渲染 pass 开始前）
                          ↓
@@ -72,7 +72,7 @@ beforeRendering 仅推进渲染周期编号，不读取或消费媒体帧。Qt �
 
 覆盖：有界最新帧、清屏旧代际拒绝、完整信息、克隆租约、接收者销毁后的晚到提交、并发帧序；真实像素的连续更新、透明度、Fit、清屏/恢复、尺寸变化、页面重挂载、scissor、ShaderEffectSource 多 pass，以及 pass 间注入新帧仍保持单帧一致；跨设备共享纹理、零超时忙槽、设备宿主切换与重建订阅。
 
-截图与构建/CTest 记录放在检查目录的 tests/artifacts/render_sync_checks 和 build/refactor-work/P2-7。软件检查不能替代真实 D3D11 播放、Seek、缩放、翻页、切屏/分辨率、连续录制及退出验收，也不能据此承诺实际吞吐或无撕裂。WHIP 不扩展，HDR/PQ/HLG、10-bit/浮点输出和色调映射另行实施。
+截图与构建/CTest 记录放在检查目录的 tests/artifacts/render_sync_checks 和 build/refactor-work/P2-7。软件检查不能替代真实 D3D11 播放、Seek、缩放、翻页、切屏/分辨率、连续录制及退出验收，也不能据此承诺实际吞吐或无撕裂。WHIP 与录屏输出格式不扩展；2026-11 的 HDR 播放新增部分见下文。
 
 ## API 依据
 
@@ -82,3 +82,33 @@ beforeRendering 仅推进渲染周期编号，不读取或消费媒体帧。Qt �
 - [AcquireSync：返回值与零超时语义](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgikeyedmutex-acquiresync)
 
 实际 API 同时对照本地 Qt 6.7.3 头文件及软件渲染检查，不据在线新版本示例升级项目 Qt。
+
+## 2026-11：高位深与 HDR 播放
+
+原路径将所有 D3D11 NV12/P010 都按 BT.709 limited 转成 BGRA8，不区分 BT.2020、PQ/HLG；软件路径同样固定 BGRA8。位深截断、矩阵错误和缺少 HDR 映射会共同造成失真，不能仅用提高饱和度修复。
+
+- Oran7VideoColorSpace 从 AVFrame 的位深、范围、矩阵、原色、传递函数和 Mastering/MaxCLL 取快照。解码器只补齐帧中缺省的流色彩字段，不覆盖逐帧值；不支持硬解配置时选用 FFmpeg 提供的软解格式。保留 Main10/高位深，不指定 8-bit 中转。
+- D3D11 NV12/P010/P016 复制正确的数组 slice 到节点独占的单层纹理，QRhi R8/RG8 或 R16/RG16 导入 Y/UV 平面；可见范围与对齐编码尺寸分开。原共享 BGRA/keyed mutex/租约路径不变。硬件平面导入失败才下载原位深并走 FP16 RGB 回退，不将 PQ 直接解释成 SDR。
+- CPU YUV 用 swscale 整理为 NV12/P016，RGB 高位深经 RGBA64 转 FP16，范围和矩阵按帧设置；HDR 的传递函数与色域变换留给 GPU。常用 BT.601/709/2020 NCL、full/limited 分别处理；PQ 解为绝对 nit，HLG 以 1000 nit、gamma 1.2 的参考显示处理。
+- HDR 输出采用线性 BT.709/scRGB 浮点空间，保留超出 1 和表示广色域的负值。SDR 输出使用亮度驱动的扩展 Reinhard 与色域压缩，峰值优先 MaxCLL、其次母版峰值、缺省 1000 nit。8-bit ShaderEffectSource 单独映射 SDR，不能令主 pass 一起失去 HDR。
+
+Oran7HdrWindowOutput 是 main.qml 的主窗口局部对象，不是单例。只给该窗口请求 Qt 6.7.3 的 `_qt_sg_hdr_format=scrgb`，不设置全局 QSG_RHI_HDR；实际表面必须为 FP16 才启用。SDR 屏幕、Windows HDR 关闭或后端不支持时使用 SDR。
+
+Qt 6.7 的普通 QML 颜色仍以 sRGB 数值合成。原生 HDR 模式下，视频先以扩展 sRGB 值写入 FP16 场景，Oran7HdrCompositor 在 afterRendering 对最终画面线性化一次、保持预乘透明度，然后由 QRhi 提交 scRGB 输出，避免界面灰色变白。Windows 的 SDR 内容亮度通过 DisplayConfig 查询，界面白色随之调整，视频绝对亮度不随此滑块改变。该步骤增加一份窗口大小的 FP16 缓冲和一次全屏合成。
+
+该输出兼容固定 Direct3D11/basic/透明窗口。Qt 6.7.3 的私有 D3D11 结构只用于取得实际表面格式、当前 RTV 和交换链重建登记字段；媒体帧仍只在节点 prepare 消费，最终绘制仍由 QRhi 完成。原生复制使用 beginExternal/endExternal 包围，先执行 Qt 已记录的绘制命令；资源创建与更新不放进 render。显示设置变化/跨屏移动防抖后，在完整帧结束处重建同一交换链，保留 HWND/播放器/几何；失败有界回退 SDR，不循环重试。此兼容层升级 Qt 时必须重新核对。
+
+新增 `hdr_video_checks` 使用 WARP、真实生产节点和离屏 FP16 目标检查 PQ/HLG、1000 nit 高光、10-bit 相邻色阶、广色域负值、CPU/P010 数组 slice 一致、8-bit 离屏和主 HDR 多 pass、SDR gamma/透明度、Windows 白色比例及清屏。与原 render_sync_checks 一起运行：
+
+```powershell
+cmake --build --preset checks --target render_sync_checks hdr_video_checks
+ctest --preset checks -R render-sync
+```
+
+真实屏幕峰值、DWM/驱动、跨屏切换和高分辨率吞吐由用户验收。当前不解析 Dolby Vision、HDR10+ 动态元数据，也不把录屏/WHIP 改成 HDR；BT.2020 constant-luminance、ICC 任意显示配置不属于此版支持范围。
+
+## 2026-11：停止后的缓冲归还
+
+清屏的本帧仍只改变 black 状态，避免破坏尚未提交的多 pass 绘制。Oran7VideoFrameMailbox 用独立 releaseSerial 标记清屏，节点在 afterFrameEnd 归还旧 GPU 纹理、pass/SRB/pipeline、CPU 转换帧和 swscale 缓冲；页面隐藏但主窗口仍绘制时也能执行，不依赖节点继续 prepare。清屏后若同帧已成功准备新图像，视为新会话资源，不能误释放。再次绘制纯黑只在 prepare 创建 1×1 纹理。主窗口完全不提交帧时释放延迟到下一帧；beforeRendering 仍只推进帧号，render 仍不创建或销毁资源。
+
+更多取证和验证见 `../PERF - 内存增长排查.md`。本项针对停用后保留上一段大尺寸资源，不代表所有驱动/GUI 缓存的长期增长已归因。

@@ -15,6 +15,7 @@ struct Frame;
 struct AVFrame;
 struct ID3D11Device;
 struct AVMessage { int value = 0; int arg1 = 0; };
+class Oran7AudioParameterQueue;
 inline std::atomic<int> freedMessages{0};
 inline void msg_free_obj_res(AVMessage*) { ++freedMessages; }
 inline constexpr int SDL_MIX_MAXVOLUME = 128;
@@ -84,6 +85,7 @@ public:
     std::string dataSource() const { return session->source; }
     void AddVideoRefreshCallback(std::function<int(const Frame*, AVFrame*)>) { ++session->frameCallbacks; }
     void oran7mp_setD3D11Device(ID3D11Device*) { ++session->devices; }
+    void oran7mp_setAudioParameterQueue(std::shared_ptr<Oran7AudioParameterQueue>) {}
     int oran7mp_get_state() { return session->state; }
     int oran7mp_start() { ++session->starts; session->state = MP_STATE_STARTED; session->push(FFP_MSG_PLAYBACK_STATE_CHANGED, MP_STATE_STARTED); return 0; }
     int oran7mp_pause() { ++session->pauses; session->state = MP_STATE_PAUSED; session->push(FFP_MSG_PLAYBACK_STATE_CHANGED, MP_STATE_PAUSED); return 0; }

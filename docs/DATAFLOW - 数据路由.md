@@ -191,6 +191,18 @@ BasicConfig.fetchNeteaseLikedSongs()
 
 ## 漫游预缓存过滤（2026-10-27）
 
+### 2026-11-05：独立推荐入口与队列
+
+底栏播放顺序只轮换 0/1/2。右侧 `Oran7RecommendationButton` 选择关闭、3 心动、4 私人漫游（DEFAULT）、5 熟悉（FAMILIAR）、6 探索（EXPLORE）。样式由自身属性控制，不读取下拉设置的 `Oran7MainUiSetting`。
+
+`musicQueue.selectRecommendation` 校验登录/种子，提交推荐意图并导航到网易云页的「推荐队列」页签。心动仍走 intelligence/list；其余走 WEAPI radio/get，不依赖当前歌曲或喜欢歌单 ID。后台沿用 CloudMusicService 的账号/请求代际和 Network 池；请求只携带值快照，模式切换、停止、视频播放和账号变化取消旧结果。
+
+`m_roam` 是队列顺序与回听游标的权威，`Client.tracks.recommendations` 是其只读模型投影，和搜索/喜欢模型分离。批次/当前队列按 64 位 songId 去重，每批最多接受 20 首；保留最近两首回听，半队列预取。收藏/整合成员状态共用 TrackLibrary 索引。手动点击推荐行按 ID 更新游标；手动点击普通列表退出推荐并恢复普通播放顺序。切换页签/浏览页面本身不会停止推荐，切到视频仍取消音乐会话。
+
+喜欢过滤沿用原策略；连续三批无可用歌曲结束补取。近期已听/跳过的跨重启历史和 FM 云端反馈仍未实施。本次不保存推荐队列或自动恢复推荐播放。
+
+协议依据：[私人 FM 模式适配](https://github.com/neteasecloudmusicapienhanced/api-enhanced/blob/main/module/personal_fm_mode.js)、[参数说明](https://github.com/neteasecloudmusicapienhanced/api-enhanced/blob/main/public/docs/home.md#私人-fm-模式选择)。离线 fixture 验证参数、解析和队列隔离；真实账号接口可用性仍由用户运行验收。
+
 下拉设置「音乐播放器设置 → 网易云播放设置 → 漫游过滤已喜欢歌曲」绑定 `Client.musicQueue.roamFilterLiked`，由 ConfigBinding 保存到 `player.roam_filter_liked`，默认关闭以保留旧行为；与桌面歌词的 `floatingLocked` 主题配置无关。
 
 `Oran7PlaybackViewModel` 独占 `Oran7RoamFilterStrategy`，在保留全部歌曲与排除已喜欢歌曲两种策略之间切换。排除策略调用 `Oran7TrackLibrary::isLiked(songId)`，复用喜欢模型已有的 `QSet<QString>` 身份索引，不逐曲遍历喜欢列表，也不维护第二份喜欢列表缓存。单曲平均 O(1)，过滤一批 M 首推荐平均 O(M)，不随喜欢列表 N 做 M×N 扫描。

@@ -1,4 +1,6 @@
 #include "Oran7UiPreferences.h"
+#include "Oran7GlobalHelper.h"
+#include <future>
 #include "Oran7AppConfigManager.h"
 #include "Oran7Theme.h"
 #include <QGuiApplication>
@@ -124,12 +126,22 @@ int main(int argc, char** argv)
     appearance["language"] = "ja_JP";
     appearance["fontPixelSize"] = 999;
     invalid["appearance"] = appearance;
+    invalid["general"] = QJsonObject{{"developerMode", "true"}};
     check(Oran7AppConfig::normalize(invalid, defaults, &normalized), "normalize language preferences");
     check(Oran7AppConfig::fromJson(normalized).appearance.language == "zh_CN" &&
               Oran7AppConfig::fromJson(normalized).appearance.fontPixelSize == 16,
           "unsupported language and font size fall back");
     {
         Oran7UiPreferences preferences(config);
+        check(!preferences.developerMode() && !Oran7GlobalHelper::developerMode(), "developer mode defaults off");
+        check(!Oran7AppConfig::fromJson(normalized).general.developerMode, "developer mode rejects non-boolean JSON");
+        QSignalSpy developerChanges(&preferences, &Oran7UiPreferences::developerModeChanged);
+        check(preferences.selectDeveloperMode(true) && preferences.developerMode(), "enable developer mode at runtime");
+        check(json(path)["general"].toObject()["developerMode"].toBool(), "developer preference persisted");
+        check(std::async(std::launch::async, [] { return Oran7GlobalHelper::developerMode(); }).get(),
+              "background reader observes shared runtime flag");
+        check(preferences.selectDeveloperMode(true) && developerChanges.count() == 1, "unchanged mode is silent");
+        check(preferences.selectDeveloperMode(false) && !Oran7GlobalHelper::developerMode(), "disable without restart");
         QQmlEngine engine;
         engine.addImportPath(QStringLiteral(ORAN7_QML_IMPORT_ROOT));
         preferences.attachEngine(&engine);
@@ -147,7 +159,7 @@ int main(int argc, char** argv)
         QQmlComponent binding(&engine);
         binding.setData(R"(import QtQuick
 Item {
- property string caption: qsTranslate("Oran7Ui", "录屏工作台")
+ property string caption: qsTranslate("Oran7Ui", "直播工作台")
  property string unknown: qsTranslate("Oran7Ui", "Untranslated fixture")
  property string family: Oran7UiPreferences.font.family
  property int pixels: Oran7UiPreferences.font.pixelSize
@@ -156,10 +168,10 @@ Item {
                         QUrl("qrc:/LanguageBinding.qml"));
         std::unique_ptr<QObject> object(binding.create());
         check(bool(object), "real QML translation binding");
-        check(object->property("caption").toString() == QString::fromUtf8("录屏工作台"), "Chinese source display");
+        check(object->property("caption").toString() == QString::fromUtf8("直播工作台"), "Chinese source display");
         QSignalSpy changes(&preferences, &Oran7UiPreferences::languageChanged);
         check(preferences.selectLanguage("en_US"), "select English");
-        check(object->property("caption").toString() == "Recording studio",
+        check(object->property("caption").toString() == "Live studio",
               "existing binding retranslates immediately");
         check(object->property("unknown").toString() == "Untranslated fixture",
               "missing translation falls back to source");
@@ -211,6 +223,8 @@ Item {
         QTest::qWait(150);
         auto* group = item(quick, "uiPreferencesGroup");
         check(group, "preferences use their own expandable group");
+        check(item(quick, "uiPreferencesHeading")->property("text").toString() == "General settings",
+              "general settings heading translated");
         check(!group->property("expanded").toBool(), "group initially collapsed like other settings sections");
         group->setProperty("expanded", true);
         QElapsedTimer expanded;
@@ -220,6 +234,16 @@ Item {
         check(quick->isVisible() && quick->height() > 350, "expanded settings content participates in layout");
         QTest::qWait(260);
         auto* choice = item(quick, "uiLanguageChoice");
+        auto* developerSwitch = item(quick, "developerModeSwitch");
+        check(developerSwitch && !developerSwitch->property("checked").toBool(), "developer switch initially matches backend");
+        check(developerSwitch->mapToItem(item(quick, "uiPreferencesExpansion"),
+                  QPointF(0, developerSwitch->height())).y() <= item(quick, "uiPreferencesExpansion")->height() + 1,
+              "developer switch stays inside expanded content");
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
+            developerSwitch->mapToScene(QPointF(developerSwitch->width() / 2, developerSwitch->height() / 2)).toPoint());
+        check(preferences.developerMode() && Oran7GlobalHelper::developerMode(), "actual switch enables runtime diagnostics");
+        check(preferences.selectDeveloperMode(false) && !developerSwitch->property("checked").toBool(),
+              "switch binding survives clicking and resynchronizes from backend");
         check(choice, "language picker in actual settings panel");
         check(choice->property("currentIndex").toInt() == 1, "picker restores English selection");
         auto* fontSize = item(quick, "uiFontSizeChoice");
@@ -279,7 +303,7 @@ Item {
         check(QMetaObject::invokeMethod(choice, "activated", Q_ARG(int, 0)), "activate Chinese in actual picker");
         QTest::qWait(30);
         check(preferences.language() == "zh_CN" &&
-                  object->property("caption").toString() == QString::fromUtf8("录屏工作台"),
+                  object->property("caption").toString() == QString::fromUtf8("直播工作台"),
               "picker switches existing UI to Chinese");
         check(window.grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR) + "/settings-zh.png"),
               "Chinese settings screenshot");
@@ -522,6 +546,7 @@ Item {
         check(snapshot(state->property("outputDraft")) == draft,
               "language switching preserves recording draft and user filename");
         check(preferences.selectLanguage("en_US"), "restore English for restart check");
+        check(preferences.selectDeveloperMode(true), "save developer mode for restart check");
     }
     Oran7AppConfigManager restoredConfig(path, defaults);
     {
@@ -529,6 +554,8 @@ Item {
         check(restored.language() == "en_US" && restored.translate(QString::fromUtf8("界面语言")) == "Language",
               "restart restores translator before QML creation");
         check(restored.fontPixelSize() == 16, "font preferences restored");
+        check(restored.developerMode() && Oran7GlobalHelper::developerMode(), "restart restores runtime flag");
+        check(restored.selectDeveloperMode(false), "restore disabled developer mode");
     }
     const auto fontPath = directory.filePath("missing-font.json");
     Oran7AppConfigManager fontConfig(fontPath, defaults);
@@ -549,5 +576,10 @@ Item {
     check(!blocked.selectLanguage("en_US") && blocked.language() == "zh_CN",
           "failed save does not change translator or live selection");
     check(blockedConfig.snapshot().appearance.language == "zh_CN", "failed save restores memory snapshot");
+    QSignalSpy blockedDeveloper(&blocked, &Oran7UiPreferences::developerModeChanged);
+    check(!blocked.selectDeveloperMode(true) && !blocked.developerMode() && !Oran7GlobalHelper::developerMode(),
+          "failed developer save leaves runtime state unchanged");
+    check(!blockedConfig.snapshot().general.developerMode && blockedDeveloper.isEmpty(),
+          "failed developer save restores snapshot and emits no success notification");
     std::printf("PASS: %d localization checks\n", checks);
 }

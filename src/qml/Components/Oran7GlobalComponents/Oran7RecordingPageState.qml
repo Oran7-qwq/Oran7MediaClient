@@ -122,14 +122,14 @@ Item {
         captureDraft = Object.assign({}, captureSaved)
     }
     function localOptions(values) {
-        return {mode: values.mode, outputDirectory: values.outputDirectory, filePrefix: values.filePrefix,
+        return {mode: values.mode, format: values.format, outputDirectory: values.outputDirectory, filePrefix: values.filePrefix,
             width: values.width, height: values.height, fps: values.fps,
             bitrateKbps: values.bitrateKbps, audioEnabled: values.audioEnabled}
     }
     function reloadOutput() {
         if (!controller) return
         outputSaved = localOptions(controller.recordingSettings())
-        // 本页面明确用于 MP4；只有保存或开始录制时才提交模式切换。
+        // 本页面用于本地文件录制；容器格式与 WHIP 输出模式分开。
         outputDraft = Object.assign({}, outputSaved, {mode: 0})
     }
     function reset() {

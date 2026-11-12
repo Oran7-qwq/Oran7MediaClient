@@ -1,11 +1,21 @@
 ---
 status: ✅ P3-2/3 代码/离线完成，真实设备待验收
-updated: 2026-10-27
+updated: 2026-11-12
 ---
 
 # Capture：录屏与推流
 
-源码 `src/cpp/Oran7ScreenCapture/`，编译进 EXE。画面沿用 ddagrab/D3D11 预览与 Media Foundation 编码，系统声音由 WASAPI 回环采集；输出为 MP4 或可选 WHIP/WebRTC。这里只实现客户端，不启动陈旧 TCP/Server。
+源码 `src/cpp/Oran7ScreenCapture/`，编译进 EXE。画面沿用 ddagrab/D3D11 预览与 Media Foundation 编码，系统声音由 WASAPI 回环采集；输出为本地 MP4 / FLV 或可选 WHIP/WebRTC。这里只实现客户端，不启动陈旧 TCP/Server。
+
+## 本地 FLV 链路（2026-11-12）
+
+工作台右侧“画质设置”新增“录制格式”MP4 / FLV 选择，沿用现有选择器与自动保存。`recording.mode` 仍为 0 本地文件、1 WHIP；新增独立 `recording.format`，默认值仅来自 default.json 的 mp4，旧配置自动补齐，非法值归一化回默认。工作台始终使用本地 mode=0，格式选择、重启恢复与上方格式徽标同步；WHIP 参数合并保留，未接 RTMP 网络输出。
+
+复用 `Oran7Mp4Muxer` 文件封装器，保留旧类名与默认 open 参数以兼容现有调用，显式选择 FFmpeg mp4 / flv muxer；H.264/AAC 编码、系统声音、非阻塞有界包消费及异步停止不变。文件唯一后缀与格式一致，准备失败仍清理临时输出。
+
+FLV 写文件头后将 stream.time_base 改为毫秒，所有音视频包（含停止排空包）经 av_packet_rescale_ts 转到实际流时间基，再交 av_interleaved_write_frame。不能仅赋值 packet.time_base 或只改扩展名，否则文件时长与音画同步会错误。音频 codecpar 统一从实际编码上下文复制，保留 AAC 配置及声道布局；收尾写入错误会返回会话错误。
+
+`recording_throughput_checks` 已扩展为 MP4 / FLV × 无声 / 有声四组：每组实时输入 240fps、2 秒、480 帧，并读取实际容器、检查时间戳、逐包软件解码，要求 480/480 帧、零输入丢帧。当前 FLV 无声时长 2.000s，有声 2.026s（AAC 编码延迟及容器非负时间戳对齐）；完整音视频负载均通过读取。另检查后端格式验证/后缀/参数往返、默认及配置恢复、实际工作台选择自动保存与切回 MP4，以及中英文界面资源。主程序与真实 MF 设备不在隔离测试中运行，由用户实录验收。
 
 ## 所有权与线程边界
 
@@ -168,3 +178,37 @@ Oran7RecordingPreview 独立承接预览外框：固定 58px 来源栏展示已�
 底部仍为固定 86px、操作行与状态行；音频模块保持 220px 并横向滚动，加入 Oran7RecordingIcon 统一线条图标、细边框、轻微渐变和滑块/按钮过渡。系统音频开关仍提交原配置；麦克风及音量仍为既有 UI 草稿，没有虚构电平、实测 FPS 或录制计时。全部颜色由自身 property/工作台传入，不绑定下拉设置样式。
 
 离屏工作台检查覆盖宽/窄屏、状态标记/浮层边界、工具栏固定几何、录制状态切换与真实按钮交互；国际化和资源导入检查通过。宽屏/窄屏/录制状态截图由占位预览夹具生成，不是真实桌面采集，材料位于 build/refactor-work/recording-studio-style/。
+
+## 高帧率采集第一轮优化（2026-11-12）
+
+用户样本 `Oran7-20261112-085828-vkAYCc.mp4`：H.264 / 1920×1080，标称 r_frame_rate=240/1，实际 1540 帧 / 13.802644 秒，avg_frame_rate 约 111.57fps，视频平均码率约 2.05Mbps。用户输出设置为 240fps / 4Mbps、屏幕刷新率为 100Hz；标称帧率、真实帧数、播放器显示和屏幕更新频率不能混为一谈。样本仅只读分析。
+
+- `Oran7CaptureTimerPeriod`：仅在超过 60fps 的采集循环中请求 timeBeginPeriod(1)，成功请求才成对 timeEndPeriod；失败/取消/退出均 RAII 回收。动态从系统目录加载 winmm，不增加常驻全局计时请求。它改善短等待的机会，不保证所有 Windows 电源/遮挡状态下的调度精度。
+- `Oran7CaptureFrameConverter`：按输出尺寸复用 AVBufferPool 的 NV12 存储，编码队列持有 AVFrame 引用期间不可复用该缓冲；换尺寸、开始新会话及停止录制时释放旧池，旧帧按自身引用延寿。GPU 与 CPU 回退共用分配入口，不扩大编码器的有界队列。
+- 同尺寸会话复用 VideoProcessor 的 NV12 输出视图，避免逐帧创建；源纹理输入视图仍按帧实际 array slice 创建。
+- 开发者模式下每 3 秒输出 `[CapturePerf]`：raw_fps、submitted_fps、预览/转换平均耗时、编码队列累计丢帧和包队列积压。预览 FPS 不作为录像帧率结论。
+
+当前仍有同步 GPU Map 回读与 CPU NV12 → MF 编码输入，未宣称实现 GPU 零拷贝，也未把队列加大当作吞吐优化。上述开销是候选瓶颈，真实设备改善量需重新录制并结合日志确认；本轮不保证 1080p240 的持续编码能力。
+
+FFmpeg 6.0 ddagrab 在无新桌面画面时能够重复上一帧；100Hz 屏幕可以构造 240fps 的重复帧输出，但不会获得 240 次独立屏幕更新。独立 CFR 调度、停止时补齐及音画时间轴策略本轮尚未实施，更没有修改文件标记伪造真实帧率。运动插帧属于额外算法，不等同于重复帧。
+
+离线检查增加计时请求成功/失败/禁用配对，以及缓冲复用、在途帧隔离、尺寸切换、停止和转换器销毁后的租约安全；WARP/合成下载检查不采集真实桌面。Release 构建与定向检查完成后，实际高帧率吞吐由用户验收。
+
+实现参考：[FFmpeg 6.0 ddagrab 源码](https://github.com/FFmpeg/FFmpeg/blob/n6.0/libavfilter/vsrc_ddagrab.c)、[Windows timeBeginPeriod](https://learn.microsoft.com/en-us/windows/win32/api/timeapi/nf-timeapi-timebeginperiod)。
+
+## 约 110fps 录制瓶颈：MP4 消费线程等待音频（2026-11-12）
+
+从用户已有日志中定位 09:12:11～09:12:32 的 1080p / 240fps / 8Mbps 录制：raw_fps 和 submitted_fps 均稳定在约 240，转换平均约 1.1ms，但 packet_queue 持续为上限 15，输入队列最终丢弃 2719 帧。这证明此样本中抓屏和颜色转换能持续提交目标帧率，堵塞发生在编码包消费链，不能再把 100Hz 显示器或 DDA 当作 110fps 文件的直接根因。
+
+`Oran7Mp4Muxer::muxLoop` 原来每写一个视频包都会调用音频 getPacket(timeout=1ms)。AAC 每秒仅约 47 个包，大部分视频循环会落入条件变量超时等待，实际唤醒还受 Windows 调度影响。串行等待压低视频包消费吞吐，反压使视频编码器卡在满包队列，并触发原始帧队列丢帧。4Mbps 与 8Mbps 文件出现相近帧率也与此处等待无关码率的特性一致。
+
+在不采集桌面、不使用硬编或真实声音的隔离测试中，按实时 240fps 喂入 2 秒、480 张合成帧，使用生产 libx264/AAC/MP4 链路复现：
+
+| 条件 | 修复前视频包 | 输入丢帧 | 修复后视频包 | 输入丢帧 |
+|---|---:|---:|---:|---:|
+| 不含音频 | 480/480 | 0 | 480/480 | 0 |
+| 含 AAC 音频 | 264/480 | 216 | 480/480 | 0 |
+
+修复后，两路 getPacket(timeout=0) 显式只检查已有包，不进入条件变量等待；消费线程对视频/音频分别有界批量取包，均为空才统一休眠，不再让低包频率的一路阻塞另一路。保持原始帧/包队列上限，不改 PTS、不补重复帧、不关闭丢帧保护；停止时仍等待生产者退出并排空余包后写 moov。顺便将收尾 AVPacket 零初始化。
+
+新增 `recording_throughput_checks` 验证真实 MP4 视频包数、时间戳递增、2 秒实际时长、音频包和零输入丢帧；基线模式仅用于记录坏结果，不代替默认检查。`[Muxer]` 新增实际写入包速率 video_fps，与 CapturePerf 一起仅在开发者模式下定时输出。上述隔离检查不能代替真实 1080p240 硬件吞吐验收；修复后需用户重新录制同一场景确认。

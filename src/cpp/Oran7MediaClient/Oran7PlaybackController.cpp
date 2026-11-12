@@ -1,7 +1,9 @@
 #include "Oran7PlaybackController.h"
 #include "Oran7PlaybackState.h"
 #include "Oran7MediaPlayer.h"
+#include "Audio/Oran7AudioParameterQueue.h"
 #include "Oran7Async.h"
+#include "Oran7GlobalHelper.h"
 #include "ffmsg.h"
 #include <QMutex>
 #include <QMutexLocker>
@@ -9,6 +11,33 @@
 #include <cmath>
 #include <thread>
 #include <utility>
+#include <QDebug>
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#include <psapi.h>
+#endif
+
+void Oran7PlaybackController::sampleMemory(const char* stage)
+{
+    if (!Oran7GlobalHelper::developerMode()) return;
+#ifdef Q_OS_WIN
+    // 只记录进程计数，不记录媒体地址/曲目/账号；不做工作集裁剪或触发垃圾回收。
+    using Query = BOOL (WINAPI*)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
+    static const auto query = reinterpret_cast<Query>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "K32GetProcessMemoryInfo"));
+    PROCESS_MEMORY_COUNTERS_EX memory{};
+    if (query && query(GetCurrentProcess(), reinterpret_cast<PPROCESS_MEMORY_COUNTERS>(&memory), sizeof(memory))) {
+        DWORD handles = 0;
+        GetProcessHandleCount(GetCurrentProcess(), &handles);
+        qInfo().nospace() << "[MemoryDiag] stage=" << stage
+            << " privateMiB=" << memory.PrivateUsage / 1048576.0
+            << " workingMiB=" << memory.WorkingSetSize / 1048576.0
+            << " handles=" << handles << " retiring=" << m_retiringPlayers << " active=" << bool(m_player);
+    }
+#else
+    Q_UNUSED(stage);
+#endif
+    m_memoryTimer.restart();
+}
 
 struct Oran7PlaybackController::Oran7EventMailbox {
     QMutex mutex;
@@ -30,6 +59,7 @@ Oran7PlaybackController::Oran7PlaybackController(Oran7PlaybackState& state, Oran
 {
     m_mailbox->receiver = this;
     m_callTimer.start();
+    m_memoryTimer.start();
     m_switchTimer.setSingleShot(true);
     m_switchTimer.setInterval(300);
     connect(&m_switchTimer, &QTimer::timeout, this, [this] {
@@ -117,6 +147,10 @@ void Oran7PlaybackController::toggle()
             return messageLoop(static_cast<Oran7MediaPlayer*>(player), mailbox, generation);
         });
         if (result == 0) {
+            // 每播放器独立队列：旧播放器退役后不会再收到新参数。
+            m_audioQueue = std::make_shared<Oran7AudioParameterQueue>();
+            if (m_audioProvider) m_audioQueue->push(m_audioProvider());
+            m_player->oran7mp_setAudioParameterQueue(m_audioQueue);
             if (m_render.beginPlayback) m_player->AddVideoRefreshCallback(m_render.beginPlayback());
             if (m_render.device) m_player->oran7mp_setD3D11Device(m_render.device());
             result = m_player->oran7mp_set_data_source(m_source.toUtf8().constData());
@@ -194,6 +228,7 @@ void Oran7PlaybackController::retirePlayer(bool pauseBeforeRelease)
             player.reset();
         }, [this] {
             --m_retiringPlayers;
+            sampleMemory("retired");
             if (!m_shutdown) {
                 if (m_retiringPlayers == 0 && m_pendingSwitch && !m_player && !m_switchTimer.isActive())
                     m_switchTimer.start(0);
@@ -247,9 +282,27 @@ void Oran7PlaybackController::setDevice(ID3D11Device* device)
     if (!m_shutdown && m_player) m_player->oran7mp_setD3D11Device(device);
 }
 
+bool Oran7PlaybackController::publishAudioParameters(const Oran7AudioParameters& parameters)
+{
+    // 没有播放器时直接丢弃；新播放器创建前会通过 provider 带入当前完整参数。
+    if (m_shutdown || !m_audioQueue) return true;
+    return m_audioQueue->push(parameters);
+}
+
+std::shared_ptr<Oran7AudioParameterQueue> Oran7PlaybackController::audioParameterQueue() const
+{
+    return m_audioQueue;
+}
+
+void Oran7PlaybackController::setAudioParameterProvider(AudioParameterProvider provider)
+{
+    m_audioProvider = std::move(provider);
+}
+
 void Oran7PlaybackController::updatePosition()
 {
     if (m_shutdown || !m_player || m_state.state() == Oran7PlaybackState::Seeking) return;
+    if (Oran7GlobalHelper::developerMode() && m_memoryTimer.elapsed() >= 30000) sampleMemory("periodic");
     const double seconds = m_player->oran7mp_get_current_position_double();
     const qint64 duration = m_state.durationMs();
     if (!std::isfinite(seconds) || seconds < 0 || duration <= 0 || seconds * 1000 > duration) return;
@@ -294,6 +347,7 @@ void Oran7PlaybackController::acceptEvent(quint64 generation, int event, qint64 
     QPointer<Oran7PlaybackController> guard(this);
     switch (event) {
     case FFP_MSG_PREPARED:
+        sampleMemory("prepared");
         if (m_player) {
             if (m_pauseWhenPrepared) m_player->oran7mp_pause();
             else m_player->oran7mp_start();

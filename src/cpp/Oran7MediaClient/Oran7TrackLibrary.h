@@ -2,7 +2,7 @@
 #include "Oran7TrackListModel.h"
 #include <memory>
 
-// 四类列表的所有权、去重及成员关系；不接管网络请求或播放队列策略。
+// 本地/整合/喜欢/搜索/推荐模型的所有权、去重及成员关系；不接管播放队列策略。
 class Oran7TrackLibrary : public QObject
 {
     Q_OBJECT
@@ -10,12 +10,15 @@ class Oran7TrackLibrary : public QObject
     Q_PROPERTY(Oran7TrackListModel* integrated READ integrated CONSTANT)
     Q_PROPERTY(Oran7TrackListModel* liked READ liked CONSTANT)
     Q_PROPERTY(Oran7TrackListModel* search READ search CONSTANT)
+    Q_PROPERTY(Oran7TrackListModel* recommendations READ recommendations CONSTANT)
 public:
     explicit Oran7TrackLibrary(QObject* parent = nullptr);
     Oran7TrackListModel* local() const { return m_local.get(); }
     Oran7TrackListModel* integrated() const { return m_integrated.get(); }
     Oran7TrackListModel* liked() const { return m_liked.get(); }
     Oran7TrackListModel* search() const { return m_search.get(); }
+    Oran7TrackListModel* recommendations() const { return m_recommendations.get(); }
+    void replaceRecommendations(const QVariantList& tracks);
     void replaceLocalTracks(const QVariantList& tracks);
     void restoreIntegratedTracks(const QVariantList& tracks);
     QVariantList integratedTracks() const;
@@ -38,5 +41,6 @@ private:
     std::unique_ptr<Oran7TrackListModel> m_integrated;
     std::unique_ptr<Oran7TrackListModel> m_liked;
     std::unique_ptr<Oran7TrackListModel> m_search;
+    std::unique_ptr<Oran7TrackListModel> m_recommendations;
     bool m_restoring = false;
 };

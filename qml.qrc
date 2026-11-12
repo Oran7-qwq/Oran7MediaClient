@@ -1,9 +1,12 @@
 <RCC>
     <qresource prefix="/">
+        <file>src/qml/RightPage/MainStackView/Oran7QQMusicStack.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7QQMusicLoginPopup.qml</file>
         <file>main.qml</file>
         <file>src/qml/Basic/BasicConfig.qml</file>
         <file>src/qml/Basic/qmldir</file>
         <file>src/qml/BottomPage/BottomPage.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RecommendationButton.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7OpenFolderItem.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SettingItem.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SwitchToggleItem.qml</file>
@@ -25,6 +28,11 @@
         <file>src/qml/Components/Oran7GlobalComponents/Oran7PlaylistHeader.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7PlaylistColumns.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7PlayerVolumeComponent.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7VideoLibraryPage.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7VideoPlaybackToolbar.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7EqualizerBand.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7EqualizerWindow.qml</file>
+        <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7PreferenceAction.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7ProgressSlider.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7ScreenCaptureComponent.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingSettingsPopup.qml</file>

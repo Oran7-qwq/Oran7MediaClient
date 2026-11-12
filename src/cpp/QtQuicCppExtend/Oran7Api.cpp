@@ -5,6 +5,7 @@
 #include <QQmlEngine>
 #include <QRegion>
 #include <QThread>
+#include <QScreen>
 #include <cmath>
 
 #ifdef Q_OS_WIN
@@ -89,6 +90,44 @@ int Oran7Api::getWindowState(QWindow *window) const
 Oran7Api::Oran7Api(QObject *parent)
     : QObject(parent)
 {
+    for (auto* screen : QGuiApplication::screens()) observeScreen(screen);
+    connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
+        observeScreen(screen);
+        emit screenWorkAreasChanged();
+    });
+    connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] { emit screenWorkAreasChanged(); });
+    connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, [this] { emit screenWorkAreasChanged(); });
+}
+
+void Oran7Api::observeScreen(QScreen* screen)
+{
+    connect(screen, &QScreen::availableGeometryChanged, this, [this] { emit screenWorkAreasChanged(); });
+    connect(screen, &QScreen::geometryChanged, this, [this] { emit screenWorkAreasChanged(); });
+}
+
+QVariantList Oran7Api::screenWorkAreas() const
+{
+    // QScreen 与 QML 窗口均使用逻辑坐标，保留副屏负坐标和任务栏造成的原点偏移。
+    auto screens = QGuiApplication::screens();
+    if (auto* primary = QGuiApplication::primaryScreen(); screens.removeOne(primary)) screens.prepend(primary);
+    QVariantList result;
+    for (auto* screen : screens) {
+        const auto area = screen->availableGeometry();
+        if (!area.isEmpty()) result.append(QVariant::fromValue(QRectF(area)));
+    }
+    return result;
+}
+
+QVariantList Oran7Api::screenGeometries() const
+{
+    auto screens = QGuiApplication::screens();
+    if (auto* primary = QGuiApplication::primaryScreen(); screens.removeOne(primary)) screens.prepend(primary);
+    QVariantList result;
+    for (auto* screen : screens) {
+        const auto area = screen->geometry(); // 完整桌面，包含任务栏；与窗口使用同一套逻辑坐标。
+        if (!area.isEmpty()) result.append(QVariant::fromValue(QRectF(area)));
+    }
+    return result;
 }
 
 void Oran7Api::setWindowMaskRect(QWindow* window, const QRectF& rect)

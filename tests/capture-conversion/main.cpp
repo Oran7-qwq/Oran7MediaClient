@@ -1,5 +1,6 @@
 #include "Oran7CaptureFrameConverter.h"
 #include "Oran7DesktopCaptureWorker.h"
+#include "Oran7CaptureTimerPeriod.h"
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QSignalSpy>
@@ -191,8 +192,20 @@ static void recordingChecks(Oran7SoftwareDevice& gpu)
           "CPU fallback converts downloaded white pixels to limited range");
     check(output->pts == 12345 && output->color_range == AVCOL_RANGE_MPEG && output->colorspace == AVCOL_SPC_BT709,
           "recording timing and SDR color metadata retained");
+    output->data[0][0] = 101;
+    auto another = converter.recording(input.get(), 16, 12);
+    check(another && another->data[0] != output->data[0] && output->data[0][0] == 101,
+          "pooled buffers cannot overwrite queued recording frames");
+    auto* reusable = another->data[0];
+    another.reset();
+    another = converter.recording(input.get(), 16, 12);
+    check(another && another->data[0] == reusable, "released NV12 storage is reused without per-frame allocation");
     converter.beginRecording();
     check(bool(converter.recording(input.get(), 20, 16)), "new recording and target size reuse safely");
+    check(output->data[0][0] == 101, "old-size frame survives buffer pool replacement");
+    converter.endRecording();
+    check(output->data[0][0] == 101 && another->data[0][0] >= 230,
+          "ending recording releases idle pool without invalidating queued frames");
     check(!converter.recording(nullptr, 16, 12), "invalid recording frame rejected");
     // 在预览槽位占满时，录制仍从原始帧转换。
     Oran7CaptureFrameConverter preview(gpu.device.Get(), 60);
@@ -201,6 +214,52 @@ static void recordingChecks(Oran7SoftwareDevice& gpu)
         lease = std::move(preview.preview(input.get()).frame);
     check(!preview.preview(input.get()).frame && converter.recording(input.get(), 16, 12),
           "preview backpressure does not consume or block original recording source");
+    Frame survivor;
+    {
+        Oran7CaptureFrameConverter temporary(
+            nullptr, 240, [](AVFrame* destination, const AVFrame* hardware, int)
+            { return av_frame_ref(destination, static_cast<AVFrame*>(hardware->opaque)); });
+        survivor = temporary.recording(input.get(), 16, 12);
+    }
+    check(survivor && survivor->data[0][0] >= 230, "pooled frame remains valid after converter destruction");
+}
+static UINT timerBegins = 0, timerEnds = 0;
+static UINT WINAPI beginTimer(UINT period)
+{
+    ++timerBegins;
+    return period == 1 ? 0 : 1;
+}
+static UINT WINAPI endTimer(UINT period)
+{
+    ++timerEnds;
+    return period == 1 ? 0 : 1;
+}
+static UINT WINAPI failTimer(UINT)
+{
+    ++timerBegins;
+    return 1;
+}
+static void timerChecks()
+{
+    {
+        Oran7CaptureTimerPeriod timer(false, beginTimer, endTimer);
+        check(!timer.active(), "disabled timer does not activate");
+    }
+    check(timerBegins == 0 && timerEnds == 0, "normal frame rate makes no timer request");
+    {
+        Oran7CaptureTimerPeriod timer(true, beginTimer, endTimer);
+        check(timer.active(), "high frame rate requests 1ms period");
+    }
+    check(timerBegins == 1 && timerEnds == 1, "successful request released exactly once");
+    {
+        Oran7CaptureTimerPeriod timer(true, failTimer, endTimer);
+        check(!timer.active(), "failed timer request is inactive");
+    }
+    check(timerBegins == 2 && timerEnds == 1, "failed timer request does not call timeEndPeriod");
+    {
+        Oran7CaptureTimerPeriod timer(true, beginTimer, nullptr);
+    }
+    check(timerBegins == 2 && timerEnds == 1, "missing end operation cannot leave an unmatched request");
 }
 static void workerChecks()
 {
@@ -234,6 +293,7 @@ static void workerChecks()
 int main(int argc, char** argv)
 {
     QCoreApplication app(argc, argv);
+    timerChecks();
     Oran7SoftwareDevice gpu;
     previewChecks(gpu);
     recordingChecks(gpu);

@@ -48,6 +48,13 @@ int main(int argc, char** argv) {
     auto* center = findItem(workspace, "recordingCenterColumn");
     auto* toolbar = findItem(workspace, "recordingCenterToolbar");
     check(source && output && preview, "three panels instantiated");
+    auto* fileFormat = findItem(workspace, "recordingFileFormat");
+    check(fileFormat && fileFormat->property("currentIndex").toInt() == 0, "local format defaults to MP4");
+    QMetaObject::invokeMethod(fileFormat, "activated", Q_ARG(int, 1)); settle(); QTest::qWait(100);
+    auto* captureFixture = window->property("fake").value<QObject*>();
+    check(captureFixture && captureFixture->property("options").value<QJSValue>().toVariant().toMap().value("format") == "flv", "FLV selection automatically saved");
+    QMetaObject::invokeMethod(fileFormat, "activated", Q_ARG(int, 0)); settle(); QTest::qWait(100);
+    check(captureFixture->property("options").value<QJSValue>().toVariant().toMap().value("format") == "mp4", "can switch back to MP4");
     check(center && toolbar && source->x() < center->x() && center->x() < output->x() && preview->width() >= 320, "wide studio layout");
     check(toolbar->parentItem() == preview->parentItem() && toolbar->y() >= preview->y() + preview->height()
         && toolbar->width() == preview->width(), "toolbar belongs directly beneath center preview");

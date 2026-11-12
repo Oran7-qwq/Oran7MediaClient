@@ -152,7 +152,7 @@ void Oran7VideoEncoder::pushFrame(AVFrame *frame)
 bool Oran7VideoEncoder::getPacket(AVPacket *pkt, int timeoutMs)
 {
     std::unique_lock<std::mutex> lock(_pkt_mtx);
-    if (!_pktCond.wait_for(lock,
+    if (timeoutMs > 0 && !_pktCond.wait_for(lock,
            std::chrono::milliseconds(timeoutMs), [this]() {
                return !_pktQueue.empty() || !_running.load();
            }))
