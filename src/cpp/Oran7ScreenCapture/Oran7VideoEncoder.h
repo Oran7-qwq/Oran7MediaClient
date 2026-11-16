@@ -42,7 +42,9 @@ public:
 
         // 直接传入 AVBufferRef*（DDAGrab 的 m_hwdev），走硬编路径
         AVBufferRef* hwDevice = nullptr;
+        bool hardwareLive = false; // RTMP 显式请求 MF 硬编；旧 WHIP 默认行为不变。
         bool liveStreaming = false; // WHIP 保持原低延迟场景；本地录制优先画质与硬编。
+        AVPixelFormat softwareInputFormat = AV_PIX_FMT_YUV420P; // 软件编码也可直接消费采集器的 NV12。
     };
 
     bool configure(const EncoderConfig& cfg,ErrorCallback onError);

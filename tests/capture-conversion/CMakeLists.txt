@@ -1,6 +1,6 @@
 set(CAP "${ORAN7_SOURCE_ROOT}/src/cpp/Oran7ScreenCapture")
 add_executable(capture_conversion_checks main.cpp
-    "${CAP}/Oran7CaptureFrameConverter.cpp"
+    "${CAP}/Oran7CaptureFrameConverter.cpp" "${CAP}/Oran7CaptureOutputRouter.cpp"
     "${CAP}/Oran7DesktopCaptureWorker.cpp" "${CAP}/Oran7DesktopCaptureWorker.h"
     "${CAP}/Oran7VideoEncoder.cpp")
 target_include_directories(capture_conversion_checks PRIVATE "${CAP}" "${FFMPEG_ROOT_DIR}/include")

@@ -62,7 +62,7 @@ bool Oran7VideoEncoder::configure(const EncoderConfig& cfg,ErrorCallback onError
         _avctx->pix_fmt        = AV_PIX_FMT_NV12;
         _avctx->gop_size        = cfg.gopSize;
         _avctx->max_b_frames    = 0;
-        if (!cfg.liveStreaming) _avctx->profile = FF_PROFILE_H264_HIGH;
+        if (!cfg.liveStreaming || cfg.hardwareLive) _avctx->profile = FF_PROFILE_H264_HIGH;
         _avctx->color_range     = AVCOL_RANGE_MPEG;
         _avctx->colorspace      = AVCOL_SPC_BT709;
         _avctx->color_primaries = AVCOL_PRI_BT709;
@@ -77,10 +77,10 @@ bool Oran7VideoEncoder::configure(const EncoderConfig& cfg,ErrorCallback onError
         setOpt(_avctx, "rate_control", "cbr");
         setOpt(_avctx, "scenario", cfg.liveStreaming ? "live_streaming" : "camera_record");
         // 持有 D3D11 AVBufferRef 并不会自动让 MF 选择硬编，必须显式请求。
-        setOpt(_avctx, "hw_encoding", cfg.liveStreaming || _softwareMfFallback ? "0" : "1");
+        setOpt(_avctx, "hw_encoding", (cfg.liveStreaming && !cfg.hardwareLive) || _softwareMfFallback ? "0" : "1");
     } else {
         // ---- 软编 libx264 ----
-        _avctx->pix_fmt     = AV_PIX_FMT_YUV420P;
+        _avctx->pix_fmt     = cfg.softwareInputFormat;
         _avctx->gop_size     = cfg.gopSize;
         _avctx->max_b_frames = 0;
         _avctx->thread_count = cfg.threadCount;
@@ -226,7 +226,7 @@ void Oran7VideoEncoder::encodeLoop()
     INFO_LOG << "[RecordingEncoder] codec=" << QString::fromStdString(_cfg.codecName)
              << "size=" << _cfg.width << "x" << _cfg.height << "fps=" << _cfg.fps
              << "target_kbps=" << _cfg.bitrateKbps << "profile=" << _avctx->profile
-             << "hardware_mf=" << (_cfg.codecName == "h264_mf" && !_cfg.liveStreaming && !_softwareMfFallback);
+             << "hardware_mf=" << (_cfg.codecName == "h264_mf" && (!_cfg.liveStreaming || _cfg.hardwareLive) && !_softwareMfFallback);
 
     while (true)
     {

@@ -1,4 +1,5 @@
 #pragma once
+#include "Oran7WasapiPcmConverter.h"
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -7,8 +8,10 @@
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <ksmedia.h>
-extern "C" {
+extern "C"
+{
 #include <libavutil/frame.h>
+#include <libavutil/mathematics.h>
 #include <libswresample/swresample.h>
 }
 
@@ -16,19 +19,31 @@ extern "C" {
 /**
  *  @brief Windows桌面音频采集器
  */
-class Oran7WasapiAudioWorker{
-public:
+class Oran7WasapiAudioWorker
+{
+  public:
     ~Oran7WasapiAudioWorker() { stop(); }
     struct Oran7WasapiConfig
     {
-        int sampleRate  = 48000;
+        int sampleRate = 48000;
         int channels = 2;
         int frameMs = 10; // WASAPI 帧周期
+        bool microphone = false;
+        int64_t clockStart100ns = 0; // 直播混音公共 QPC 起点；0 保留原录制时钟。
     };
 
     bool start(const Oran7WasapiConfig& cfg);
     void stop();
     bool isRunning() const;
+    uint64_t droppedFrames() const { return _droppedFrames.load(); }
+    uint64_t discontinuities() const { return _discontinuities.load(); }
+    static int64_t clockNow100ns()
+    {
+        LARGE_INTEGER count{}, frequency{};
+        QueryPerformanceCounter(&count);
+        QueryPerformanceFrequency(&frequency);
+        return av_rescale(count.QuadPart, 10000000, frequency.QuadPart);
+    }
 
     /**
      * @brief 阻塞拉取 PCM 帧（S16 interleaved, 48000Hz stereo）
@@ -37,29 +52,30 @@ public:
      * @return av_frame_free
      */
     bool getPcmFrame(AVFrame** frame, int timeoutMs = 100);
-private:
+
+  private:
     void captureLoop();
     bool initWASAPI();
     void cleanupWASAPI();
 
     // WASAPI COM 接口
-    IAudioClient*          _audioClient   = nullptr;
-    IAudioCaptureClient*   _captureClient = nullptr;
-    WAVEFORMATEX*          _deviceFormat  = nullptr;  // 设备原生格式
-    HANDLE                 _hEvent        = nullptr;  // loopback 事件
+    IAudioClient* _audioClient = nullptr;
+    IAudioCaptureClient* _captureClient = nullptr;
+    WAVEFORMATEX* _deviceFormat = nullptr; // 设备原生格式
+    HANDLE _hEvent = nullptr;              // loopback 事件
 
     // 格式转换：设备格式 → S16/48kHz/stereo
-    SwrContext* _swr = nullptr;
+    Oran7WasapiPcmConverter _converter;
 
     // PCM 帧队列
-    std::mutex              _frameQueue_mtx;
+    std::mutex _frameQueue_mtx;
     std::condition_variable _frameCond;
-    std::queue<AVFrame*>    _frameQueue;
-    static constexpr int    kMaxQueued = 10;
+    std::queue<AVFrame*> _frameQueue;
+    static constexpr int kMaxQueued = 10;
 
-    std::thread                _thread;
-    std::atomic<bool>  _running{false};
-    Oran7WasapiConfig         _cfg;
-    int64_t               _recStartUs = 0;  // wall clock
+    std::thread _thread;
+    std::atomic<bool> _running{false};
+    std::atomic<uint64_t> _droppedFrames{0}, _discontinuities{0};
+    Oran7WasapiConfig _cfg;
+    int64_t _recStartUs = 0; // wall clock
 };
-

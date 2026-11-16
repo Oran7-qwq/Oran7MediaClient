@@ -6,6 +6,8 @@
 #include "Oran7CloudMusicService.h"
 #include "Oran7PlaybackViewModel.h"
 #include "Oran7VideoHistory.h"
+#include "qqmusic/Oran7QQMusicSession.h"
+#include "qqmusic/Oran7QQMusicService.h"
 #include <QObject>
 #include <QQuickItem>
 #include <QList>
@@ -38,6 +40,8 @@ class Oran7MediaClient : public QObject
     Q_PROPERTY(Oran7PlaybackViewModel* musicQueue READ musicQueue CONSTANT)
     Q_PROPERTY(Oran7AudioEffects* audioEffects READ audioEffects CONSTANT)
     Q_PROPERTY(Oran7VideoHistory* videoHistory READ videoHistory CONSTANT)
+    Q_PROPERTY(Oran7QQMusicSession* qqMusic READ qqMusic CONSTANT)
+    Q_PROPERTY(Oran7QQMusicService* qqMusicService READ qqMusicService CONSTANT)
 public:
     explicit Oran7MediaClient(const QString& host, quint16 port, QObject* parent = nullptr);
     ~Oran7MediaClient() override;
@@ -48,6 +52,11 @@ public:
     Oran7PlaybackViewModel* musicQueue() const { return m_musicQueue.get(); }
     Oran7AudioEffects* audioEffects() const { return m_audioEffects.get(); }
     Oran7VideoHistory* videoHistory() const { return m_videoHistory.get(); }
+    Oran7QQMusicSession* qqMusic() const { return m_qqMusic.get(); }
+    Oran7QQMusicService* qqMusicService() const { return m_qqMusicService.get(); }
+    Q_INVOKABLE QVariantMap currentTrackFields() const { return m_playback->currentTrack().toVariantMap(); }
+    Q_INVOKABLE void toggleTrackLike(const QVariantMap& fields);
+    Q_INVOKABLE void toggleTrackIntegration(const QVariantMap& fields);
 
     // 应用生命周期：配置管理器须先加载，调用方负责最终落盘。
     bool restoreConfiguration(QQmlApplicationEngine& engine);
@@ -161,6 +170,8 @@ private:
     std::unique_ptr<Oran7TrackLibrary> m_tracks;
     std::unique_ptr<Oran7VideoHistory> m_videoHistory;
     std::unique_ptr<Oran7CloudMusicService> m_cloudMusic;
+    std::unique_ptr<Oran7QQMusicSession> m_qqMusic;
+    std::unique_ptr<Oran7QQMusicService> m_qqMusicService;
     std::unique_ptr<Oran7PlaybackViewModel> m_musicQueue;
     std::unique_ptr<Oran7AudioEffects> m_audioEffects;
     std::unique_ptr<QTimer> m_audioSaveTimer;

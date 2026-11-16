@@ -12,6 +12,8 @@ Item {
     Oran7RecordingWorkspace {
         id: workspace
         anchors.fill: parent
+        audioMonitoringActive: root.isActive && workspace.visible && (!Window.window ||
+            (Window.window.visible && Window.window.visibility !== Window.Minimized && Window.window.opacity > 0))
         service: Client
         controller: Client.screenCapture()
         previewComponent: Component {

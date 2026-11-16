@@ -193,6 +193,12 @@ int main(int argc, char** argv) {
     check(result.toInt() == 24, "24 source/save/start/rollback/reconnect checks");
     auto* fake = window->property("fake").value<QObject*>();
     check(fake, "fixture controller");
+    check(fake->property("audioMonitoringEnabled").toBool(),"visible workspace requests idle audio capture");
+    workspace->setVisible(false);settle();
+    check(!fake->property("audioMonitoringEnabled").toBool(),"hidden workspace releases idle monitoring request");
+    workspace->setVisible(true);settle();
+    check(fake->property("audioMonitoringEnabled").toBool(),"returning to workspace restores idle monitoring request");
+
     auto* microphone=findItem(toolbar,"recordingMicrophone");
     auto* microphoneVolume=findItem(toolbar,"recordingMicrophoneVolume");
     auto* systemVolume=findItem(toolbar,"recordingSystemVolume");
@@ -202,6 +208,11 @@ int main(int argc, char** argv) {
         QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,systemToggle->mapToScene(QPointF(systemToggle->width()/2,systemToggle->height()/2)).toPoint());
         settle();settle();
     }
+    fake->setProperty("audioLevels",QVariantMap{{"active",true},{"systemPeak",.3},{"microphonePeak",0.0}});settle();
+    auto* idleSystemMeter=findItem(toolbar,"recordingSystemLevelMeter");
+    check(!fake->property("recordingBusy").toBool() && idleSystemMeter->property("available").toBool() && idleSystemMeter->property("targetLevel").toDouble()>.7,
+          "idle system levels display before any recording or streaming starts");
+    fake->setProperty("audioLevels",QVariantMap{{"active",false}});settle();
     const auto originalOptions=fake->property("options").value<QJSValue>().toVariant();
     const int originalSaves=fake->property("saves").toInt();
     QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,microphone->mapToScene(QPointF(microphone->width()/2,microphone->height()/2)).toPoint());
@@ -211,6 +222,12 @@ int main(int argc, char** argv) {
     systemVolume->forceActiveFocus();QTest::keyClick(window,Qt::Key_Left);settle();
     check(toolbar->property("microphoneVolume").toDouble()<100 && toolbar->property("systemVolume").toDouble()<100, "audio sliders edit their UI values");
     check(fake->property("saves").toInt()==originalSaves && fake->property("options").value<QJSValue>().toVariant()==originalOptions, "UI-only audio controls do not change backend recording settings");
+    check(fake->property("previewAudio").value<QJSValue>().toVariant().toMap().value("microphoneEnabled").toBool(), "microphone toggle previews actual live audio settings");
+    QVariant audioSaved;
+    check(QMetaObject::invokeMethod(workspace,"saveLiveAudio",Q_RETURN_ARG(QVariant,audioSaved)) && audioSaved.toBool(), "audio auto-save flush succeeds");
+    const auto savedLive=fake->property("liveOptions").value<QJSValue>().toVariant().toMap();
+    check(savedLive.value("microphoneEnabled").toBool() && savedLive.value("microphoneVolume").toInt()<100 && savedLive.value("systemVolume").toInt()<100,
+          "independent microphone and system gain persist in live settings");
     auto stableGeometry=[&] {
         auto* controls=findItem(toolbar,"recordingControlRow");
         auto* status=findItem(toolbar,"recordingStatusRow");
@@ -247,8 +264,20 @@ int main(int argc, char** argv) {
     fake->setProperty("recordingBusy", true); fake->setProperty("recordingState", "Recording"); settle();
     check(findItem(workspace, "recordingStatus")->property("text").toString() == QString::fromUtf8("正在录制"), "recording status overrides old settings messages");
     check(!findItem(workspace, "startLocalRecording")->isEnabled() && !findItem(workspace, "recordingDirectory")->isEnabled()
-        && !findItem(workspace, "recordingAudio")->isEnabled() && !findItem(workspace, "restartCapturePreview")->isEnabled(), "actual controls locked while busy");
-    check(!microphone->isEnabled() && !microphoneVolume->isEnabled() && !systemVolume->isEnabled(), "new audio UI locks during recording");
+        && findItem(workspace, "recordingAudio")->isEnabled() && !findItem(workspace, "restartCapturePreview")->isEnabled(), "actual controls locked while busy");
+    check(microphone->isEnabled() && microphoneVolume->isEnabled() && systemVolume->isEnabled(), "shared audio controls remain active during local recording");
+    microphoneVolume->forceActiveFocus();QTest::keyClick(window,Qt::Key_Left);settle();
+    check(QMetaObject::invokeMethod(workspace,"saveLiveAudio",Q_RETURN_ARG(QVariant,audioSaved)) && audioSaved.toBool(),"local recording permits audio settings save");
+    check(fake->property("recordingState")=="Recording", "changing local mix does not stop or restart recording");
+    auto* systemMeter=findItem(toolbar,"recordingSystemLevelMeter");
+    auto* microphoneMeter=findItem(toolbar,"recordingMicrophoneLevelMeter");
+    check(systemMeter && microphoneMeter && systemMeter->height()==4 && microphoneMeter->height()==4,"compact independent level meters added below gain sliders");
+    fake->setProperty("audioLevels",QVariantMap{{"active",true},{"systemPeak",.5},{"microphonePeak",.95},{"systemFullScale",false},{"microphoneFullScale",true}});settle();
+    check(systemMeter->property("available").toBool() && systemMeter->property("targetLevel").toDouble()>.8 && microphoneMeter->property("fullScale").toBool(),"recording meters show live measured peaks and overload warning");
+    check(microphoneMeter->property("description").toString().contains("dBFS"),"level tooltip exposes measured decibels");
+    QTest::qWait(80);settle();window->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/meters-active.png");
+    fake->setProperty("audioLevels",QVariantMap{{"active",false}});settle();
+    check(systemMeter->property("targetLevel").toDouble()==0 && !microphoneMeter->property("available").toBool(),"inactive session clears meters");
     window->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/recording.png");
     auto* stop = findItem(workspace, "stopLocalRecording");
     check(stop->isEnabled() && QMetaObject::invokeMethod(stop, "clicked"), "actual stop button submits request");
@@ -340,6 +369,46 @@ int main(int argc, char** argv) {
     check(audio->property("onColor").value<QColor>() == QColor("#ff8844")
         && audio->height() == 20, "reused switch uses injected workspace colors and sizing");
     settle();
+    QVariant liveChecks;
+    check(QMetaObject::invokeMethod(window,"runLiveChecks",Q_RETURN_ARG(QVariant,liveChecks)) && liveChecks.toInt()==3,
+          "live auto-save is separate from recording and failed saves preserve drafts");
+    auto* liveButton=findItem(workspace,"startLiveStreaming");
+    check(liveButton && findItem(workspace,"liveServer") && findItem(workspace,"liveStreamKey"),"live controls instantiated");
+    check(findItem(workspace,"liveStreamKey")->property("echoMode").toInt()==2,"stream key masked by default");
+    QMetaObject::invokeMethod(liveButton,"clicked");settle();
+    auto* liveSession=captureFixture->property("liveSession").value<QObject*>();
+    check(liveSession && liveSession->property("busy").toBool() && findItem(workspace,"startLocalRecording")->isEnabled(),
+          "live button connects while local recording remains independently available");
+    check(!findItem(workspace,"liveServer")->isEnabled(),"live address locked while connecting");
+    liveSession->setProperty("state","Streaming");settle();
+    check(microphone->isEnabled() && systemToggle->isEnabled(), "audio toggles stay usable during live streaming");
+    if(!systemToggle->property("checked").toBool())QMetaObject::invokeMethod(systemToggle,"switchToggleChanged",Q_ARG(bool,true));
+    if(!microphone->property("checked").toBool())QMetaObject::invokeMethod(microphone,"switchToggleChanged",Q_ARG(bool,true));
+    settle();
+    check(microphoneVolume->isEnabled() && systemVolume->isEnabled(), "enabled audio sources expose live gain sliders");
+    systemVolume->forceActiveFocus();QTest::keyClick(window,Qt::Key_Left);settle();
+    check(QMetaObject::invokeMethod(workspace,"saveLiveAudio",Q_RETURN_ARG(QVariant,audioSaved)) && audioSaved.toBool(), "live audio settings save without stopping stream");
+    check(liveSession->property("state")=="Streaming" && liveSession->property("busy").toBool(),"changing live gain does not restart session");
+    auto* recordButton=findItem(workspace,"startLocalRecording");
+    check(recordButton->isEnabled() && QMetaObject::invokeMethod(recordButton,"clicked"),"recording can start from toolbar while RTMP is streaming");settle();
+    check(fake->property("recordingBusy").toBool() && liveSession->property("state")=="Streaming","starting recording preserves live session");
+    fake->setProperty("recordingState","Recording");settle();
+    check(findItem(workspace,"recordingStatus")->property("text").toString().contains(QString::fromUtf8("正在录制")) &&
+          findItem(workspace,"recordingStatus")->property("text").toString().contains(QString::fromUtf8("推流中")),"status row displays both active sessions");
+    QMetaObject::invokeMethod(findItem(workspace,"stopLocalRecording"),"clicked");settle();
+    check(liveSession->property("state")=="Streaming","local stop button does not stop live");
+    fake->setProperty("recordingState","Idle");fake->setProperty("recordingBusy",false);settle();
+    QMetaObject::invokeMethod(liveButton,"clicked");settle();
+    check(liveSession->property("state")=="Stopping" && !liveButton->isEnabled(),"second click cancels connection then prevents duplicate stop");
+    liveSession->setProperty("state","Idle");liveSession->setProperty("busy",false);settle();
+    fake->setProperty("recordingState","Recording");fake->setProperty("recordingBusy",true);settle();
+    check(liveButton->isEnabled() && findItem(workspace,"liveServer")->isEnabled(),"live controls stay available during recording");
+    QMetaObject::invokeMethod(liveButton,"clicked");settle();
+    check(liveSession->property("state")=="Connecting" && fake->property("recordingState")=="Recording","live can connect without restarting active recording");
+    QMetaObject::invokeMethod(liveButton,"clicked");settle();
+    check(fake->property("recordingState")=="Recording","cancel live connection preserves recording");
+    liveSession->setProperty("state","Idle");liveSession->setProperty("busy",false);
+    fake->setProperty("recordingState","Idle");fake->setProperty("recordingBusy",false);settle();
     check(warnings.isEmpty(), "no QML warnings or binding loops");
     std::printf("PASS: %d layout/runtime checks + %d recording workflow checks\n", checks, result.toInt());
 }

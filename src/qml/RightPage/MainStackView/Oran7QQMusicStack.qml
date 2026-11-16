@@ -1,21 +1,25 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Client 1.0
 import "../../Basic"
 import "../../Components/Oran7GlobalComponents"
 
-// 界面先接通；模型和命令由后续 QQ 音乐服务显式注入，不创建临时曲库或复用网易云模型。
+// 账号由 Client 的 QQ 音乐会话管理；曲库与播放命令保留独立注入边界。
 Item {
     id: root
     property string pageName: "QQMusicPage"
-    property bool serviceConnected: false
-    property bool loggedIn: false
-    property bool loginBusy: false
-    property bool searchBusy: false
-    property bool likedBusy: false
-    property string userName: ""
-    property string loginStatus: ""
-    property string errorMessage: ""
+    property var musicService: null
+    property bool serviceConnected: musicService !== null
+    property var accountSession: null
+    property bool loginServiceConnected: accountSession !== null
+    property bool loggedIn: accountSession ? accountSession.loggedIn : false
+    property bool loginBusy: accountSession ? accountSession.loginBusy : false
+    property bool searchBusy: musicService ? musicService.searchBusy : false
+    property bool likedBusy: musicService ? musicService.likedBusy : false
+    property string userName: accountSession ? accountSession.userName : ""
+    property string loginStatus: accountSession ? qsTranslate("Oran7Ui", accountSession.statusText) : ""
+    property string errorMessage: musicService ? qsTranslate("Oran7Ui", musicService.errorMessage) : ""
     property var likedModel: null
     property var searchModel: null
     property color accentColor: "#31c27c"
@@ -34,7 +38,16 @@ Item {
     signal trackPlayRequested(var model, int index)
     signal trackLikeRequested(var track)
     signal trackIntegrateRequested(var track)
+    onLoginRequested: { if (accountSession) accountSession.startLogin() }
+    onLoginCancelled: { if (accountSession) accountSession.cancelLogin() }
+    onLogoutRequested: { if (accountSession) accountSession.logout() }
+    onSearchRequested: function(keywords) { if (musicService) musicService.search(keywords) }
+    onLikedRefreshRequested: { if (musicService) musicService.fetchLiked(true) }
+    onTrackPlayRequested: function(model, index) { Client.musicQueue.activate(model, index) }
+    onTrackLikeRequested: function(track) { if (musicService) musicService.toggleLike(track) }
+    onTrackIntegrateRequested: function(track) { Client.toggleTrackIntegration(track) }
     onVisibleChanged: { if (!visible) loginPopup.close() }
+    onIsActiveChanged: { if (isActive && musicService) musicService.fetchLiked() }
 
     function submitSearch() {
         var keywords = searchField.text.trim()
@@ -146,6 +159,7 @@ Item {
                     Layout.fillWidth: true
                     visible: root.width >= 520
                     text: root.loggedIn ? root.userName : qsTranslate("Oran7Ui", "扫码登录")
+                    textFormat: Text.PlainText
                     color: root.textColor
                     font.family: root.uiFont.family
                     font.pixelSize: 13
@@ -222,7 +236,8 @@ Item {
                     Layout.fillWidth: true
                     text: playlist.currentPageIndex === 0
                         ? root.likedBusy ? qsTranslate("Oran7Ui", "正在加载喜欢的音乐…")
-                            : root.loggedIn ? qsTranslate("Oran7Ui", "暂无喜欢的音乐")
+                            : root.loggedIn ? !root.serviceConnected ? qsTranslate("Oran7Ui", "喜欢列表尚未同步")
+                                : qsTranslate("Oran7Ui", "暂无喜欢的音乐")
                             : qsTranslate("Oran7Ui", "登录后查看喜欢的音乐")
                         : root.searchBusy ? qsTranslate("Oran7Ui", "正在搜索…")
                             : !root.serviceConnected ? qsTranslate("Oran7Ui", "搜索歌曲、歌手或专辑")
@@ -275,7 +290,9 @@ Item {
             objectName: "qqMusicPageStatus"
             Layout.fillWidth: true
             text: root.errorMessage || root._feedback
-                || (!root.serviceConnected ? qsTranslate("Oran7Ui", "QQ 音乐服务暂未连接")
+                || (!root.serviceConnected ? root.loggedIn
+                        ? qsTranslate("Oran7Ui", "账号已登录，音乐服务尚未连接")
+                        : qsTranslate("Oran7Ui", "QQ 音乐服务暂未连接")
                     : root.loggedIn ? qsTranslate("Oran7Ui", "已登录 QQ 音乐")
                     : qsTranslate("Oran7Ui", "登录后同步喜欢的音乐"))
             font.family: root.uiFont.family
@@ -297,7 +314,7 @@ Item {
     }
     Oran7QQMusicLoginPopup {
         id: loginPopup
-        serviceConnected: root.serviceConnected
+        serviceConnected: root.loginServiceConnected
         loggedIn: root.loggedIn
         loginBusy: root.loginBusy
         userName: root.userName

@@ -30,6 +30,7 @@ Rectangle {
     signal openFileRequested()
     signal playFileRequested(string path)
     signal playRoomRequested(string roomNumber)
+    signal playRtmpRequested(string address)
     signal resumeRequested()
     signal loginRequested()
     signal historyRequested(string kind, string target)
@@ -558,6 +559,33 @@ Rectangle {
                                     if (root.selectedTab === 0) root.playFileRequested(localField.text.trim())
                                     else root.playRoomRequested(roomField.text)
                                 }
+                            }
+                        }
+                        Label {
+                            visible: root.selectedTab === 1
+                            text: qsTranslate("Oran7Ui", "RTMP 拉流地址（仅本次会话）")
+                            color: root.secondaryTextColor
+                            font.family: root.fontFamily
+                            font.pixelSize: 12
+                        }
+                        RowLayout {
+                            visible: root.selectedTab === 1
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Oran7VideoEntryField {
+                                id: rtmpField
+                                objectName: "videoRtmpField"
+                                Layout.fillWidth: true
+                                maximumLength: 8192
+                                placeholderText: "rtmp://server/live/stream"
+                                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                                onAccepted: if (text.trim()) root.playRtmpRequested(text.trim())
+                            }
+                            Oran7VideoEntryButton {
+                                objectName: "videoRtmpPlayButton"
+                                text: qsTranslate("Oran7Ui", "播放 RTMP")
+                                enabled: rtmpField.text.trim().length > 0
+                                onClicked: root.playRtmpRequested(rtmpField.text.trim())
                             }
                         }
                     }

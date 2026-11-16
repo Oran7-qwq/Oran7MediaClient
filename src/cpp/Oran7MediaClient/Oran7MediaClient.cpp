@@ -41,6 +41,11 @@ Oran7MediaClient::Oran7MediaClient(const QString &host,quint16 port,QObject *par
 {
     m_configBinding = std::make_unique<Oran7ConfigBinding>(Oran7AppConfigManager::ins());
     m_tracks = std::make_unique<Oran7TrackLibrary>();
+    m_qqMusic = std::make_unique<Oran7QQMusicSession>(Oran7AppConfigManager::ins());
+    QQmlEngine::setObjectOwnership(m_qqMusic.get(), QQmlEngine::CppOwnership);
+    m_qqMusicService = std::make_unique<Oran7QQMusicService>(*m_tracks, *m_qqMusic);
+    QQmlEngine::setObjectOwnership(m_qqMusicService.get(), QQmlEngine::CppOwnership);
+    QTimer::singleShot(0, m_qqMusic.get(), &Oran7QQMusicSession::restore);
     m_videoHistory = std::make_unique<Oran7VideoHistory>(Oran7AppConfigManager::ins());
     QQmlEngine::setObjectOwnership(m_videoHistory.get(), QQmlEngine::CppOwnership);
     QQmlEngine::setObjectOwnership(m_tracks.get(), QQmlEngine::CppOwnership);
@@ -84,6 +89,22 @@ Oran7MediaClient::Oran7MediaClient(const QString &host,quint16 port,QObject *par
             [](qint64 id) { NcmSession::instance().playlistApi()->setLikedPlaylistId(id); },
             [](qint64 id, bool liked) { NcmSession::instance().playlistApi()->setLike(id, liked); }});
     m_musicQueue = std::make_unique<Oran7PlaybackViewModel>(*m_tracks, *m_playback, *m_cloudMusic);
+    connect(m_qqMusicService.get(), &Oran7QQMusicService::urlReady, this, [this](const QString& path, const QString& url) {
+        if (!m_playbackController->isShuttingDown() && m_playback->currentTrack().path == path)
+            startMusicPlayback(url);
+    });
+    connect(m_qqMusicService.get(), &Oran7QQMusicService::resolveFailed, this, [this](const QString& path, const QString& error) {
+        if (m_playbackController->isShuttingDown() || m_playback->currentTrack().path != path) return;
+        m_playback->setError(error);
+        if (m_playback->currentTrack().path == path) m_musicQueue->resolveFailed(0);
+    });
+    connect(m_qqMusicService.get(), &Oran7QQMusicService::lyricsReady, this, &Oran7MediaClient::lyricsAvailable);
+    connect(m_qqMusicService.get(), &Oran7QQMusicService::lyricsUnavailable, this, [this] {
+        if (m_playback->currentTrack().provider == "qqmusic") emit lyricsUnavailable();
+    });
+    connect(m_qqMusic.get(), &Oran7QQMusicSession::sessionChanged, this, [this] {
+        if (!m_qqMusic->loggedIn() && m_playback->currentTrack().provider == "qqmusic") stopPlayback();
+    });
     QQmlEngine::setObjectOwnership(m_cloudMusic.get(), QQmlEngine::CppOwnership);
     QQmlEngine::setObjectOwnership(m_musicQueue.get(), QQmlEngine::CppOwnership);
     m_audioEffects = std::make_unique<Oran7AudioEffects>();
@@ -175,6 +196,8 @@ void Oran7MediaClient::shutdown()
     if (m_audioEffects) m_audioEffects->setPublisher({});
     m_musicQueue->shutdown();
     m_cloudMusic->shutdown();
+    m_qqMusicService->shutdown();
+    m_qqMusic->shutdown();
     m_metadataService->cancel();
     m_libraryService->shutdown();
     resetNetworkPlayRequest();
@@ -248,11 +271,17 @@ void Oran7MediaClient::initializeConnections()
     m_connections << connect(m_playbackController.get(), &Oran7PlaybackController::mediaAccepted,
         this, [this](const QString& source, bool musicPlayback) {
             if (!musicPlayback) m_videoHistory->beginLocalPlayback(source);
-            if (musicPlayback) m_lyricsService->load(source, m_configBinding->lyricsDirectory(), m_playback->currentTrack());
-            else m_lyricsService->stop();
+            const auto track = m_playback->currentTrack();
+            if (musicPlayback && track.provider == "qqmusic") {
+                m_lyricsService->stop(); m_qqMusicService->loadLyrics(track);
+            } else {
+                m_qqMusicService->cancelLyrics();
+                if (musicPlayback) m_lyricsService->load(source, m_configBinding->lyricsDirectory(), track);
+                else m_lyricsService->stop();
+            }
         });
     m_connections << connect(m_playbackController.get(), &Oran7PlaybackController::stopped,
-        this, [this](bool switching) { if (!switching) m_lyricsService->stop(); });
+        this, [this](bool switching) { if (!switching) { m_lyricsService->stop(); m_qqMusicService->cancelLyrics(); } });
     m_connections << connect(m_playbackController.get(), &Oran7PlaybackController::stopIconUpdated,
         this, &Oran7MediaClient::stopIconUpdated);
     m_connections << connect(m_playbackController.get(), &Oran7PlaybackController::playNextTriggered,
@@ -351,7 +380,8 @@ void Oran7MediaClient::playMusic(QString source)
 void Oran7MediaClient::startMusicPlayback(QString source)
 {
     if (source.isEmpty()) return;
-    m_configBinding->rememberMusicSource(source, currentIsVip());
+    m_configBinding->rememberMusicSource(m_playback->currentTrack().provider == "qqmusic"
+        ? m_playback->currentTrack().path : source, currentIsVip());
     preparePlayingMedia(source);
 }
 
@@ -526,7 +556,7 @@ void Oran7MediaClient::selectMusicTrack(const QVariantMap& fields)
         return;
     }
     // VIP 地址解析可能尚未完成；选择新歌时就停止旧歌词。
-    if (!sameMusicIdentity(m_playback->currentTrack(), *selection)) m_lyricsService->stop();
+    if (!sameMusicIdentity(m_playback->currentTrack(), *selection)) { m_lyricsService->stop(); m_qqMusicService->cancelLyrics(); }
     m_playback->selectTrack(*selection);
     persistCurrentMusic();
 }
@@ -534,7 +564,7 @@ void Oran7MediaClient::selectMusicTrack(const QVariantMap& fields)
 void Oran7MediaClient::persistCurrentMusic()
 {
     const auto track = m_playback->currentTrack();
-    if (track.songId > 0 || isNetworkUrl(track.path)) m_configBinding->rememberTrack(track);
+    if (track.songId > 0 || isNetworkUrl(track.path) || track.provider == "qqmusic") m_configBinding->rememberTrack(track);
 }
 
 void Oran7MediaClient::publishFocusedMusic(const Oran7Track& track)
@@ -547,11 +577,24 @@ void Oran7MediaClient::publishFocusedMusic(const Oran7Track& track)
 void Oran7MediaClient::resetNetworkPlayRequest()
 {
     m_networkResolver->cancel();
+    m_qqMusicService->cancelResolve();
 }
 
 void Oran7MediaClient::playNetworkSong(qint64 songId, const QString& fallbackUrl, bool isVip)
 {
     if (m_playbackController->isShuttingDown()) return;
+    const auto track = m_playback->currentTrack();
+    if (track.provider == "qqmusic") {
+        if (m_playbackController->hasPlayer() && m_qqMusicService->matchesSource(track.path, m_playbackController->source())) {
+            m_playbackController->toggle(); return;
+        }
+        resetNetworkPlayRequest();
+        const auto revision = m_playback->trackRevision();
+        if (!m_playbackController->hasPlayer()) m_playback->beginOpening(track.path);
+        if (!m_playbackController->isShuttingDown() && m_playback->trackRevision() == revision)
+            m_qqMusicService->resolve(track);
+        return;
+    }
     const bool hasPlayer = m_playbackController->hasPlayer();
     const QString source = m_playbackController->source();
     // QML 已选中目标歌，暂停判定继续使用播放器目标，不能比较 currentTrack。
@@ -573,7 +616,9 @@ void Oran7MediaClient::playNetworkSong(qint64 songId, const QString& fallbackUrl
 
 void Oran7MediaClient::onPlaybackOpenFailed()
 {
-    m_networkResolver->playbackOpenFailed(m_playbackController->source(), currentSongId());
+    if (m_playback->currentTrack().provider == "qqmusic")
+        m_qqMusicService->playbackOpenFailed(m_playback->currentTrack(), m_playbackController->source());
+    else m_networkResolver->playbackOpenFailed(m_playbackController->source(), currentSongId());
 }
 
 void Oran7MediaClient::saveWindowSize(QQmlApplicationEngine &engine)
@@ -619,4 +664,20 @@ void Oran7MediaClient::saveConfiguration(QQmlApplicationEngine& engine)
     m_configBinding->saveAudio(m_audioEffects->toConfig());
     saveWindowSize(engine);
     saveWindowPosition(engine);
+}
+
+void Oran7MediaClient::toggleTrackLike(const QVariantMap& fields)
+{
+    const auto track = Oran7Track::fromVariantMap(fields);
+    if (!track) return;
+    if (track->provider == "qqmusic") m_qqMusicService->toggleLike(track->toVariantMap());
+    else m_cloudMusic->toggleLike(fields);
+}
+void Oran7MediaClient::toggleTrackIntegration(const QVariantMap& fields)
+{
+    const auto track = Oran7Track::fromVariantMap(fields);
+    if (!track) return;
+    if (m_tracks->isIntegrated(track->songId, {}, track->path))
+        m_tracks->removeIntegratedTrack(track->songId, {}, track->path);
+    else m_tracks->addIntegratedTrack(fields);
 }

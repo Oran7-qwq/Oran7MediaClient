@@ -286,6 +286,8 @@ int main(int argc, char* argv[])
         qmlRegisterUncreatableType<Oran7TrackListModel>("Client", 1, 0, "Oran7TrackListModel",
                                                         QStringLiteral("曲目列表由 Client 持有"));
         qmlRegisterUncreatableType<Oran7CloudMusicService>("Client", 1, 0, "Oran7CloudMusicService", "由 Client 持有");
+        qmlRegisterUncreatableType<Oran7QQMusicService>("Client", 1, 0, "Oran7QQMusicService", "由 Client 持有");
+        qmlRegisterUncreatableType<Oran7QQMusicSession>("Client", 1, 0, "Oran7QQMusicSession", "由 Client 持有");
         qmlRegisterUncreatableType<Oran7VideoHistory>("Client", 1, 0, "Oran7VideoHistory", "由 Client 持有");
         qmlRegisterUncreatableType<Oran7PlaybackViewModel>("Client", 1, 0, "Oran7PlaybackViewModel", "由 Client 持有");
         qmlRegisterUncreatableType<Oran7TrackLibrary>("Client", 1, 0, "Oran7TrackLibrary",

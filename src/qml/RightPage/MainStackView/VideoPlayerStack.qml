@@ -25,6 +25,7 @@ Item {
     property color textColor: "#f1f2f5"
     property color secondaryTextColor: "#a8aebb"
     property color accentColor: "#ebc286"
+    property string rtmpSource: ""
     property bool live: false
     property string openedSource: ""
     property string localPath: ""
@@ -58,7 +59,7 @@ Item {
     readonly property bool opening: resolving || (ownsPlayback && Client.playback.state === 1)
     readonly property bool failed: ownsPlayback && Client.playback.state === 6
 
-    anchors.fill: parent
+    // 页面尺寸由 StackView 接管，根项不能使用锚点约束切换动画中的位置。
     StackView.onActivated: isActive = true
     StackView.onDeactivated: {
         isActive = false
@@ -130,6 +131,7 @@ Item {
         cancelResolve()
         danmaku.stop()
         danmakuErrorText = ""
+        rtmpSource = ""
         localPath = value
         live = false
         displayTitle = value.replace(/\\/g, "/").split("/").pop()
@@ -144,11 +146,37 @@ Item {
             Client.stopPlayback()
         if (!sameSource || !Client.playback.active) Client.playVideo(value)
     }
+    function playRtmp(address) {
+        var value = String(address).trim()
+        // RTMP 只作拉流；不接受用户信息或控制字符，不持久化可能含密钥的地址。
+        if (value.length > 8192 || /[\s\x00-\x1f\x7f]/.test(value)
+                || !/^rtmp:\/\/([^\/@?#:]+|\[[0-9a-fA-F:]+\])(?::[0-9]{1,5})?\/[^#]+$/.test(value)) {
+            statusText = qsTranslate("Oran7Ui", "请输入完整的 RTMP 拉流地址")
+            return
+        }
+        cancelResolve()
+        if (ownsPlayback) Client.stopPlayback()
+        danmaku.stop()
+        danmakuErrorText = ""
+        rtmpSource = value
+        localPath = ""
+        roomNumber = ""
+        live = true
+        openedSource = value
+        displayTitle = qsTranslate("Oran7Ui", "RTMP 直播流")
+        streamDescription = "RTMP"
+        statusText = ""
+        BasicConfig.globalPlayingFocus = BasicConfig.globalPlayer_LivePlayerIndex
+        showPlayer()
+        videoRenderItem.tryAttachDelayed()
+        Client.playVideo(value)
+    }
     function playRoom(number) {
         if (!/^[0-9]{1,12}$/.test(number)) {
             statusText = qsTranslate("Oran7Ui", "请输入有效的房间号")
             return
         }
+        rtmpSource = ""
         number = String(Number(number))
         cancelResolve()
         if (ownsPlayback) Client.stopPlayback()
@@ -186,7 +214,8 @@ Item {
         wakeControls()
     }
     function retry() {
-        if (live) playRoom(roomNumber)
+        if (rtmpSource.length) playRtmp(rtmpSource)
+        else if (live) playRoom(roomNumber)
         else if (localPath.length) playLocal(localPath)
     }
     function togglePlayback() {
@@ -196,13 +225,13 @@ Item {
         wakeControls()
     }
     function syncDanmaku() {
-        var enabled = isActive && ownsPlayback && live && danmakuEnabled && Client.playback.playing
+        var enabled = isActive && ownsPlayback && live && !rtmpSource.length && danmakuEnabled && Client.playback.playing
         if (enabled && !danmaku.active) danmaku.start(roomNumber)
         else if (!enabled && danmaku.active) danmaku.stop()
     }
     function rememberViewing() {
         if (!ownsPlayback || !Client.playback.playing) return
-        if (live) Client.videoHistory.rememberRoom(roomNumber)
+        if (live && !rtmpSource.length) Client.videoHistory.rememberRoom(roomNumber)
     }
     function toggleFullscreen() {
         if (!mainWindow) return
@@ -331,6 +360,7 @@ Item {
         onOpenFileRequested: fileDialog.open()
         onPlayFileRequested: (path) => root.playLocal(path)
         onPlayRoomRequested: (number) => root.playRoom(number)
+        onPlayRtmpRequested: (address) => root.playRtmp(address)
         onResumeRequested: root.showPlayer()
         onLoginRequested: root.login()
         onHistoryRequested: (kind, target) => {
@@ -583,7 +613,7 @@ Item {
                         onToggled: root.showInfo = checked
                     }
                     Oran7StudioButton {
-                        visible: root.live
+                        visible: root.live && !root.rtmpSource.length
                         text: qsTranslate("Oran7Ui", "弹幕")
                         checkable: true
                         checked: root.danmakuEnabled
@@ -591,7 +621,7 @@ Item {
                     }
                     Label {
                         Layout.fillWidth: true
-                        visible: root.live
+                        visible: root.live && !root.rtmpSource.length
                         text: root.streamDescription + "\n" + (root.danmakuErrorText.length ? root.danmakuErrorText
                             : danmaku.isConnected ? qsTranslate("Oran7Ui", "弹幕已连接") : qsTranslate("Oran7Ui", "弹幕未连接"))
                         color: root.secondaryTextColor
@@ -600,7 +630,7 @@ Item {
                     Oran7StudioButton {
                         visible: root.live
                         text: qsTranslate("Oran7Ui", "刷新直播流")
-                        onClicked: { settings.close(); root.playRoom(root.roomNumber) }
+                        onClicked: { settings.close(); root.retry() }
                     }
                     Oran7StudioButton {
                         text: BilibiliAuthManager.isLoggedIn ? qsTranslate("Oran7Ui", "退出B站登录") : qsTranslate("Oran7Ui", "B站登录")

@@ -153,7 +153,11 @@ Rectangle {
                             filepath: m.filepath,
                             songId: m.songId || 0,
                             isVip: m.isVip === true,
-                            source: (m.songId > 0) ? "netease" : "local"
+                            source: m.provider === "qqmusic" ? "qqmusic" : (m.songId > 0) ? "netease" : "local",
+                            provider: m.provider || "",
+                            providerId: m.providerId || "",
+                            mediaMid: m.mediaMid || "",
+                            nativeId: m.nativeId || "0"
                         });
                     }
                 }

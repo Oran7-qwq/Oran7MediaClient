@@ -24,3 +24,6 @@ add_executable(recovery_checks main.cpp "${CMAKE_CURRENT_BINARY_DIR}/controller.
 target_include_directories(recovery_checks PRIVATE stubs "${CAP}" "${ROOT}/src/cpp/Oran7Config" "${FFMPEG_ROOT_DIR}/include")
 target_link_libraries(recovery_checks PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Test Qt6::Network Qt6::WebSockets
     "${FFMPEG_ROOT_DIR}/lib/avutil.lib" "${FFMPEG_ROOT_DIR}/lib/swscale.lib" "${FFMPEG_ROOT_DIR}/lib/avfilter.lib" d3d11 dxgi)
+
+target_sources(recovery_checks PRIVATE "${CAP}/Live/Oran7LiveSession.cpp" "${CAP}/Live/Oran7LiveSession.h" "${CAP}/Live/Oran7RtmpPublisher.cpp")
+target_link_libraries(recovery_checks PRIVATE "${FFMPEG_ROOT_DIR}/lib/avformat.lib" "${FFMPEG_ROOT_DIR}/lib/avcodec.lib")

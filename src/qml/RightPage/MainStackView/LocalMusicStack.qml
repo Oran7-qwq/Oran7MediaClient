@@ -133,6 +133,10 @@ Item {
 
         // ---- 整合按钮：加入/移出"我整合的音乐"合集（原喜欢图标的控制链路，现统一为整合操作）----
         onItemIntegrated: function (index) {
+            if (listModel.get(index).provider === "qqmusic") {
+                Client.toggleTrackIntegration(listModel.get(index));
+                return;
+            }
             var item = listModel.get(index);
             // 已整合 → 移出合集；未整合 → 加入合集（本地行 url 为空、存 filepath；整合行 url 优先）
             // 移除带 songId：VIP 整合行 url/filepath 为空，只能按 songId 精确移除

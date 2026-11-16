@@ -65,6 +65,11 @@ std::optional<Oran7Track> Oran7ConfigBinding::restoredTrack()
 {
     const auto saved = m_config.snapshot().lastMedia;
     const auto songId = saved.songId;
+    if (saved.provider == "qqmusic" && !saved.path.isEmpty()) return Oran7Track::fromVariantMap({
+        {"path", saved.path}, {"title", saved.title}, {"artist", saved.artist}, {"album", saved.album},
+        {"cover", saved.cover}, {"timesize", saved.timesize}, {"isVip", saved.isVip},
+        {"provider", saved.provider}, {"providerId", saved.providerId}, {"mediaMid", saved.mediaMid},
+        {"nativeId", QString::number(saved.nativeId)}});
     QString path = m_config.getLastUsedFile();
     if (songId > 0 || Oran7NetworkSongResolver::isNetworkUrl(path)) {
         if (!Oran7NetworkSongResolver::isNetworkUrl(path)) path.clear();
@@ -83,11 +88,16 @@ void Oran7ConfigBinding::rememberTrack(const Oran7Track& track)
 {
     auto saved = m_config.snapshot();
     saved.lastMedia.title = track.title;
+    if (track.provider == "qqmusic") { saved.lastMedia.path = track.path; m_lastMusicSource = track.path; }
     saved.lastMedia.artist = track.artist;
     saved.lastMedia.album = track.album;
     saved.lastMedia.cover = track.cover;
     saved.lastMedia.timesize = track.timesize;
     saved.lastMedia.songId = track.songId;
+    saved.lastMedia.provider = track.provider;
+    saved.lastMedia.providerId = track.providerId;
+    saved.lastMedia.mediaMid = track.mediaMid;
+    saved.lastMedia.nativeId = track.nativeId;
     saved.lastMedia.isVip = track.isVip;
     m_config.updateConfig(saved);
     m_config.saveConfig();
@@ -106,10 +116,12 @@ void Oran7ConfigBinding::completePersistedDetails(const Oran7Track& track)
 void Oran7ConfigBinding::rememberMusicSource(const QString& path, bool isVip)
 {
     m_lastMusicSource = path;
-    if (Oran7NetworkSongResolver::isNetworkUrl(path)) m_config.setLastUsedFile(path, isVip);
+    if (Oran7NetworkSongResolver::isNetworkUrl(path) || path.startsWith("qqmusic://song/")) m_config.setLastUsedFile(path, isVip);
     else {
         auto saved = m_config.snapshot();
         saved.lastMedia.songId = 0;
+        saved.lastMedia.provider.clear(); saved.lastMedia.providerId.clear(); saved.lastMedia.mediaMid.clear();
+        saved.lastMedia.nativeId = 0;
         m_config.updateConfig(saved);
         m_config.setLastUsedFile(path, false);
         m_config.saveConfig();
@@ -118,7 +130,7 @@ void Oran7ConfigBinding::rememberMusicSource(const QString& path, bool isVip)
 
 void Oran7ConfigBinding::setFocusedMusicSource(const QString& path)
 {
-    m_lastMusicSource = Oran7NetworkSongResolver::isNetworkUrl(path) ? path : QFileInfo(path).absoluteFilePath();
+    m_lastMusicSource = Oran7NetworkSongResolver::isNetworkUrl(path) || path.startsWith("qqmusic://song/") ? path : QFileInfo(path).absoluteFilePath();
 }
 
 void Oran7ConfigBinding::saveLastFocused(bool isVip)

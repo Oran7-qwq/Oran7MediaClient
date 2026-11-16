@@ -1,6 +1,7 @@
 import QtQuick
 import Qt5Compat.GraphicalEffects
 import QtQuick.Controls
+import Client 1.0
 import "./TopMenuBar"
 import "../Basic"
 import "./MainStackView"
@@ -272,6 +273,12 @@ Rectangle {
                         var properties = { "pageName": pageName };
                         if (pageName === "VideoPlayerPage")
                             properties.windowButtonsHovered = Qt.binding(function() { return root.windowButtonsHovered });
+                        if (pageName === "QQMusicPage") {
+                            properties.accountSession = Client.qqMusic;
+                            properties.musicService = Client.qqMusicService;
+                            properties.likedModel = Client.tracks.qqLiked;
+                            properties.searchModel = Client.tracks.qqSearch;
+                        }
                         var page = component.createObject(mainStackView, properties);
                         //cache this page
                         this.cache[pageName] = page;

@@ -19,7 +19,8 @@ Item {
     property bool outputSaveQueued: false
     property bool startAfterApply: false
     property string message: ""
-    readonly property bool busy: !controller || controller.recordingBusy || controller.previewBusy === true || applying
+    readonly property bool busy: !controller || controller.recordingBusy || controller.liveBusy === true || controller.previewBusy === true || applying
+    readonly property bool outputBusy: !controller || controller.recordingBusy || controller.previewBusy === true || applying
     readonly property string previewHint: {
         if (!controller || controller.previewBusy !== true) return ""
         if (controller.previewError) return String(controller.previewError)
@@ -74,7 +75,11 @@ Item {
     }
     function flushSettings() {
         autoSaveTimer.stop()
-        if (busy) return false // 异步应用完成或录制结束后继续处理已提交的变更。
+        if (outputBusy) return false
+        if (controller.liveBusy === true && captureDirty) {
+            message = "推流期间不可修改采集参数，请先恢复已保存的画面来源设置"
+            return false
+        }
         // 降帧率先保存录制端，升帧率先应用采集端，保持后端约束。
         if (outputSaveQueued && outputDirty && outputDraft.fps <= captureSaved.fps) {
             outputSaveQueued = false
@@ -92,8 +97,8 @@ Item {
         return !captureDirty && !outputDirty
     }
     Timer { id: autoSaveTimer; interval: 180; onTriggered: root.flushSettings() }
-    onBusyChanged: {
-        if (!busy && (captureSaveQueued || outputSaveQueued)) autoSaveTimer.restart()
+    onOutputBusyChanged: {
+        if (!outputBusy && (captureSaveQueued || outputSaveQueued)) autoSaveTimer.restart()
     }
     property var monitorInputs: []
     readonly property var translatedMonitors: {
@@ -180,7 +185,7 @@ Item {
         return result && result.ok
     }
     function saveOutput() {
-        if (busy) return false
+        if (outputBusy) return false
         if (!validFrameRates()) return false
         if (outputDraft.fps > captureSaved.fps) {
             message = "较高的采集帧率尚未生效，请先完成左侧帧率设置"
@@ -194,7 +199,7 @@ Item {
         return result && result.ok
     }
     function start() {
-        if (busy) return false
+        if (outputBusy) return false
         if (!validFrameRates()) return false
         captureSaveQueued = captureDirty
         outputSaveQueued = outputDirty
@@ -234,6 +239,11 @@ Item {
             if (!root.busy) root.refreshMonitors()
         }
         function onRecordingSettingsChanged() {
+            if (typeof root.controller.applyAudioSettings === "function") {
+                var audioEnabled = !!root.controller.recordingSettings().audioEnabled
+                root.outputDraft = Object.assign({}, root.outputDraft, {audioEnabled:audioEnabled})
+                root.outputSaved = Object.assign({}, root.outputSaved, {audioEnabled:audioEnabled})
+            }
             if (!root.outputDirty) root.reloadOutput()
         }
     }

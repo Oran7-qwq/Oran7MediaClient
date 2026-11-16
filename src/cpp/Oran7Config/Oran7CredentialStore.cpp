@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QUuid>
@@ -56,7 +57,8 @@ QJsonObject nonempty(QJsonObject object)
 {
     const auto keys = object.keys();
     for (const auto& key : keys)
-        if (object.value(key).isNull() || (object.value(key).isString() && object.value(key).toString().isEmpty()))
+        if (object.value(key).isNull() || (object.value(key).isString() && object.value(key).toString().isEmpty())
+            || (object.value(key).isArray() && object.value(key).toArray().isEmpty()))
             object.remove(key);
     return object;
 }
@@ -66,7 +68,7 @@ Oran7CredentialStore::Oran7CredentialStore(QString directory) : m_directory(std:
 
 QStringList Oran7CredentialStore::groups()
 {
-    return {"netease", "bilibili", "recording", "legacy"};
+    return {"netease", "bilibili", "qqmusic", "recording", "live", "legacy"};
 }
 
 bool Oran7CredentialStore::validRevision(const QString& revision)
@@ -146,11 +148,11 @@ bool Oran7CredentialStore::writeVerified(const QString& group, const QJsonObject
 
 QJsonObject Oran7CredentialStore::extract(const QJsonObject& config, const QString& group)
 {
-    if (group == "netease" || group == "bilibili")
+    if (group == "netease" || group == "bilibili" || group == "qqmusic")
         return nonempty(config.value(group + "_auth").toObject());
     QJsonObject result;
-    const auto source = config.value(group == "legacy" ? "user" : "recording").toObject();
-    const auto keys = group == "legacy" ? QStringList{"username", "password"} : recordingKeys();
+    const auto source = config.value(group == "legacy" ? "user" : group == "live" ? "live" : "recording").toObject();
+    const auto keys = group == "legacy" ? QStringList{"username", "password"} : group == "live" ? QStringList{"server", "stream_key"} : recordingKeys();
     for (const auto& key : keys)
     {
         const auto value = source.value(key);
@@ -165,14 +167,14 @@ QJsonObject Oran7CredentialStore::extract(const QJsonObject& config, const QStri
 
 void Oran7CredentialStore::remove(QJsonObject* config, const QString& group)
 {
-    if (group == "netease" || group == "bilibili")
+    if (group == "netease" || group == "bilibili" || group == "qqmusic")
     {
         config->remove(group + "_auth");
         return;
     }
-    const QString section = group == "legacy" ? "user" : "recording";
+    const QString section = group == "legacy" ? "user" : group == "live" ? "live" : "recording";
     auto object = config->value(section).toObject();
-    for (const auto& key : group == "legacy" ? QStringList{"username", "password"} : recordingKeys())
+    for (const auto& key : group == "legacy" ? QStringList{"username", "password"} : group == "live" ? QStringList{"server", "stream_key"} : recordingKeys())
         object.remove(key);
     (*config)[section] = object;
 }
@@ -180,12 +182,12 @@ void Oran7CredentialStore::remove(QJsonObject* config, const QString& group)
 void Oran7CredentialStore::apply(QJsonObject* config, const QString& group, const QJsonObject& data)
 {
     remove(config, group);
-    if (group == "netease" || group == "bilibili")
+    if (group == "netease" || group == "bilibili" || group == "qqmusic")
     {
         (*config)[group + "_auth"] = data;
         return;
     }
-    const QString section = group == "legacy" ? "user" : "recording";
+    const QString section = group == "legacy" ? "user" : group == "live" ? "live" : "recording";
     auto object = config->value(section).toObject();
     for (auto it = data.begin(); it != data.end(); ++it)
         object[it.key()] = it.value();

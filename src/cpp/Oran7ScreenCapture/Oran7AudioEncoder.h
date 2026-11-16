@@ -31,6 +31,9 @@ public:
         int sampleRate = 48000;
         int channels = 2; //stero
         int bitrateBps = 128000; // 128 kbps
+        bool continuousPts = false; // 直播 AAC 按样本数连续计时，不跟随采集回调抖动。
+        int maxFrameQueue = 3, maxPacketQueue = 10;
+        bool drainInputOnStop = false; // 文件录制先排完已混音 PCM，再刷新 AAC 尾包。
     };
 
     bool configure(const EncoderConfig& cfg, ErrorCallback onError);
@@ -63,6 +66,8 @@ public:
 
     /*! @note 调试接口 */
     int64_t sentFrameCount() const { return _frameIndex.load(); }
+    int64_t droppedInputFrames() const { return _inputDrops.load(); }
+    int64_t droppedOutputPackets() const { return _packetDrops.load(); }
     int queuedPktCount() const {
         std::lock_guard<std::mutex> lock(_pkt_mtx);
         return (int)_pktQueue.size();
@@ -81,6 +86,8 @@ private:
     // FIFO：WASAPI ~480 samples → libfdk_aac 1024 samples
     std::vector<int16_t> _fifoBuf;       // 交错 S16 缓冲
     int                  _fifoUsed = 0;   // 当前 FIFO 内每声道采样数
+    bool _fifoClockStarted = false;
+    std::atomic<int64_t> _inputDrops{0}, _packetDrops{0};
     int64_t              _fifoBasePts = 0; // FIFO 首块数据的 PTS（48kHz 时间基）
 
     // 包队列：编码线程写->复用线程读取消费

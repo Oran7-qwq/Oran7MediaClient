@@ -12,6 +12,81 @@ Pane {
     font.pixelSize: root.textPixelSize
     required property var service
     required property var controller
+    readonly property bool liveSupported: !!controller && typeof controller.startLive === "function"
+    property var liveDraft: ({})
+    property bool audioDirty: false
+    property bool liveDirty: false
+    property string liveMessage: ""
+    property bool audioMonitoringActive: visible && (!Window.window ||
+        (Window.window.visible && Window.window.visibility !== Window.Minimized && Window.window.opacity > 0))
+    property bool audioMonitoringMounted: false
+    function syncAudioMonitoring() {
+        if (audioMonitoringMounted && controller && typeof controller.setAudioMonitoringEnabled === "function")
+            controller.setAudioMonitoringEnabled(audioMonitoringActive)
+    }
+    onAudioMonitoringActiveChanged: syncAudioMonitoring()
+    Component.onCompleted: {
+        if (liveSupported) liveDraft = Object.assign({}, controller.liveOptions)
+        audioMonitoringMounted = true
+        syncAudioMonitoring()
+    }
+    Component.onDestruction: {
+        if (audioMonitoringMounted && controller && typeof controller.setAudioMonitoringEnabled === "function")
+            controller.setAudioMonitoringEnabled(false)
+    }
+    function editLive(key,value) {
+        var next = Object.assign({},liveDraft); next[key] = value
+        liveDraft = next; liveDirty = true; liveSave.restart()
+    }
+    function audioValues(source) {
+        return {audioEnabled:!!source.audioEnabled, microphoneEnabled:!!source.microphoneEnabled,
+            systemVolume:source.systemVolume === undefined ? 100 : source.systemVolume,
+            microphoneVolume:source.microphoneVolume === undefined ? 100 : source.microphoneVolume}
+    }
+    function editLiveAudio(key, value) {
+        var next = Object.assign({}, liveDraft); next[key] = value
+        var result = controller.previewAudioSettings(audioValues(next))
+        if (!result.ok) { pageState.message = result.msg || ""; return }
+        liveDraft = next; audioDirty = true; audioSave.restart()
+    }
+    function saveLiveAudio() {
+        audioSave.stop()
+        if (!audioDirty) return true
+        var result = controller.applyAudioSettings(audioValues(liveDraft))
+        if (!result.ok) {
+            pageState.message = result.msg || ""
+            var saved = audioValues(controller.audioOptions)
+            controller.previewAudioSettings(saved)
+            liveDraft = Object.assign({}, liveDraft, saved)
+        }
+        if (result.ok) liveDraft = Object.assign({}, liveDraft, audioValues(controller.audioOptions))
+        audioDirty = false
+        return result.ok
+    }
+    Connections {
+        target: root.controller
+        ignoreUnknownSignals: true
+        function onLiveSettingsChanged() {
+            if (!root.audioDirty && root.controller.audioOptions)
+                root.liveDraft = Object.assign({}, root.liveDraft, root.audioValues(root.controller.audioOptions))
+        }
+    }
+    Timer { id: audioSave; interval: 2000; onTriggered: root.saveLiveAudio() }
+    function saveLive() {
+        liveSave.stop()
+        if (!root.saveLiveAudio()) return false
+        if (!liveDirty) return true
+        var result = controller.applyLiveSettings(liveDraft)
+        liveMessage = result.msg || ""
+        if (!result.ok) {
+            pageState.message = liveMessage
+            console.warn("[RTMP] " + liveMessage)
+        }
+
+        if (result.ok) { liveDirty = false; liveDraft = Object.assign({},controller.liveOptions) }
+        return result.ok
+    }
+    Timer { id: liveSave; interval: 2000; onTriggered: root.saveLive() }
     property Component previewComponent
     // 工作台自行管理样式，调用方可覆盖；不借用下拉设置窗口的样式单例。
     property color panelColor: "#22252d"
@@ -216,7 +291,6 @@ Pane {
         width: parent.width
         implicitHeight: root.controlHeight
         selectByMouse: true
-        enabled: !root.pageState.busy
         color: root.textColor
         placeholderTextColor: root.mutedTextColor
         selectionColor: root.accentColor
@@ -359,7 +433,7 @@ Pane {
             Rectangle {
                 implicitWidth: formatBadge.implicitWidth + 16; implicitHeight: 24
                 radius: 5; color: root.groupColor; border.color: root.borderColor
-                Label { id: formatBadge; anchors.centerIn: parent; text: root.pageState.outputDraft.format === "flv" ? qsTranslate("Oran7Ui", "本地 FLV") : qsTranslate("Oran7Ui", "本地 MP4"); color: root.mutedTextColor; font.pixelSize: 11 }
+                Label { id: formatBadge; anchors.centerIn: parent; text: root.controller && root.controller.liveBusy === true ? "RTMP" : root.pageState.outputDraft.format === "flv" ? qsTranslate("Oran7Ui", "本地 FLV") : qsTranslate("Oran7Ui", "本地 MP4"); color: root.mutedTextColor; font.pixelSize: 11 }
             }
             Item { Layout.fillWidth: true }
             Oran7Action { text: qsTranslate("Oran7Ui", "还原设置"); enabled: !root.pageState.busy; onClicked: {
@@ -419,6 +493,10 @@ Pane {
                         onScaleToggled: function(checked) { root.fillPreview = checked; root.previewScaleChanged(checked) }
                     }
                     Oran7RecordingToolbar {
+                        liveCommit: function() { return root.saveLive() }
+                        audioCommit: function() { return root.saveLiveAudio() }
+                        audioOptions: root.liveDraft
+                        audioEdit: function(key,value) { root.editLiveAudio(key,value) }
                         id: recordingToolbar
                         objectName: "recordingCenterToolbar"
                         Layout.fillWidth: true
@@ -596,9 +674,11 @@ Pane {
                     Layout.preferredHeight: 380
                     Column {
                         width: parent.width; spacing: 12
-                        enabled: !root.pageState.busy
+                        enabled: root.controller && root.controller.previewBusy !== true && !root.pageState.applying
                         opacity: enabled ? 1 : 0.5
                         Oran7SettingsGroup {
+                            enabled: !root.controller.recordingBusy
+                            opacity: enabled ? 1 : 0.5
                             title: qsTranslate("Oran7Ui", "画质设置")
                             Oran7FieldLabel { text: qsTranslate("Oran7Ui", "录制格式") }
                             Oran7Choice {
@@ -729,6 +809,8 @@ Pane {
                             Oran7Caption { text: qsTranslate("Oran7Ui", "同一码率下，提高帧率不会增加估算体积，每帧可分配的数据会减少。编码负载还取决于分辨率、帧率和编码器；实际体积会浮动。") }
                         }
                         Oran7SettingsGroup {
+                            enabled: !root.controller.recordingBusy
+                            opacity: enabled ? 1 : 0.5
                             title: qsTranslate("Oran7Ui", "文件保存")
                             Oran7FieldLabel { text: qsTranslate("Oran7Ui", "保存目录") }
                             Oran7Input {
@@ -770,6 +852,73 @@ Pane {
                                 onCommitRequested: root.pageState.commitOutput()
                             }
                             Oran7Caption { text: qsTranslate("Oran7Ui", "自动追加后缀，避免覆盖。") }
+                        }
+                        Oran7SettingsGroup {
+                            visible: root.liveSupported
+                            objectName: "liveSettingsGroup"
+                            enabled: !root.controller.liveBusy
+                            opacity: enabled ? 1 : 0.5
+                            title: qsTranslate("Oran7Ui", "直播推流")
+                            Oran7Choice {
+                                model: [qsTranslate("Oran7Ui", "B站直播"), qsTranslate("Oran7Ui", "自定义 RTMP")]
+                                selectedRow: root.liveDraft.platform === "custom" ? 1 : 0
+                                onActivated: function(index) { root.editLive("platform", index ? "custom" : "bilibili") }
+                            }
+                            Oran7FieldLabel { text: qsTranslate("Oran7Ui", "推流服务器地址") }
+                            Oran7Input {
+                                objectName: "liveServer"
+                                text: root.liveDraft.server || ""
+                                placeholderText: "rtmp://server/live"
+                                maximumLength: 8192
+                                inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
+                                onTextEdited: root.editLive("server",text)
+                                onCommitRequested: root.saveLive()
+                            }
+                            Oran7FieldLabel { text: qsTranslate("Oran7Ui", "推流码") }
+                            Oran7Input {
+                                objectName: "liveStreamKey"
+                                text: root.liveDraft.streamKey || ""
+                                maximumLength: 8192
+                                echoMode: liveKeyVisible.checked ? TextInput.Normal : TextInput.Password
+                                inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
+                                onTextEdited: root.editLive("streamKey",text)
+                                onCommitRequested: root.saveLive()
+                            }
+                            Oran7Action {
+                                id: liveKeyVisible
+                                checkable: true
+                                text: checked ? qsTranslate("Oran7Ui", "隐藏推流码") : qsTranslate("Oran7Ui", "显示推流码")
+                            }
+                            Oran7Action {
+                                text: qsTranslate("Oran7Ui", "清除推流凭据")
+                                onClicked: { root.editLive("server", ""); root.editLive("streamKey", ""); root.saveLive() }
+                            }
+                            Oran7FieldLabel { text: qsTranslate("Oran7Ui", "直播画质") }
+                            Oran7Choice {
+                                model: ["720p30", "720p60", "1080p30", "1080p60", "1440p60"]
+                                selectedRow: root.liveDraft.width === 1280 ? (root.liveDraft.fps === 60 ? 1 : 0)
+                                    : root.liveDraft.width === 2560 ? 4 : root.liveDraft.fps === 30 ? 2 : 3
+                                onActivated: function(index) {
+                                    var sizes = [[1280,720,30],[1280,720,60],[1920,1080,30],[1920,1080,60],[2560,1440,60]]
+                                    root.editLive("width", sizes[index][0]); root.editLive("height", sizes[index][1]); root.editLive("fps", sizes[index][2])
+                                }
+                            }
+                            Oran7FieldLabel { text: qsTranslate("Oran7Ui", "直播码率 · kbps") }
+                            Oran7Input {
+                                objectName: "liveBitrate"
+                                text: String(root.liveDraft.bitrateKbps || "")
+                                validator: IntValidator { bottom: 100; top: 50000 }
+                                onTextEdited: root.editLive("bitrateKbps", Number(text))
+                                onCommitRequested: root.saveLive()
+                            }
+                            Oran7Action {
+                                checkable: true
+                                checked: !!root.liveDraft.audioEnabled
+                                text: qsTranslate("Oran7Ui", "直播系统声音")
+                                onClicked: root.editLiveAudio("audioEnabled", checked)
+                            }
+                            Oran7Caption { text: qsTranslate("Oran7Ui", "与本地录制互斥；直播帧率不能超过采集帧率。") }
+                            Oran7Caption { text: qsTranslate("Oran7Ui", root.liveMessage); visible: text.length > 0 }
                         }
                     }
                 }

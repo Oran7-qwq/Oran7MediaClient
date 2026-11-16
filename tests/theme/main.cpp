@@ -223,6 +223,26 @@ QtObject {
           "switch clears previous global and component overrides");
     theme.setCurrentThemeProfile(name);
     check(theme.Oran7ProgressSlider()["moveThreshold"].toInt() == 15, "switch back restores override");
+    auto duplicateProfile = profiles.loadThemeProfile(name);
+    auto duplicateComponents = duplicateProfile["__component__"].toObject();
+    duplicateComponents["Oran7MusicLyricsIsland"] = QJsonObject{
+        {"__init__", QJsonObject{{"__vars__", QJsonObject{{"floatingBackdropColor", "$genColor(#000000)"}}}}},
+        {"__style__", QJsonObject{{"floatingBackdropColor", "#111111"}, {"floatingOpacity", 0.7}}}};
+    duplicateProfile["__component__"] = duplicateComponents;
+    check(profiles.saveThemeProfile(name, duplicateProfile), "legacy duplicate color profile fixture");
+    theme.reloadTheme();
+    QSignalSpy island(&theme, &Oran7Theme::Oran7MusicLyricsIslandChanged);
+    theme.saveComponentToken("Oran7MusicLyricsIsland", "floatingBackdropColor", "$genColor(#3a86ff)");
+    const auto islandColors = theme.Oran7MusicLyricsIsland();
+    check(islandColors["floatingBackdropColor"].value<QColor>() == QColor("#3a86ff") &&
+              islandColors["floatingBackdropColor-6"].value<QColor>().isValid() && island.count() == 1,
+          "confirmed picker color replaces legacy style duplicate and regenerates visible palette immediately");
+    const auto savedIsland = profiles.loadThemeProfile(name)["__component__"].toObject()["Oran7MusicLyricsIsland"].toObject();
+    check(!savedIsland["__style__"].toObject().contains("floatingBackdropColor") &&
+              savedIsland["__style__"].toObject()["floatingOpacity"].toDouble() == 0.7,
+          "color save removes only shadowing token and preserves other style settings");
+    theme.reloadTheme();
+    check(theme.Oran7MusicLyricsIsland() == islandColors, "selected backdrop color survives theme reload");
     check(theme.deleteThemeProfile(name) && theme.currentThemeProfile() == "profile-default",
           "deleting active profile falls back");
     theme.deleteThemeProfile(name + "-clean");

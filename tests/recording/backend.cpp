@@ -58,12 +58,12 @@ int main(int argc,char** argv){
  cb.started=[&](const QVariantMap& result){++started;output=result.value("outputPath").toString();cancel=true;};cb.statistics=[](const auto&){};
  auto feed=source();check(Oran7RecordingBackend::run(c,feed,cancel,cb).isEmpty()&&started==1&&QFile::exists(output),"successful MP4 setup commits unique output");noLeaks();
  check(!lastLiveStreaming,"MP4 requests recording encoder policy");
- check(!feed->snapshot().encoder,"encoder detached before completion");
+ check(feed->outputs().empty(),"encoder detached before completion");
  check(order.indexOf("videoStop")<order.indexOf("muxClose")&&order.indexOf("audioStop")<order.indexOf("muxClose"),"producers flushed before mux finalization");
  const auto first=output;cancel=false;check(Oran7RecordingBackend::run(c,source(),cancel,cb).isEmpty()&&output!=first&&QFile::exists(first),"repeated recording never overwrites existing output");noLeaks();
  for(auto* failure:{&videoFailure,&audioFailure,&muxerFailure}){
   *failure=true;cancel=false;auto f=source();const auto before=started;
-  check(!Oran7RecordingBackend::run(c,f,cancel,cb).isEmpty()&&started==before&&!f->snapshot().encoder,"preparation failure never reports recording");noLeaks();*failure=false;
+  check(!Oran7RecordingBackend::run(c,f,cancel,cb).isEmpty()&&started==before&&f->outputs().empty(),"preparation failure never reports recording");noLeaks();*failure=false;
  }
  check(QDir(dir.path()).entryList(QDir::Files).size()==2,"uncommitted MP4 output removed on failure");
  auto flv=c;check(Oran7RecordingBackend::apply({{"format","flv"}},&flv).isEmpty(),"FLV selected independently from output mode");

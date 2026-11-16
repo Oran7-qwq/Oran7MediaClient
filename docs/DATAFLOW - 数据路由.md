@@ -145,7 +145,7 @@ QML → Client.screenCapture().startRecording() → Oran7RecordingSession（Prep
 ## 7. 配置加载/保存
 
 见 [[ARCHITECTURE - 架构]] §3/§4 与 [[Config - 配置与持久化]]。
-P1-5：Manager 首次访问即加载并迁移为 schemaVersion=2；后续 loadConfig 返回既有状态，不覆盖待保存修改。模块通过 Oran7AppConfig 分组快照读取/提交，default.json 深合并提供唯一默认值。退出仍按原顺序采集窗口/播放状态，保存先备份已有原件，再用 QSaveFile 原子提交；损坏/未来版本保护见 [[Config - 配置与持久化]]。
+P1-5：Manager 首次访问即加载并迁移为 schemaVersion=2；后续 loadConfig 返回既有状态，不覆盖待保存修改。模块通过 Oran7AppConfig 分组快照读取/提交，default.json 深合并提供唯一默认值。退出仍按原顺序采集窗口/播放状态，日常保存直接用 QSaveFile 原子提交，仅旧 schema/明文凭据迁移和损坏恢复前备份原件；损坏/未来版本保护见 [[Config - 配置与持久化]]。
 
 ## 8. 异步任务（QML 侧）
 

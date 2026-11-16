@@ -1,5 +1,7 @@
 #include "Oran7RecordingBackend.h"
 #include "Oran7WasapiAudioWorker.h"
+#include "Oran7AudioMixPipeline.h"
+#include "Oran7AudioCaptureBackend.h"
 #include "Oran7Mp4Muxer.h"
 #include "Oran7WhipPublisher.h"
 #include <QStandardPaths>
@@ -23,8 +25,13 @@ struct Oran7RecordingError {
 struct Oran7RecordingResources {
     std::shared_ptr<Oran7RecordingFeed> feed;
     std::shared_ptr<Oran7VideoEncoder> video = std::make_shared<Oran7VideoEncoder>();
+    uint64_t videoSubscription=0;
     std::shared_ptr<Oran7AudioEncoder> audio;
-    std::unique_ptr<Oran7WasapiAudioWorker> capture;
+    std::unique_ptr<Oran7WasapiAudioWorker> capture; // 旧 WHIP 路径
+    Oran7AudioMixPipeline audioMix;
+    std::shared_ptr<Oran7AudioCaptureFeed> audioSource;
+    uint64_t audioSubscription = 0;
+    bool audioTailOk = true;
     std::unique_ptr<Oran7Mp4Muxer> muxer;
     std::unique_ptr<Oran7WhipPublisher> publisher;
     std::thread bridge;
@@ -36,7 +43,12 @@ struct Oran7RecordingResources {
         if (closed) return;
         closed = true;
         if (onClosing) onClosing();
-        feed->detach();
+        feed->detach(videoSubscription);
+        if (audioSource) {
+            audioTailOk = audioSource->finish(audioSubscription);
+            audioSource->detach(audioSubscription);
+        }
+        audioMix.stop(true);
         bridgeRunning.store(false);
         if (bridge.joinable()) bridge.join();
         if (capture) capture->stop();
@@ -82,8 +94,13 @@ QString Oran7RecordingBackend::validate(const Oran7RecordingConfig& c, bool star
 }
 
 QString Oran7RecordingBackend::run(const Oran7RecordingConfig& c, std::shared_ptr<Oran7RecordingFeed> feed,
-                                  const std::atomic_bool& cancelled, const Oran7RecordingCallbacks& cb) {
+                                  const std::atomic_bool& cancelled, const Oran7RecordingCallbacks& cb,
+                                  std::shared_ptr<Oran7LiveAudioControl> audioControl, std::shared_ptr<Oran7AudioCaptureFeed> audioFeed) {
     if (const auto error = validate(c, true); !error.isEmpty()) return error;
+    if (audioFeed && c.mode == 0) {
+        const auto error=Oran7AudioCaptureBackend::waitReady(audioFeed,cancelled);
+        if (!error.isEmpty() || cancelled.load()) return error;
+    }
     if (!feed) return QStringLiteral("采集源不可用");
     QElapsedTimer timer; timer.start();
     auto source = feed->snapshot();
@@ -100,6 +117,7 @@ QString Oran7RecordingBackend::run(const Oran7RecordingConfig& c, std::shared_pt
     QTemporaryFile output;
     Oran7RecordingResources resources; resources.feed = feed; resources.onClosing = cb.stopping;
     auto& r = resources;
+    r.audioSource = c.mode == 0 ? audioFeed : nullptr;
     Oran7VideoEncoder::EncoderConfig video;
     video.width = width; video.height = height; video.fps = c.fps; video.gopSize = c.fps;
     video.bitrateKbps = c.bitrateKbps; video.codecName = "h264_mf"; video.hwDevice = source.device.get();
@@ -108,10 +126,16 @@ QString Oran7RecordingBackend::run(const Oran7RecordingConfig& c, std::shared_pt
         || !waitOpened(cancelled, [&] { return r.video->isOpened(); }, [&] { return r.video->isRuning(); }))
         return cancelled.load() ? QString() : QStringLiteral("视频编码器准备失败或超时");
     if (cancelled.load()) return {};
-    if (c.audioEnabled) {
+    if (c.mode == 0 || c.audioEnabled) {
         Oran7AudioEncoder::EncoderConfig audio;
         audio.codecName = c.mode == 1 ? "opus" : (avcodec_find_encoder_by_name("libfdk_aac") ? "libfdk_aac" : "aac");
         audio.sampleRate = 48000; audio.channels = 2; audio.bitrateBps = 128000;
+        if (c.mode == 0) {
+            audio.continuousPts = true;
+            audio.maxFrameQueue = 64;
+            audio.maxPacketQueue = 100;
+            audio.drainInputOnStop = true;
+        }
         r.audio = std::make_shared<Oran7AudioEncoder>();
         if (!r.audio->configure(audio, onError) || !r.audio->start()
             || !waitOpened(cancelled, [&] { return r.audio->isOpened(); }, [&] { return r.audio->isRunning(); }))
@@ -148,11 +172,22 @@ QString Oran7RecordingBackend::run(const Oran7RecordingConfig& c, std::shared_pt
             return QStringLiteral("无法打开录制输出文件");
     }
     if (cancelled.load()) return {};
-    if (c.audioEnabled) {
+    if (c.mode == 1 && c.audioEnabled) {
         r.capture = std::make_unique<Oran7WasapiAudioWorker>();
         if (!r.capture->start({48000, 2, 10})) return QStringLiteral("系统音频采集启动失败");
     }
-    if (!feed->attach(r.video, width, height, c.fps)) return QStringLiteral("采集源已经停止");
+    r.videoSubscription=feed->attach(r.video,width,height,c.fps);
+    if (!r.videoSubscription) return QStringLiteral("采集源已经停止");
+    if (c.mode == 0) {
+        if (!audioControl) {
+            audioControl = std::make_shared<Oran7LiveAudioControl>();
+            audioControl->set({c.audioEnabled,false,100,100});
+        }
+        if (audioFeed) {
+            r.audioSubscription=audioFeed->attach(r.audio);
+            if (!r.audioSubscription) return QStringLiteral("音频输出接入失败");
+        } else if (!r.audioMix.start(r.audio,audioControl)) return QStringLiteral("录制音频采集或混音失败");
+    }
     if (r.capture) {
         r.bridgeRunning.store(true);
         r.bridge = std::thread([&r] {
@@ -166,12 +201,24 @@ QString Oran7RecordingBackend::run(const Oran7RecordingConfig& c, std::shared_pt
     cb.started({{"outputPath",outputPath},{"streamId",streamId}});
     qint64 lastBytes = 0; timer.restart();
     while (!cancelled.load()) {
-        if (!feed->snapshot().alive) return QStringLiteral("采集源已停止");
+        const auto current=feed->snapshot();
+        if (!current.alive || current.epoch!=source.epoch) return QStringLiteral("采集源已停止");
+        if (r.audioSource && !r.audioSource->snapshot().alive)
+            return Oran7AudioCaptureBackend::errorMessage(r.audioSource->snapshot().error);
         if (!errors->get().isEmpty()) return errors->get();
-        if (!r.video->isRuning() || (r.audio && (!r.audio->isRunning() || !r.capture->isRunning())))
+        if (r.audioMix.error() == Oran7AudioMixPipeline::Error::Microphone)
+            return QStringLiteral("麦克风采集失败，请检查默认输入设备和麦克风权限");
+        if (r.audioMix.error() != Oran7AudioMixPipeline::Error::None)
+            return QStringLiteral("录制音频采集或混音失败");
+        if (!r.video->isRuning() || (r.audio && !r.audio->isRunning()) || (r.capture && !r.capture->isRunning()))
             return QStringLiteral("编码或系统音频采集已意外停止");
         if (timer.elapsed() >= 500) {
-            QVariantMap stats{{"outputPath",outputPath},{"width",width},{"height",height}};
+            const auto sourceStats = r.audioSource ? r.audioSource->snapshot() : Oran7AudioCaptureFeed::Snapshot{};
+            QVariantMap stats{{"outputPath",outputPath},{"width",width},{"height",height},
+                {"audioInputDrops",qlonglong(r.audio ? r.audio->droppedInputFrames() : 0)},
+                {"audioPacketDrops",qlonglong(r.audio ? r.audio->droppedOutputPackets() : 0)},
+                {"captureAudioDrops",qulonglong(r.audioSource ? sourceStats.captureDrops : r.audioMix.captureDrops())},
+                {"microphoneDrops",qulonglong(r.audioSource ? sourceStats.microphoneDrops : r.audioMix.microphoneDrops())}};
             if (r.publisher) {
                 const auto state = QString::fromStdString(r.publisher->connectionState());
                 const auto ice = QString::fromStdString(r.publisher->iceState());
@@ -186,6 +233,8 @@ QString Oran7RecordingBackend::run(const Oran7RecordingConfig& c, std::shared_pt
         QThread::msleep(20);
     }
     resources.close();
+    if (!r.audioTailOk || r.audioMix.error() != Oran7AudioMixPipeline::Error::None)
+        return QStringLiteral("录制音频采集或混音失败");
     return errors->get();
 }
 

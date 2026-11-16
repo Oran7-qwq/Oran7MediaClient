@@ -14,9 +14,11 @@
 #include "D3d11Videoitem.h"
 #include "Oran7SignalingClient.h"
 #include "Oran7RecordingSession.h"
+#include "Live/Oran7LiveSession.h"
 using Microsoft::WRL::ComPtr;
 struct Oran7CaptureControl;
 class Oran7RecordingFeed;
+class Oran7AudioCaptureFeed;
 
 //  =====================  CaptureOutputInfo  ==================
 
@@ -62,6 +64,12 @@ class Oran7ScreenCaptureController : public QObject
     Q_PROPERTY(QString previewState READ previewStateName NOTIFY previewStateChanged)
     Q_PROPERTY(bool previewBusy READ previewBusy NOTIFY previewStateChanged)
     Q_PROPERTY(QString previewError READ previewError NOTIFY previewStateChanged)
+    Q_PROPERTY(QObject* liveSession READ liveSession CONSTANT)
+    Q_PROPERTY(bool liveBusy READ liveBusy NOTIFY liveChanged)
+    Q_PROPERTY(QVariantMap liveOptions READ liveSettings NOTIFY liveSettingsChanged)
+    Q_PROPERTY(QVariantMap audioOptions READ audioSettings NOTIFY liveSettingsChanged)
+    Q_PROPERTY(QVariantMap audioLevels READ audioLevels NOTIFY audioLevelsChanged)
+    Q_PROPERTY(bool audioMonitoringEnabled READ audioMonitoringEnabled WRITE setAudioMonitoringEnabled NOTIFY audioMonitoringChanged)
     Q_PROPERTY(QString recordingState READ recordingStateName NOTIFY recordingStateChanged)
     Q_PROPERTY(bool recordingBusy READ recordingBusy NOTIFY recordingStateChanged)
     Q_PROPERTY(QString recordingError READ recordingError NOTIFY recordingStateChanged)
@@ -135,6 +143,19 @@ class Oran7ScreenCaptureController : public QObject
     };
     Q_ENUM(RecordMode)
 
+    QObject* liveSession() const { return m_live.get(); }
+    bool liveBusy() const { return m_live->busy(); }
+    Q_INVOKABLE bool startLive();
+    Q_INVOKABLE void stopLive() { m_live->stop(); }
+    Q_INVOKABLE QVariantMap liveSettings() const;
+    Q_INVOKABLE QVariantMap applyLiveSettings(const QVariantMap& values);
+    Q_INVOKABLE QVariantMap previewLiveAudioSettings(const QVariantMap& values) { return previewAudioSettings(values); }
+    Q_INVOKABLE QVariantMap audioSettings() const;
+    QVariantMap audioLevels() const { return m_audioLevels; }
+    bool audioMonitoringEnabled() const { return m_audioMonitoringRequested; }
+    Q_INVOKABLE void setAudioMonitoringEnabled(bool enabled);
+    Q_INVOKABLE QVariantMap previewAudioSettings(const QVariantMap& values);
+    Q_INVOKABLE QVariantMap applyAudioSettings(const QVariantMap& values);
     Q_INVOKABLE bool startRecording();
     Q_INVOKABLE void stopRecording();
     Q_INVOKABLE bool isRecording() const;
@@ -152,6 +173,10 @@ class Oran7ScreenCaptureController : public QObject
   signals:
     void previewStateChanged();
     void captureRequestFinished(const QVariantMap& result);
+    void liveChanged();
+    void liveSettingsChanged();
+    void audioLevelsChanged();
+    void audioMonitoringChanged();
     void recordingSettingsChanged();
     void started();
     void stopped();
@@ -217,7 +242,24 @@ class Oran7ScreenCaptureController : public QObject
     std::shared_ptr<Oran7CaptureControl> m_control;
     std::shared_ptr<Oran7RecordingFeed> m_feed;
     //=================== CaptureRecording ===================//
+    std::unique_ptr<Oran7LiveSession> m_live;
     std::unique_ptr<Oran7RecordingSession> m_recording;
+    void updateAudioMeterPolling();
+    bool audioCaptureWanted() const;
+    void scheduleAudioCapture();
+    void driveAudioCapture();
+    std::shared_ptr<Oran7AudioCaptureFeed> prepareAudioCapture();
+    std::unique_ptr<Oran7RecordingSession> m_audioCapture = std::make_unique<Oran7RecordingSession>();
+    std::shared_ptr<Oran7AudioCaptureFeed> m_audioCaptureFeed, m_runningAudioCaptureFeed;
+    std::shared_ptr<Oran7LiveAudioControl> m_audioCaptureControl = std::make_shared<Oran7LiveAudioControl>();
+    bool m_audioMonitoringRequested=false, m_audioCaptureScheduled=false, m_audioCaptureFailed=false;
+    void pollAudioLevels();
+    QTimer m_audioMeterTimer;
+    QVariantMap m_audioLevels{{"active",false},{"systemPeak",0.0},{"microphonePeak",0.0},
+        {"systemFullScale",false},{"microphoneFullScale",false}};
+    bool audioSettingsLocked() const;
+    void setRuntimeAudio(const Oran7LiveConfig&);
+    std::shared_ptr<Oran7LiveAudioControl> m_recordingAudioControl = m_audioCaptureControl;
     std::unique_ptr<Oran7SignalingClient> m_signaling;
     QString m_recordingOutputPath;
 };

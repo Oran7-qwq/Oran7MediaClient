@@ -54,14 +54,28 @@
     "last_media_cover": "",
     "last_media_timesize": "",
     "last_media_songid": 0,
+    "last_media_provider": "",
+    "last_media_providerId": "",
+    "last_media_mediaMid": "",
+    "last_media_nativeId": "0",
     "last_media_isvip": false,
     "netease_auth": {
         "MUSIC_U": "",
         "__csrf": "",
         "nickname": ""
     },
+    "qqmusic_auth": {
+        "cookies": [],
+        "user_id": "",
+        "nickname": ""
+    },
     "integratedMusic": {
         "list": []
+    },
+    "live": {
+        "platform": "bilibili", "server": "", "stream_key": "",
+        "width": 1920, "height": 1080, "fps": 60, "bitrate_kbps": 6000, "audio_enabled": true,
+        "microphone_enabled": false, "system_volume": 100, "microphone_volume": 100
     },
     "recording": {
         "format": "mp4",

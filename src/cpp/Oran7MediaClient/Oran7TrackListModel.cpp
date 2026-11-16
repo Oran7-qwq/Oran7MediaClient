@@ -28,7 +28,8 @@ QHash<int, QByteArray> Oran7TrackListModel::roleNames() const
         {IsLikedRole,"isLiked"},{IsIntegratedRole,"isIntegrated"},{PathRole,"path"},{SongIdRole,"songId"},
         {SourceRole,"source"},{IsSelectedRole,"isSelected"},{NeedsAnimateInRole,"needsAnimateIn"},
         {IconRole,"icon"},{MusicNameRole,"music_name"},{MusicArtistRole,"music_artist"},
-        {MusicAlbumRole,"music_album"},{TimesizeRole,"timesize"},{FilepathRole,"filepath"},{IsLovedRole,"isLoved"}};
+        {MusicAlbumRole,"music_album"},{TimesizeRole,"timesize"},{FilepathRole,"filepath"},{IsLovedRole,"isLoved"},{ProviderRole,"provider"},
+        {ProviderIdRole,"providerId"},{MediaMidRole,"mediaMid"},{NativeIdRole,"nativeId"}};
 }
 QVariant Oran7TrackListModel::data(const QModelIndex& index, int role) const
 {
@@ -55,6 +56,10 @@ QVariant Oran7TrackListModel::data(const QModelIndex& index, int role) const
     case IsIntegratedRole: return entry.integrated;
     case PathRole: case FilepathRole: return track.path;
     case SongIdRole: return track.songId;
+    case ProviderRole: return track.provider;
+    case ProviderIdRole: return track.providerId;
+    case MediaMidRole: return track.mediaMid;
+    case NativeIdRole: return QString::number(track.nativeId);
     case SourceRole: return entry.source;
     case IsSelectedRole: return entry.selected;
     case NeedsAnimateInRole: return entry.animationPending;
@@ -114,6 +119,10 @@ std::optional<Oran7TrackListModel::Oran7Entry> Oran7TrackListModel::entryFromMap
     }
     entry.url = fields.value("url").toString();
     entry.source = fields.value("source").toString();
+    if (track->provider == "qqmusic") {
+        entry.url = track->path;
+        entry.source = "qqmusic";
+    }
     const auto keys = identityKeys(track->songId, entry.url, track->path);
     if (keys.isEmpty()) return std::nullopt;
     entry.trackId = keys.first();
@@ -125,7 +134,8 @@ QVariantMap Oran7TrackListModel::serialize(const Oran7Entry& entry)
     const auto& t = entry.track;
     return {{"icon",t.cover},{"music_name",t.title},{"music_artist",t.artist},{"music_album",t.album},
         {"timesize",t.timesize},{"url",entry.url},{"filepath",t.path},{"songId",t.songId},
-        {"isVip",t.isVip},{"source",entry.source}};
+        {"isVip",t.isVip},{"source",entry.source},{"provider",t.provider},{"providerId",t.providerId},
+        {"mediaMid",t.mediaMid},{"nativeId",QString::number(t.nativeId)}};
 }
 QVariantList Oran7TrackListModel::serializedTracks() const
 {
@@ -259,12 +269,13 @@ QSet<qint64> Oran7TrackListModel::songIds() const
     for (const auto& entry : m_entries) if (entry.track.songId > 0) ids.insert(entry.track.songId);
     return ids;
 }
-void Oran7TrackListModel::updateMembership(const QSet<qint64>& liked, const QSet<QString>& integrated)
+void Oran7TrackListModel::updateMembership(const QSet<qint64>& liked, const QSet<QString>& integrated, const QSet<QString>& qqLiked)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     for (int row = 0; row < count(); ++row) {
         auto& entry = m_entries[row];
-        const bool isLiked = liked.contains(entry.track.songId);
+        const bool isLiked = entry.track.provider == "qqmusic"
+            ? qqLiked.contains(sourceKey(entry.track.path)) : liked.contains(entry.track.songId);
         bool isIntegrated = false;
         for (const auto& key : identityKeys(entry.track.songId, entry.url, entry.track.path))
             if (integrated.contains(key)) { isIntegrated = true; break; }

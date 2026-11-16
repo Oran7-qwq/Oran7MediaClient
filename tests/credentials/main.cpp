@@ -106,6 +106,10 @@ void migration(const QJsonObject& defaults)
     recording["height"] = 1440;
     recording["future_option"] = 42;
     legacy["recording"] = recording;
+    auto live = legacy.value("live").toObject();
+    live["server"] = "rtmp://example.test/live";
+    live["stream_key"] = "LIVE_SENTINEL?token=FICTIONAL";
+    legacy["live"] = live;
     legacy["user"] = QJsonObject{
         {"username", "LEGACY_USER_SENTINEL"}, {"password", "LEGACY_PASSWORD_SENTINEL"}, {"remember_password", true}};
     legacy["extension"] = QJsonObject{{"keep", 42}};
@@ -127,8 +131,11 @@ void migration(const QJsonObject& defaults)
         check(json(path).value("extension") == legacy.value("extension") &&
                   json(path).value("recording").toObject().value("future_option") == QJsonValue(42),
               "ordinary unknown fields retained");
+        check(config.snapshot().live.streamKey == "LIVE_SENTINEL?token=FICTIONAL" &&
+                  json(path).value("live").toObject().value("width") == QJsonValue(1920),
+              "live credentials migrate separately while public dimensions remain");
         firstRefs = refs(path);
-        check(firstRefs.size() == 4, "all credential groups migrated");
+        check(firstRefs.size() == 5, "all credential groups migrated");
         for (const auto& name : QDir(config.credentialDirectory()).entryList({"*.dpapi"}, QDir::Files))
             check(!read(QDir(config.credentialDirectory()).filePath(name)).contains("SENTINEL"),
                   "encrypted generations contain no plaintext");

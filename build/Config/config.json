@@ -1,261 +1,311 @@
 {
     "appearance": {
+        "fontFamily": "拾陆字濑户2.0-1",
+        "fontPixelSize": 18,
+        "language": "zh_CN",
         "themeProfile": "profile-default"
+    },
+    "audio": {
+        "band_gains_db": [
+            10,
+            7,
+            4,
+            -4,
+            -8,
+            -5,
+            -2.5,
+            -2,
+            -3,
+            -3
+        ],
+        "bass_boost_db": 0,
+        "bass_freq_hz": 120,
+        "compressor_attack_ms": 10,
+        "compressor_enabled": false,
+        "compressor_knee_db": 3,
+        "compressor_makeup_db": 0,
+        "compressor_ratio": 3,
+        "compressor_release_ms": 150,
+        "compressor_threshold_db": -18,
+        "crossfeed": 0,
+        "custom_presets": [
+            {
+                "id": "custom-b89fc809-8c17-4ff7-bfdf-5c721c190659",
+                "name": "低音-海螺",
+                "settings": {
+                    "bandGainsDb": [
+                        9,
+                        6,
+                        4.5,
+                        -4,
+                        -5.5,
+                        -6,
+                        -3,
+                        -2,
+                        -3,
+                        -3
+                    ],
+                    "bassBoostDb": 0,
+                    "bassFreqHz": 120,
+                    "compressorAttackMs": 10,
+                    "compressorEnabled": false,
+                    "compressorKneeDb": 3,
+                    "compressorMakeupDb": 0,
+                    "compressorRatio": 3,
+                    "compressorReleaseMs": 150,
+                    "compressorThresholdDb": -18,
+                    "crossfeed": 0,
+                    "highPassHz": 20,
+                    "limiterCeilingDb": -1,
+                    "lowPassHz": 20000,
+                    "outputGainDb": 0,
+                    "preampDb": -3,
+                    "stereoWidth": 1
+                }
+            },
+            {
+                "id": "custom-7acdd638-07f1-4d7e-b7b1-b6848de5fbaf",
+                "name": "荣耀亲选X7Lite",
+                "settings": {
+                    "bandGainsDb": [
+                        3.5,
+                        -2,
+                        2.5,
+                        -2.5,
+                        5,
+                        -2,
+                        -2,
+                        -2,
+                        -2,
+                        -0.5
+                    ],
+                    "bassBoostDb": 0,
+                    "bassFreqHz": 120,
+                    "compressorAttackMs": 10,
+                    "compressorEnabled": false,
+                    "compressorKneeDb": 3,
+                    "compressorMakeupDb": 0,
+                    "compressorRatio": 3,
+                    "compressorReleaseMs": 150,
+                    "compressorThresholdDb": -18,
+                    "crossfeed": 0,
+                    "highPassHz": 20,
+                    "limiterCeilingDb": -1,
+                    "lowPassHz": 20000,
+                    "outputGainDb": 0,
+                    "preampDb": -3,
+                    "stereoWidth": 1
+                }
+            }
+        ],
+        "enabled": true,
+        "high_pass_hz": 20,
+        "limiter_ceiling_db": -1,
+        "low_pass_hz": 20000,
+        "output_gain_db": 0,
+        "preamp_db": -3,
+        "preset_id": "custom",
+        "stereo_width": 1,
+        "version": 2
     },
     "bilibili_auth": {
         "bili_jct": "",
         "dede_user_id": "",
-        "sessdata": "63c9011c,1804083222,c2d0d*91CjBFWzlAuReOtovG6hKfnDAVQ7yP9XO8YQ1udtE8Bb4BS4Bnv6tF3rEErv4MZQjuA88SVk5iWXB0ckt1YXI0UFphUWFQek5yZEVZYlBFTTZZTzNaSnItZDFxbUN5ekZ6SURiRHltemRWNERSUzdLNlgtaENqWGFXSm5OOXNTSG1LNkdaQnJBUWVRIIEC",
-        "user_name": "Oran柒"
+        "sessdata": "",
+        "user_name": ""
     },
-    "favorite": {
-        "list": [
-        ]
+    "credentialStorage": {
+        "groups": {
+            "live": "149ffe69-2ab2-46fb-8627-b2f7309c94ec",
+            "netease": "27199e7f-b17e-4d8d-aee9-d3ef73b46ff0",
+            "qqmusic": "1e9b2e9d-5364-4df8-8b88-f84d45289ad4"
+        },
+        "version": 1
+    },
+    "general": {
+        "developerMode": false
     },
     "integratedMusic": {
         "list": [
             {
+                "filepath": "https://music.163.com/song/media/outer/url?id=1814767154.mp3",
+                "icon": "https://p2.music.126.net/kp_ognduJhPV-TshvY8YvA==/109951165662588422.jpg",
+                "isVip": false,
+                "music_album": "恭喜发财（J-Dillon Bootleg）",
+                "music_artist": "J-Dillon",
+                "music_name": "恭喜发财",
+                "songId": 1814767154,
+                "source": "netease",
+                "timesize": "167",
+                "url": "https://music.163.com/song/media/outer/url?id=1814767154.mp3"
+            },
+            {
                 "filepath": "",
-                "icon": "https://p2.music.126.net/xxQXfMnMlJyMlydzVsRcag==/109951167974724190.jpg",
+                "icon": "https://p2.music.126.net/PdV31lBHqzn182M1LgZ16A==/109951171263357162.jpg",
+                "isVip": false,
+                "music_album": "spring",
+                "music_artist": "sleepyyer",
+                "music_name": "spring",
+                "songId": 2690283579,
+                "source": "netease",
+                "timesize": "152",
+                "url": ""
+            },
+            {
+                "filepath": "",
+                "icon": "https://p1.music.126.net/X--faCIa7Ovgm-tKR9WKog==/109951173282092742.jpg",
                 "isVip": true,
-                "music_album": "Running In The Dark【手游《明日方舟》印象曲】",
-                "music_artist": "MONKEY MAJIK / 塞壬唱片-MSR",
-                "music_name": "Running In The Dark",
-                "songId": 1990154664,
+                "music_album": "Falling Into Feelings",
+                "music_artist": "Lunak",
+                "music_name": "Falling Into Feelings",
+                "songId": 3386346120,
                 "source": "netease",
-                "timesize": "220",
+                "timesize": "134",
                 "url": ""
             },
             {
                 "filepath": "",
-                "icon": "https://p1.music.126.net/tuWLl2YkJfe6EOvdnpg9rw==/109951169398455370.jpg",
-                "isVip": true,
-                "music_album": "先说谎的人",
-                "music_artist": "h3R3 / 张鑫",
-                "music_name": "先说谎的人",
-                "songId": 1903876057,
+                "icon": "https://p2.music.126.net/EYHIR90JuXJNL6Vq3qDrGA==/109951170918941392.jpg",
+                "isVip": false,
+                "music_album": "Heavenly Me",
+                "music_artist": "AIYUE / 理名 / 塞壬唱片-MSR",
+                "music_name": "Heavenly Me INST",
+                "songId": 2699629222,
                 "source": "netease",
-                "timesize": "168",
+                "timesize": "191",
                 "url": ""
             },
             {
-                "filepath": "",
-                "icon": "https://p1.music.126.net/D_i2HV3rCE_es_Nf5FgE7w==/109951171496664450.jpg",
-                "isVip": true,
-                "music_album": "我们之间",
-                "music_artist": "h3R3",
-                "music_name": "我们之间",
-                "songId": 2728178201,
+                "filepath": "https://music.163.com/song/media/outer/url?id=1945307649.mp3",
+                "icon": "https://p1.music.126.net/Ke_sAbeUJBmtWW3X4Cs4oQ==/109951167386669561.jpg",
+                "isVip": false,
+                "music_album": "愚人号OST",
+                "music_artist": "塞壬唱片-MSR / Steven Grove",
+                "music_name": "愚人曲",
+                "songId": 1945307649,
                 "source": "netease",
-                "timesize": "234",
-                "url": ""
-            },
-            {
-                "filepath": "",
-                "icon": "http://p3.music.126.net/KtOGn6tmTqqq30MlXm-tTA==/109951170434114563.jpg",
-                "isVip": false,
-                "music_album": "Õ.Õ",
-                "music_artist": "Amena",
-                "music_name": "Õ.Õ (VIP Mix)",
-                "songId": 2752592450,
-                "source": "netease",
-                "timesize": "172",
-                "url": ""
-            },
-            {
-                "filepath": "https://music.163.com/song/media/outer/url?id=2118809751.mp3",
-                "icon": "https://p1.music.126.net/EAPZJZofC8YoFUReR1NPlw==/109951169794473161.jpg",
-                "isVip": false,
-                "music_album": "故事商铺·下",
-                "music_artist": "h3R3 / 黄礼格",
-                "music_name": "断电",
-                "songId": 2118809751,
-                "source": "netease",
-                "timesize": "164",
-                "url": "https://music.163.com/song/media/outer/url?id=2118809751.mp3"
-            },
-            {
-                "filepath": "",
-                "icon": "https://p2.music.126.net/XGHsj0FoF1wLFQTSlwSj_w==/109951166373105865.jpg",
-                "isVip": false,
-                "music_album": "Fragment of Eden",
-                "music_artist": "Plum - Melodic Artist",
-                "music_name": "MemoryLocked",
-                "songId": 1877154646,
-                "source": "netease",
-                "timesize": "300",
-                "url": ""
-            },
-            {
-                "filepath": "",
-                "icon": "https://p1.music.126.net/7tMKza9QbB9xsiQHMmLSKw==/109951167280335904.jpg",
-                "isVip": true,
-                "music_album": "Something Just Like This",
-                "music_artist": "The Chainsmokers / Coldplay",
-                "music_name": "Something Just Like This",
-                "songId": 461347998,
-                "source": "netease",
-                "timesize": "247",
-                "url": ""
-            },
-            {
-                "filepath": "https://music.163.com/song/media/outer/url?id=466794339.mp3",
-                "icon": "https://p2.music.126.net/4YTTnzJhrOT9Dr9UPQ_WVg==/109951168171862807.jpg",
-                "isVip": false,
-                "music_album": "Something Just Like This (feat. Romy Wave)",
-                "music_artist": "Anthony Keyrouz / Romy Wave",
-                "music_name": "Something Just Like This (feat. Romy Wave)",
-                "songId": 466794339,
-                "source": "netease",
-                "timesize": "228",
-                "url": "https://music.163.com/song/media/outer/url?id=466794339.mp3"
-            },
-            {
-                "filepath": "http://m801.music.126.net/20260824000445/273ccb825a103f680641af666f8a818e/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/81724361558/ef5b/892e/3f43/6c944c29e4aef0a36b665d628464f766.mp3?vuutv=dCee4X8SmclF0Nk9MYKp2HbbxsCGotRlKRW/CfULCI3818w1r8pUSuEUp0jZT3wUCIEyYab6itSVOHacX6GllhKzC17k33DLxkxiI1NBnYY=",
-                "icon": "https://p2.music.126.net/TbN6n23U2mUFFvrICXAFRQ==/109951173620428645.jpg",
-                "isVip": false,
-                "music_album": "Stuck in Me",
-                "music_artist": "Sean Ven",
-                "music_name": "Stuck in Me",
-                "songId": 3410044918,
-                "source": "netease",
-                "timesize": "210",
-                "url": "http://m801.music.126.net/20260824000445/273ccb825a103f680641af666f8a818e/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/81724361558/ef5b/892e/3f43/6c944c29e4aef0a36b665d628464f766.mp3?vuutv=dCee4X8SmclF0Nk9MYKp2HbbxsCGotRlKRW/CfULCI3818w1r8pUSuEUp0jZT3wUCIEyYab6itSVOHacX6GllhKzC17k33DLxkxiI1NBnYY="
-            },
-            {
-                "filepath": "http://m701.music.126.net/20260823145404/9377f4d4904a71b85de7827038faaca1/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/81724361558/ef5b/892e/3f43/6c944c29e4aef0a36b665d628464f766.mp3?vuutv=5nC7cEXClzgo63uopmfkGsofKhNshwTnNionuNzFjVQzrZhFRKKaqBPrVE9DYMOPajHYm4juKjSATTTYw0K8iOF8ar8w4VnxdhQnxfzmToY=",
-                "icon": "https://p2.music.126.net/dBsNnlV6lSYCBuLUEwAGUQ==/109951173628666804.jpg",
-                "isVip": false,
-                "music_album": "酸橙色信笺",
-                "music_artist": "塞壬唱片-MSR / DAZBEE",
-                "music_name": "酸橙色信笺",
-                "songId": 3410744228,
-                "source": "netease",
-                "timesize": "229",
-                "url": "http://m701.music.126.net/20260823145404/9377f4d4904a71b85de7827038faaca1/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/81724361558/ef5b/892e/3f43/6c944c29e4aef0a36b665d628464f766.mp3?vuutv=5nC7cEXClzgo63uopmfkGsofKhNshwTnNionuNzFjVQzrZhFRKKaqBPrVE9DYMOPajHYm4juKjSATTTYw0K8iOF8ar8w4VnxdhQnxfzmToY="
-            },
-            {
-                "filepath": "",
-                "icon": "https://p1.music.126.net/uSUP0k1VuFlnec6K078Owg==/109951172629552685.jpg",
-                "isVip": false,
-                "music_album": "Good Luck",
-                "music_artist": "My Car / GuTs",
-                "music_name": "Good Luck",
-                "songId": 3342103633,
-                "source": "netease",
-                "timesize": "133",
-                "url": ""
-            },
-            {
-                "filepath": "",
-                "icon": "https://p2.music.126.net/arhjNUkkuUkOabzQidpt3A==/109951173564379345.jpg",
-                "isVip": false,
-                "music_album": "寻诀 (Guided by Echoes)",
-                "music_artist": "铁痕电台-MSR / 钱润玉 / Kkoori",
-                "music_name": "寻诀 (Guided by Echoes)",
-                "songId": 3406727231,
-                "source": "netease",
-                "timesize": "209",
-                "url": ""
-            },
-            {
-                "filepath": "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Config/audioTemp/Tommee Profitt,Fleurie - Breathe.flac",
-                "icon": "file:///C:%5CUsers%5Cfunny%5CQtProject.doc%5COran7MediaClient%5Cbuild%5CConfig%5CaudioTemp%5CaudioCover%5CTommee%20Profitt,Fleurie%20-%20Breathe.jpg",
-                "isVip": false,
-                "music_album": "Cinematic Songs (Vol. 2)",
-                "music_artist": "Tommee Profitt/Fleurie",
-                "music_name": "Breathe",
-                "songId": 0,
-                "source": "local",
-                "timesize": "217",
-                "url": "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Config/audioTemp/Tommee Profitt,Fleurie - Breathe.flac"
-            },
-            {
-                "filepath": "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Config/audioTemp/宇多田ヒカル - One Last Kiss.flac",
-                "icon": "file:///C:%5CUsers%5Cfunny%5CQtProject.doc%5COran7MediaClient%5Cbuild%5CConfig%5CaudioTemp%5CaudioCover%5C%E5%AE%87%E5%A4%9A%E7%94%B0%E3%83%92%E3%82%AB%E3%83%AB%20-%20One%20Last%20Kiss.jpg",
-                "isVip": false,
-                "music_album": "One Last Kiss(最终一吻)",
-                "music_artist": "宇多田ヒカル",
-                "music_name": "One Last Kiss",
-                "songId": 0,
-                "source": "local",
-                "timesize": "252",
-                "url": "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Config/audioTemp/宇多田ヒカル - One Last Kiss.flac"
-            },
-            {
-                "filepath": "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Config/audioTemp/胡彦斌 - 无间渡.flac",
-                "icon": "file:///C:%5CUsers%5Cfunny%5CQtProject.doc%5COran7MediaClient%5Cbuild%5CConfig%5CaudioTemp%5CaudioCover%5C%E8%83%A1%E5%BD%A6%E6%96%8C%20-%20%E6%97%A0%E9%97%B4%E6%B8%A1.jpg",
-                "isVip": false,
-                "music_album": "无间渡",
-                "music_artist": "胡彦斌",
-                "music_name": "无间渡",
-                "songId": 0,
-                "source": "local",
-                "timesize": "238",
-                "url": "C:/Users/funny/QtProject.doc/Oran7MediaClient/build/Config/audioTemp/胡彦斌 - 无间渡.flac"
-            },
-            {
-                "filepath": "",
-                "icon": "https://p2.music.126.net/Ok0wyueq9c7WezgSLEj_Ag==/109951169216665778.jpg",
-                "isVip": false,
-                "music_album": "do you need me?",
-                "music_artist": "-Prey",
-                "music_name": "do you need me?",
-                "songId": 2112424731,
-                "source": "netease",
-                "timesize": "204",
-                "url": ""
-            },
-            {
-                "filepath": "",
-                "icon": "https://p2.music.126.net/AXrMggcQQAocMtW2HUr--w==/109951172631416219.jpg",
-                "isVip": false,
-                "music_album": "Montagem Yuki",
-                "music_artist": "KPHK",
-                "music_name": "Montagem Yuki",
-                "songId": 3342306149,
-                "source": "netease",
-                "timesize": "96",
-                "url": ""
+                "timesize": "201",
+                "url": "https://music.163.com/song/media/outer/url?id=1945307649.mp3"
             }
         ]
     },
-    "last_media_album": "空のグラス",
-    "last_media_artist": "Neo",
-    "last_media_cover": "https://p2.music.126.net/hsuaIZPj_hOmfBI9oSr1uw==/109951170949204943.jpg",
+    "last_media_album": "Baby Just Come",
+    "last_media_artist": "SMYE",
+    "last_media_cover": "https://p1.music.126.net/AtZr5DA0oe5xeiYZekEHJA==/109951172850876762.jpg",
     "last_media_isvip": false,
-    "last_media_name": "空のグラス (feat. Nqsi)",
-    "last_media_songid": 2701675434,
-    "last_media_timesize": "134",
-    "last_used_file": "https://music.163.com/song/media/outer/url?id=2701675434.mp3",
+    "last_media_mediaMid": "",
+    "last_media_name": "Baby Just Come",
+    "last_media_nativeId": "0",
+    "last_media_provider": "",
+    "last_media_providerId": "",
+    "last_media_songid": 3356687441,
+    "last_media_timesize": "130",
+    "last_used_file": "https://music.163.com/song/media/outer/url?id=3356687441.mp3",
     "last_used_file_isvip": false,
+    "live": {
+        "audio_enabled": true,
+        "bitrate_kbps": 6000,
+        "fps": 60,
+        "height": 1080,
+        "microphone_enabled": false,
+        "microphone_volume": 100,
+        "platform": "bilibili",
+        "system_volume": 100,
+        "width": 1920
+    },
     "local_music_sort": {
         "last_modified": "",
         "play_order": [
+            "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/audioTemp/宇多田ヒカル - One Last Kiss.flac",
+            "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/audioTemp/塞壬唱片-MSR,Kirara Magic - 赴大荒.flac",
+            "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/audioTemp/塞壬唱片-MSR,Kirara Magic - Effervescence.flac",
+            "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/audioTemp/胡彦斌 - 无间渡.flac",
+            "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/audioTemp/Tommee Profitt,Fleurie - Breathe.flac",
+            "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/audioTemp/SuggestedCopy7 - Chreeio!.flac",
+            "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/audioTemp/Giga,初音ミク,鏡音リン - Beyond the way.flac",
+            "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/audioTemp/Far Out,Krewella - Alibi (Far Out Remix).flac"
         ],
         "sort_type": "birth_time"
     },
-    "netease_auth": {
-        "MUSIC_U": "007B9F1D946083F780E1E96058BFEEA796842EE9670B378E74D3733B74281929A5C3BC93E87DEBE5F78C2BF7D4D7B382E8BA9D706067CA137BEA05F2AAD49CB4E6EF117E4D44944F4B49BD4962B295F67B890CF837C9D03B91A7FB2E17B0E09B6BF2B0322D96499059D67B5FF435DA24DAB96584310591022CD3FB9A61172266798DD54D8887B7193B042678E4DCE81B52D9F75505654C961A66B92780637DB0F73BA19F9EF64011A35934508A4B2869544EE7F53268B509FBBA186F65B45ED3784ECF32620A6BFB23D26F3A51BE854A650A1BFB379BA8D52676BD17C89AC0AE6618AD2E7DE21FFFBA8D09A124E15D5DDE890AB3859869193F877FB40D1E78CB2F93E250DAC5B5EFBE18FB53E275A9FE1E769A61D682C4028F5C310039FD9077B82DFF48F40B05232BD0A20FF37A01F907E527915D2D8164F2A0F08608E44784F96E50086A7DD3758AE6BF9EB57C46A9ECB2B7411DE6635F9856FE14E74A82098D6FD0926C84AA6398D1C7810C6A4AD3896B8080D208CEB6834B18B5241C5A606E6B0C84342D6E1DAFE8C3A26F8B4D9072C92169E964EF1BEFEA6F877F148C9886",
-        "__csrf": "1a672a14d2f867801408b782121b454e",
-        "nickname": "Oran柒"
+    "player": {
+        "roam_filter_liked": true
     },
-    "playerVolume": 10,
+    "playerVolume": 30,
     "recent_files": [
     ],
     "recent_files_max_count": 10,
+    "recording": {
+        "audio_enabled": true,
+        "bearer_token": "",
+        "bitrate_kbps": 20000,
+        "file_prefix": "Oran7",
+        "format": "flv",
+        "fps": 30,
+        "height": 0,
+        "mode": 0,
+        "output_directory": "",
+        "publisher_id": "",
+        "room_id": "",
+        "signaling_password": "",
+        "signaling_url": "",
+        "signaling_user": "",
+        "stun_url": "",
+        "turn_password": "",
+        "turn_url": "",
+        "turn_user": "",
+        "whip_url": "",
+        "width": 0
+    },
+    "schemaVersion": 2,
+    "screen_capture": {
+        "debug_log": false,
+        "draw_mouse": true,
+        "fps": 240,
+        "output_index": 0
+    },
     "user": {
         "auto_login": false,
         "remember_password": true,
         "username": "default"
     },
+    "video": {
+        "history": [
+            {
+                "completed": false,
+                "durationMs": 579883,
+                "lastOpenedAt": "2026-11-13T12:13:26.809Z",
+                "mediaKind": "local",
+                "positionMs": 33684,
+                "target": "C:/Users/funny/QtProject.doc/MediaTestSrc/4K极致_8K__120fps_带来全球最美的_HDR.mp4",
+                "title": "4K极致_8K__120fps_带来全球最美的_HDR.mp4"
+            },
+            {
+                "completed": false,
+                "durationMs": 546750,
+                "lastOpenedAt": "2026-11-13T11:51:26.816Z",
+                "mediaKind": "local",
+                "positionMs": 26339,
+                "target": "C:/Users/funny/QtProject.doc/MediaTestSrc/TIS_4K_fps60-80.mp4",
+                "title": "TIS_4K_fps60-80.mp4"
+            },
+            {
+                "completed": false,
+                "durationMs": 11377,
+                "lastOpenedAt": "2026-11-12T02:32:00.306Z",
+                "mediaKind": "local",
+                "positionMs": 10497,
+                "target": "C:/Users/funny/Videos/Oran7-20261112-103126-tnovjq.flv",
+                "title": "Oran7-20261112-103126-tnovjq.flv"
+            }
+        ]
+    },
     "window": {
-        "height": 564,
+        "height": 725,
         "maximized": false,
         "position": {
-            "x": 504,
-            "y": 397
+            "x": 288,
+            "y": 161
         },
-        "width": 990
+        "width": 1539
     }
 }

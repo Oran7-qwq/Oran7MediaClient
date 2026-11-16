@@ -127,6 +127,9 @@ Oran7AppConfig Oran7AppConfig::fromJson(const QJsonObject& json) {
     result.auth.netease.musicU = value(json, NeteaseMusicU).toVariant().toString();
     result.auth.netease.csrf = value(json, NeteaseCsrf).toVariant().toString();
     result.auth.netease.nickname = value(json, NeteaseNickname).toVariant().toString();
+    result.auth.qqMusic.cookies = value(json, QQMusicCookies).toArray().toVariantList();
+    result.auth.qqMusic.userId = value(json, QQMusicUserId).toString();
+    result.auth.qqMusic.nickname = value(json, QQMusicNickname).toString();
     result.auth.bilibili.sessdata = value(json, BilibiliSessdata).toVariant().toString();
     result.auth.bilibili.dedeUserId = value(json, BilibiliUserId).toVariant().toString();
     result.auth.bilibili.biliJct = value(json, BilibiliJct).toVariant().toString();
@@ -142,11 +145,19 @@ Oran7AppConfig Oran7AppConfig::fromJson(const QJsonObject& json) {
     result.lastMedia.cover = value(json, LastCover).toVariant().toString();
     result.lastMedia.timesize = value(json, LastTimesize).toVariant().toString();
     result.lastMedia.songId = value(json, LastSongId).toVariant().toLongLong();
+    result.lastMedia.provider = value(json, "last_media_provider").toString();
+    result.lastMedia.providerId = value(json, "last_media_providerId").toString();
+    result.lastMedia.mediaMid = value(json, "last_media_mediaMid").toString();
+    result.lastMedia.nativeId = value(json, "last_media_nativeId").toVariant().toLongLong();
     result.lastMedia.isVip = value(json, LastVip).toVariant().toBool();
     result.lastMedia.sourceIsVip = value(json, LastSourceVip).toVariant().toBool();
     result.recentFiles = value(json, RecentFiles).toVariant().toStringList();
     result.videoHistory = value(json, QStringLiteral("video.history")).toArray().toVariantList();
     result.recentFilesMaxCount = value(json, RecentMax).toVariant().toInt();
+    const auto live = json.value("live").toObject();
+    result.live = {live.value("platform").toString(),live.value("server").toString(),live.value("stream_key").toString(),
+        live.value("width").toInt(),live.value("height").toInt(),live.value("fps").toInt(),live.value("bitrate_kbps").toInt(),live.value("audio_enabled").toBool(),live.value("microphone_enabled").toBool(),
+        live.value("system_volume").toInt(),live.value("microphone_volume").toInt()};
     result.recording.mode = value(json, RecordingMode).toVariant().toInt();
     result.recording.format = value(json, RecordingFormat).toString();
     result.recording.width = value(json, RecordingWidth).toVariant().toInt();
@@ -215,6 +226,9 @@ QJsonObject Oran7AppConfig::toJson() const {
     put(result, NeteaseMusicU, QJsonValue::fromVariant(QVariant::fromValue(auth.netease.musicU)));
     put(result, NeteaseCsrf, QJsonValue::fromVariant(QVariant::fromValue(auth.netease.csrf)));
     put(result, NeteaseNickname, QJsonValue::fromVariant(QVariant::fromValue(auth.netease.nickname)));
+    put(result, QQMusicCookies, QJsonArray::fromVariantList(auth.qqMusic.cookies));
+    put(result, QQMusicUserId, auth.qqMusic.userId);
+    put(result, QQMusicNickname, auth.qqMusic.nickname);
     put(result, BilibiliSessdata, QJsonValue::fromVariant(QVariant::fromValue(auth.bilibili.sessdata)));
     put(result, BilibiliUserId, QJsonValue::fromVariant(QVariant::fromValue(auth.bilibili.dedeUserId)));
     put(result, BilibiliJct, QJsonValue::fromVariant(QVariant::fromValue(auth.bilibili.biliJct)));
@@ -230,11 +244,21 @@ QJsonObject Oran7AppConfig::toJson() const {
     put(result, LastCover, QJsonValue::fromVariant(QVariant::fromValue(lastMedia.cover)));
     put(result, LastTimesize, QJsonValue::fromVariant(QVariant::fromValue(lastMedia.timesize)));
     put(result, LastSongId, QJsonValue::fromVariant(QVariant::fromValue(lastMedia.songId)));
+    put(result, "last_media_provider", lastMedia.provider);
+    put(result, "last_media_providerId", lastMedia.providerId);
+    put(result, "last_media_mediaMid", lastMedia.mediaMid);
+    put(result, "last_media_nativeId", QString::number(lastMedia.nativeId));
     put(result, LastVip, QJsonValue::fromVariant(QVariant::fromValue(lastMedia.isVip)));
     put(result, LastSourceVip, QJsonValue::fromVariant(QVariant::fromValue(lastMedia.sourceIsVip)));
     put(result, RecentFiles, QJsonValue::fromVariant(QVariant::fromValue(recentFiles)));
     put(result, QStringLiteral("video.history"), QJsonArray::fromVariantList(videoHistory));
     put(result, RecentMax, QJsonValue::fromVariant(QVariant::fromValue(recentFilesMaxCount)));
+    const auto liveValues = QJsonObject{{"platform",live.platform},{"server",live.server},{"stream_key",live.streamKey},
+        {"width",live.width},{"height",live.height},{"fps",live.fps},{"bitrate_kbps",live.bitrateKbps},{"audio_enabled",live.audioEnabled},{"microphone_enabled",live.microphoneEnabled},
+        {"system_volume",live.systemVolume},{"microphone_volume",live.microphoneVolume}};
+    auto liveObject=result.value("live").toObject();
+    for(auto it=liveValues.begin();it!=liveValues.end();++it)liveObject[it.key()]=it.value();
+    result["live"]=liveObject;
     put(result, RecordingMode, QJsonValue::fromVariant(QVariant::fromValue(recording.mode)));
     put(result, RecordingFormat, recording.format);
     put(result, RecordingWidth, QJsonValue::fromVariant(QVariant::fromValue(recording.width)));

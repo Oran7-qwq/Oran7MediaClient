@@ -10,11 +10,14 @@ struct Oran7GeneralConfig { bool developerMode{}; };
 struct Oran7PlayerConfig { int volume{}; bool roamFilterLiked{}; };
 struct Oran7ScreenCaptureConfig { int outputIndex{}, fps{}; bool drawMouse{}, debugLog{}; };
 struct Oran7NeteaseAuthConfig { QString musicU, csrf, nickname; };
+struct Oran7QQMusicAuthConfig { QVariantList cookies; QString userId, nickname; };
 struct Oran7BilibiliAuthConfig { QString sessdata, dedeUserId, biliJct, userName; };
-struct Oran7AuthConfig { Oran7NeteaseAuthConfig netease; Oran7BilibiliAuthConfig bilibili; };
+struct Oran7AuthConfig { Oran7NeteaseAuthConfig netease; Oran7BilibiliAuthConfig bilibili; Oran7QQMusicAuthConfig qqMusic; };
 struct Oran7LocalLibraryConfig { QVariantList playOrder, integrated; QString sortType, lastModified; };
 struct Oran7LastMediaConfig {
     QString path, title, artist, album, cover, timesize;
+    QString provider, providerId, mediaMid;
+    qint64 nativeId{};
     qint64 songId{};
     bool isVip{}, sourceIsVip{};
 };
@@ -24,6 +27,13 @@ struct Oran7RecordingConfig {
     bool audioEnabled{};
     QString outputDirectory, filePrefix, whipUrl, bearerToken, roomId, publisherId, stunUrl;
     QString turnUrl, turnUser, turnPassword, signalingUrl, signalingUser, signalingPassword;
+};
+struct Oran7LiveConfig {
+    QString platform, server, streamKey;
+    int width{}, height{}, fps{}, bitrateKbps{};
+    bool audioEnabled{};
+    bool microphoneEnabled{};
+    int systemVolume{}, microphoneVolume{};
 };
 struct Oran7AudioConfig {
     int version{2};
@@ -61,6 +71,7 @@ struct Oran7AppConfig {
     Oran7LocalLibraryConfig library;
     Oran7LastMediaConfig lastMedia;
     Oran7RecordingConfig recording;
+    Oran7LiveConfig live;
     Oran7AudioConfig audio;
     QStringList recentFiles;
     QVariantList videoHistory;

@@ -51,6 +51,10 @@ void redaction()
                                  "QMap((\"Cookie\", \"SENTINEL_CREDENTIAL\"))",
                                  "user_name=SENTINEL_CREDENTIAL; other=ok",
                                  "bili_jct=SENTINEL_CREDENTIAL",
+                                 "qm_keyst=SENTINEL_CREDENTIAL",
+                                 "qqmusic_key=SENTINEL_CREDENTIAL",
+                                 "wxskey=SENTINEL_CREDENTIAL",
+                                 "psrf_qqaccess_token=SENTINEL_CREDENTIAL",
                                  "csrfToken: SENTINEL_CREDENTIAL",
                                  "bearerToken=SENTINEL_CREDENTIAL",
                                  "credential=SENTINEL_CREDENTIAL",
@@ -71,6 +75,9 @@ void redaction()
     check(Oran7LogSink::redact("[CaptureDiag] fps=120 status=200 bytes=512 colorToken=blue") ==
               "[CaptureDiag] fps=120 status=200 bytes=512 colorToken=blue",
           "diagnostics preserved");
+    check(!Oran7LogSink::redact("streamKey=LIVE_SENTINEL").contains("LIVE_SENTINEL") &&
+              !Oran7LogSink::redact("stream_key=LIVE_SENTINEL").contains("LIVE_SENTINEL"),
+          "RTMP stream key field variants are redacted");
     check(!Oran7LogSink::redact("eyJhbGciOiJIUzI1NiJ9.c2VjcmV0.c2ln").contains("c2VjcmV0"), "JWT removed");
 }
 

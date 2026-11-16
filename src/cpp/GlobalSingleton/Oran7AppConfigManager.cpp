@@ -1,4 +1,5 @@
 #include "Oran7AppConfigManager.h"
+#include <QRegularExpression>
 #include "Oran7GlobalHelper.h"
 
 #include <utility>
@@ -62,6 +63,7 @@ bool Oran7AppConfigManager::loadConfig()
     // 同一存储只加载一次，避免丢失尚未落盘的音量/窗口/列表修改。
     if (m_loaded) return m_loadSucceeded;
     m_loaded = true;
+    qInfo().noquote() << "[Config] 配置文件路径：" << QFileInfo(m_filePath).absoluteFilePath();
     if (!m_writable) return false;
     QFile file(configFilePath());
     if (!file.exists()) {
@@ -77,8 +79,8 @@ bool Oran7AppConfigManager::loadConfig()
     QJsonParseError error;
     const auto doc = QJsonDocument::fromJson(file.readAll(), &error);
     file.close(); // Windows 下先释放原件读句柄，启动迁移才能原子替换该文件。
-    m_backupNeeded = true;
     if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+        m_backupNeeded = true;
         m_lastError = QStringLiteral("配置文件损坏，使用默认值；保存前保留原件备份");
         m_modified = true;
         WARNING_LOG << m_lastError;
@@ -90,6 +92,8 @@ bool Oran7AppConfigManager::loadConfig()
         WARNING_LOG << m_lastError;
         return false;
     }
+    // 普通会话保存及默认字段补齐不留历史副本；只在旧格式迁移/坏档恢复前保留原件。
+    m_backupNeeded = doc.object().value("schemaVersion") != m_defaultConfig.value("schemaVersion");
     m_config = normalized;
     if (!restoreCredentials(&m_config)) return false;
     m_modified = Oran7CredentialStore::publicConfig(m_config, m_credentialRefs) != doc.object();
@@ -99,6 +103,7 @@ bool Oran7AppConfigManager::loadConfig()
     for (const auto& group : Oran7CredentialStore::groups())
         migration |= !Oran7CredentialStore::extract(doc.object(), group).isEmpty();
     if (migration) {
+        m_backupNeeded = true;
         m_modified = true;
         const bool saved = saveConfig();
         if (!saved) WARNING_LOG << "[Credentials] 迁移未完成，原配置已保留：" << m_lastError;
@@ -533,7 +538,8 @@ QString Oran7AppConfigManager::getLastUsedFile() const
             return "";
         // 网络 URL（网易云播放链接）无本地文件，跳过存在性检查
         if (lastFile.startsWith(QLatin1String("http://"))
-            || lastFile.startsWith(QLatin1String("https://")))
+              || lastFile.startsWith(QLatin1String("https://"))
+              || QRegularExpression(QStringLiteral("^qqmusic://song/[A-Za-z0-9]{1,64}$")).match(lastFile).hasMatch())
             return lastFile;
         // 检查本地文件是否仍然存在
         if (QFile::exists(lastFile))
@@ -558,7 +564,8 @@ void Oran7AppConfigManager::setLastUsedFile(const QString& filePath, bool isVip)
 
     // 网络 URL（网易云播放链接）无本地文件，跳过存在性检查；本地文件才校验存在
     const bool isUrl = filePath.startsWith(QLatin1String("http://"))
-                    || filePath.startsWith(QLatin1String("https://"));
+                      || filePath.startsWith(QLatin1String("https://"))
+                      || QRegularExpression(QStringLiteral("^qqmusic://song/[A-Za-z0-9]{1,64}$")).match(filePath).hasMatch();
     if (!isUrl && !QFile::exists(filePath))
     {
         WARNING_LOG << "Oran7AppConfigManager::setLastUsedFile:File does not exist:" << filePath;

@@ -7,9 +7,10 @@ Oran7TrackLibrary::Oran7TrackLibrary(QObject* parent) : QObject(parent),
     m_integrated(std::make_unique<Oran7TrackListModel>()),
     m_liked(std::make_unique<Oran7TrackListModel>()),
     m_search(std::make_unique<Oran7TrackListModel>()),
-    m_recommendations(std::make_unique<Oran7TrackListModel>())
+    m_recommendations(std::make_unique<Oran7TrackListModel>()),
+    m_qqLiked(std::make_unique<Oran7TrackListModel>()), m_qqSearch(std::make_unique<Oran7TrackListModel>())
 {
-    for (auto* model : {local(), integrated(), liked(), search(), recommendations()}) {
+    for (auto* model : {local(), integrated(), liked(), search(), recommendations(), qqLiked(), qqSearch()}) {
         QQmlEngine::setObjectOwnership(model, QQmlEngine::CppOwnership);
         connect(model, &Oran7TrackListModel::contentsChanged, this, &Oran7TrackLibrary::refreshMembership);
     }
@@ -21,7 +22,7 @@ void Oran7TrackLibrary::refreshMembership()
 {
     const auto likes = liked()->songIds();
     const auto integrations = integrated()->identityKeys();
-    for (auto* model : {local(), integrated(), liked(), search(), recommendations()}) model->updateMembership(likes, integrations);
+    for (auto* model : {local(), integrated(), liked(), search(), recommendations(), qqLiked(), qqSearch()}) model->updateMembership(likes, integrations, qqLiked()->identityKeys());
 }
 void Oran7TrackLibrary::replaceLocalTracks(const QVariantList& tracks) { local()->replaceTracks(tracks); }
 void Oran7TrackLibrary::restoreIntegratedTracks(const QVariantList& tracks)
@@ -43,7 +44,7 @@ void Oran7TrackLibrary::addIntegratedTracks(const QVariantList& tracks)
     for (const auto& value : tracks) {
         auto fields = value.toMap();
         // VIP 临时链接不入库，恢复与播放仍按 songId 重新解析。
-        if (fields.value("isVip").toBool()) {
+        if (fields.value("isVip").toBool() && fields.value("provider").toString() != "qqmusic") {
             fields["url"] = QString(); fields["filepath"] = QString(); fields["path"] = QString();
         }
         normalized.append(fields);

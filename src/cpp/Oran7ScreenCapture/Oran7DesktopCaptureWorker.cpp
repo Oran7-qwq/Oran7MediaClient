@@ -176,6 +176,7 @@ QString Oran7DesktopCaptureWorker::initGraph()
     if (!captureDevice)
         return "capture d3d11 device is null";
     m_converter = std::make_unique<Oran7CaptureFrameConverter>(captureDevice, m_fps);
+    m_outputRouter = std::make_unique<Oran7CaptureOutputRouter>(captureDevice,m_recordingFeed);
 
     // 2) Build filter graph: ddagrab -> buffersink（去掉 fps filter，源头直接设置帧率）
     m_graph.reset(avfilter_graph_alloc());
@@ -339,66 +340,12 @@ void Oran7DesktopCaptureWorker::grabLoop()
                     emit firstFrameReady();
                 }
 
-                // ---- 录制/推流路径 ----
-                const auto recording = m_recordingFeed->snapshot();
-                const auto encoder = recording.encoder;
-                const bool recEnabled = bool(encoder);
-                if (recEnabled)
-                {
-                    auto nowUs = std::chrono::duration_cast<std::chrono::microseconds>(
-                                     std::chrono::steady_clock::now().time_since_epoch())
-                                     .count();
-                    if (!m_lastRecEnabled || m_recordingEpoch != recording.epoch)
-                    {
-                        m_converter->beginRecording();
-                        m_recordingEpoch = recording.epoch;
-                        m_nextRecordUs = nowUs;
-                        m_recStartUs = nowUs;
-                        m_lastPts = AV_NOPTS_VALUE;
-                        m_lastRecEnabled = true;
-                    }
-                    int visW = f->width;
-                    int visH = f->height;
-                    int targetW = recording.targetWidth;
-                    int targetH = recording.targetHeight;
-                    int encW = (targetW > 0) ? targetW : visW;
-                    int encH = (targetH > 0) ? targetH : visH;
-
-                    // 用 av_hwframe_transfer_data 下载 D3D11 帧（正确处理 data[1] 子资源）
-                    // 一趟 BGRA → NV12 到编码器分辨率
-                    Oran7CaptureFrameConverter::Frame encFrame;
-                    if (nowUs + 1000 >= m_nextRecordUs)
-                    {
-                        stage.start();
-                        encFrame = m_converter->recording(f, encW, encH);
-                        conversionNs += stage.nsecsElapsed();
-                        ++conversions;
-                    }
-                    if (encFrame && encoder && encoder->isRuning())
-                    {
-                        int64_t pts = (nowUs - m_recStartUs) * 90'000 / 1'000'000;
-                        if (pts < 0)
-                            pts = 0;
-                        if (m_lastPts != AV_NOPTS_VALUE && pts <= m_lastPts)
-                            pts = m_lastPts + 1;
-                        m_lastPts = pts;
-                        encFrame->pts = pts;
-                        encFrame->duration =
-                            av_rescale_q(1, AVRational{1, qMax(1, recording.fps)}, AVRational{1, 90000});
-                        if (pts == 1)
-                            encFrame->pict_type = AV_PICTURE_TYPE_I;
-
-                        m_nextRecordUs = qMax(m_nextRecordUs + 1000000 / qMax(1, recording.fps), nowUs);
-                        encoder->pushFrame(encFrame.release());
-                        ++submittedFrames;
-                    }
-                }
-                else
-                {
-                    if (m_lastRecEnabled)
-                        m_converter->endRecording();
-                    m_lastRecEnabled = false;
-                }
+                // 原始桌面帧只抓取一次，各输出独立缩放、限帧和提交。
+                const auto routed=m_outputRouter->submit(f,Oran7RecordingFeed::clockUs());
+                submittedFrames+=routed.submitted;conversions+=routed.conversions;conversionNs+=routed.conversionNs;
+                const auto activeOutputs=m_recordingFeed->outputs();
+                uint64_t encoderDrops=0;int packetQueue=0;
+                for(const auto& output:activeOutputs){encoderDrops+=output.encoder->droppedFrameCount();packetQueue+=output.encoder->queuedPktCount();}
                 if (performance.elapsed() >= 3000)
                 {
                     const double seconds = performance.nsecsElapsed() / 1e9;
@@ -408,8 +355,8 @@ void Oran7DesktopCaptureWorker::grabLoop()
                                  << "submitted_fps=" << submittedFrames / seconds
                                  << "preview_avg_ms=" << (rawFrames ? previewNs / (rawFrames * 1e6) : 0.0)
                                  << "conversion_avg_ms=" << (conversions ? conversionNs / (conversions * 1e6) : 0.0)
-                                 << "encoder_dropped_total=" << (encoder ? encoder->droppedFrameCount() : 0)
-                                 << "packet_queue=" << (encoder ? encoder->queuedPktCount() : 0);
+                                 << "encoder_dropped_total=" << encoderDrops
+                                 << "packet_queue=" << packetQueue;
                     }
                     rawFrames = submittedFrames = previewNs = conversionNs = conversions = 0;
                     performance.restart();
@@ -424,13 +371,11 @@ void Oran7DesktopCaptureWorker::cleanup()
 {
     m_recordingFeed->close();
     // 先释放转换器及其设备引用，再释放过滤图和 FFmpeg 设备。
+    m_outputRouter.reset();
     m_converter.reset();
     m_debugLastPts = AV_NOPTS_VALUE;
     m_rawCount = 0;
     m_rawT0 = 0;
-    m_recStartUs = 0;
-    m_lastPts = AV_NOPTS_VALUE;
-    m_lastRecEnabled = false;
     m_graph.reset();
     m_src = nullptr;
     m_sink = nullptr;

@@ -2,6 +2,7 @@
 #include "Oran7RecordingFeed.h"
 #include "Oran7CaptureControl.h"
 #include "Oran7CaptureFrameConverter.h"
+#include "Oran7CaptureOutputRouter.h"
 #include <QObject>
 #include <atomic>
 #include <functional>
@@ -57,9 +58,7 @@ class Oran7DesktopCaptureWorker : public QObject
     std::unique_ptr<AVBufferRef, Oran7BufferDeleter> m_hwdev;
     std::unique_ptr<Oran7CaptureFrameConverter> m_converter;
     std::shared_ptr<Oran7RecordingFeed> m_recordingFeed = std::make_shared<Oran7RecordingFeed>();
-    quint64 m_recordingEpoch = 0;
-    int64_t m_nextRecordUs = 0, m_recStartUs = 0, m_lastPts = AV_NOPTS_VALUE;
-    bool m_lastRecEnabled = false;
+    std::unique_ptr<Oran7CaptureOutputRouter> m_outputRouter;
     int64_t m_debugLastPts = AV_NOPTS_VALUE;
     int m_rawCount = 0;
     qint64 m_rawT0 = 0;

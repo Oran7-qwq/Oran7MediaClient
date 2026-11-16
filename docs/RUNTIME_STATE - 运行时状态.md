@@ -36,6 +36,8 @@ updated: 2026-10-27
 | 主窗背景路由/超时回退 | `Oran7MainWindowBackground` | main.startupPageReady 汇总；不保存运行期回退 | 否 | 视频失败/5 秒超时锁定图片/底色，切源或切模式才重新尝试 |
 | 主窗原生背景样式应用结果 | main.qml 的 backgroundNativeReady/backgroundDwmApplied | 背景组件显式参数 | 否 | 意图来自主题配置，DWM 不再无条件启用 |
 | 凭据已提交引用与加密基线 | Oran7AppConfigManager（Oran7Core） | Oran7AppConfig 为运行期解密值快照；业务不另行持久化 | config.json 的分组 UUID + 独立 DPAPI 文件 | 先验证新密文，再提交普通配置；错误组保留原引用，退出登录提交空代际 |
+| QQ 音乐账号/扫码与验证状态 | Client 独占 `Oran7QQMusicSession`，内含 `Oran7QQMusicWebLogin` | `Client.qqMusic` 只读账号/忙状态；页面显式注入 accountSession，不暴露 Cookie | qqmusic_auth 经独立 qqmusic DPAPI 分组提交 | 官方网页扫码；验证及保存成功才发布登录；普通取消异步回收浏览器，旧请求代际不可恢复账号 |
+| QQ 音乐搜索/喜欢请求、播放地址与歌词 | Client 独占 `Oran7QQMusicService` / 内含 `Oran7QQMusicApi` | `Client.qqMusicService`，列表借用 `Client.tracks.qqLiked/qqSearch`，统一 musicQueue | 最近歌曲/整合仅存 provider/MID/nativeId 与稳定入口；不存临时 CDN URL | 喜欢列表整批发布、模型哈希判重；账号切换取消旧结果；写操作确认成功再更新并读回 |
 | 日志队列、统计与文件分段状态 | Oran7Core 内唯一 `Oran7LogSink` | statistics() 为锁保护值快照；QML 无副本 | AppLocalDataLocation/Logs | 生产者脱敏入队，专用线程独占文件；退出排空，满队列丢新，错误降级 |
 | 播放器打开目标 | `Oran7PlaybackController::m_source` | `Oran7PlaybackState::source` 为 QML 播放状态快照；恢复聚焦可不启动 | last_used_file（音乐） | 已删除 appData.CurMediaFilePath；实际 Native 地址通过 playingSource 返回副本 |
 | 当前音乐信息（入口路径/名/歌手/专辑/封面/标注时长/songId/VIP） | `Oran7PlaybackState::currentTrack`（Oran7Track 值） | BasicConfig.currentMedia* 只读绑定；currentSongId/currentIsVip 读取同一值 | `last_media_*` / last_used_file | 入口一次提交；恢复先更新快照；停止/视频期间保留音乐选择 |
@@ -222,3 +224,31 @@ P2-5：源 JSON + 当前 profile v2 差量 → 唯一 darkMode（手动或系统
 ## P1-3 列表所有权更新（2026-10-24）
 
 四个列表实例由 Client → unique_ptr<Oran7TrackLibrary> → unique_ptr<Oran7TrackListModel> 持有，QML 只读借用。服务的文件快照是后台作业/排序依据；模型是 GUI 列表投影，扫描结果按代际整批替换。本地拖拽直接同步服务顺序；喜欢/整合成员关系只有 C++ 索引一份，角色通知同步其他模型。P1-7 后网络收藏拉取重入/TTL/冷却由 Oran7CloudMusicService 统一，播放归属/队列/漫游由 Oran7PlaybackViewModel 统一；搜索关键词/请求代际保留在搜索页。
+
+RTMP L1 实施：Oran7LiveSession 由采集控制器独占，独立持有异步会话与统计；配置 live 与 recording 分离，不自动开播。
+
+### RTMP 混音控制（2026-11-16）
+
+持久化权威为配置 live 分组的 audio_enabled/microphone_enabled/system_volume/microphone_volume；QML 仅持草稿。预览增益经控制器校验提交到当前 LiveSession 独占的 Oran7LiveAudioControl（原子完整快照），不修改编码会话身份或重建视频。两秒保存仅提交音频字段，成功后快照成为已保存值，失败回退。LiveBackend 音频线程独占两个 WASAPI 输入和 Oran7LiveAudioMixer，归一化的公共 QPC/48k 时间轴写入有界缓冲，固定 10ms 混音送入单个 AAC 编码器；网络线程仅读取编码包。麦克风关闭释放设备，无 QObject 跨线程捕获；停止先退出混音/输入设备，再停止编码与 Publisher。录制仍由原独立会话管理。
+
+### 本地录制音频控制补充（2026-11-16）
+
+底部音频四字段现在是本地录制与 RTMP 的公共工作台设置；保留原 live 组键为权威，recording.audio_enabled 仅兼容同步。新 audioOptions/previewAudioSettings/applyAudioSettings 不依赖直播端点是否有效。GUI 每轮录制分配独立 Oran7LiveAudioControl 并交后台捕获，实时更新只交换该快照，不重启录制。公共 Oran7AudioMixPipeline 独占输入设备和混音线程，两个会话分别持有实例；本地停止排完等待区及 AAC 输入队列后再写文件尾，RTMP 仍直接取消。QML 不复制运行状态，也不再将录制中的音频控件与画质参数一起禁用。
+
+### 工作台音频电平（2026-11-16）
+
+每路电平是混音器实际平滑增益之后、总限幅之前的峰值；共享音频控制对象另持原子峰值邮箱，不复制音频帧。GUI 控制器以独立 50ms 定时器仅读取当前 Recording/Streaming 会话并发布只读 audioLevels，退出活跃状态立即停表清零；无后台 QObject 访问，也不增加业务统计消息频率。录制控制对象在提交任务前创建，started 只处理输出路径/WHIP 信令，不能替换后台已捕获的控制快照。
+
+### 持续音频源（2026-11-16）
+
+工作台可见性只提交 audioMonitoringEnabled 采集意图，运行权威为控制器独占的音频采集任务及其当前/退役 Feed。Oran7AudioCaptureBackend 后台独占公共混音管线与设备，Oran7AudioCaptureFeed 持有短锁保护的订阅和源生命周期。录制/RTMP 使用同一个源控制快照，输出只订阅新帧并将时间轴归零；普通输出启停不重启源。工作台隐藏且输出全部结束时异步释放源；退出才允许 join。电平统一读取持续源邮箱，未开始输出时也可观测，不通过正式输出会话制造录制状态。文件收尾先等源交付停止时刻数据，再排空编码器；源在文件结束后继续监测。
+
+### 本地录制与 RTMP 并行订阅（2026-11-16）
+
+控制器分别持有录制和直播会话，普通文件模式允许二者同时运行；WHIP 保持互斥。Oran7RecordingFeed/Oran7AudioCaptureFeed 各最多两个订阅，用独立编号撤销，输出不能关闭公共源。视频 epoch 表示源生命周期，不表示输出订阅变化。采集线程独占 Oran7CaptureOutputRouter 及每输出转换器，先于源设备释放；每路独立限帧、缩放、时间戳、编码器、封装器和有界队列。音频共享持续采集与增益控制，两个 AAC 编码器分别接收当前 PCM；文件尾段等待只作用于所属订阅。
+
+任一路活跃时持续源保持运行；最后一路停止后仍按工作台可见性决定是否保留监测。停止、失败和重试不替换公共音频控制对象，也不改变另一会话状态。QML 只呈现两个会话的状态：各自运行时锁定自己的输出配置，共享采集配置在任一路运行时锁定。
+
+### 并行输出退出顺序补充（2026-11-16）
+
+shutdown 必须先同时取消文件与 RTMP，再 join 两个输出；不能在此之前 teardownWorker 关闭公共视频 Feed。输出收尾期间保留源，文件领取停止时刻之前的混音尾段、排空编码和写尾后，才关闭音频采集并 join，随后停止视频采集、等待 worker 清理设备。关闭前排队的音频驱动直接丢弃。退出中的会话通知按代际失效，不依赖 GUI 事件循环继续推进。

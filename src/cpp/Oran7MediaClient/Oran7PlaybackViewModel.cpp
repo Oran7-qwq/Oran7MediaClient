@@ -134,7 +134,8 @@ void Oran7PlaybackViewModel::setRoamFilterLiked(bool enabled)
 bool Oran7PlaybackViewModel::owns(Oran7TrackListModel* model) const
 {
     return model && (model == m_tracks.local() || model == m_tracks.integrated()
-        || model == m_tracks.liked() || model == m_tracks.search());
+        || model == m_tracks.liked() || model == m_tracks.search()
+        || model == m_tracks.qqLiked() || model == m_tracks.qqSearch());
 }
 void Oran7PlaybackViewModel::toggleCurrent()
 {
@@ -150,9 +151,7 @@ void Oran7PlaybackViewModel::toggleCurrent()
     if (m_waiting) clearRoam();
     emit musicActivated();
     if (command != m_commandRevision) return;
-    playTrack({{"path",track.path},{"songId",track.songId},{"title",track.title},
-        {"artist",track.artist},{"album",track.album},{"cover",track.cover},
-        {"timesize",track.timesize},{"isVip",track.isVip}}, false);
+    playTrack(track.toVariantMap(), false);
 }
 bool Oran7PlaybackViewModel::activate(Oran7TrackListModel* model, int index)
 {
@@ -175,7 +174,8 @@ bool Oran7PlaybackViewModel::activate(Oran7TrackListModel* model, int index)
     if (recommendationActive()) m_playback.setMode(m_orderMode);
     clearRoam(); m_failures = 0; m_enabled = true;
     m_musicSuppressed = false;
-    m_owner = model == m_tracks.local() || model == m_tracks.integrated() ? "local" : "search";
+    m_owner = model == m_tracks.qqLiked() || model == m_tracks.qqSearch() ? "qqmusic"
+        : model == m_tracks.local() || model == m_tracks.integrated() ? "local" : "search";
     emit ownerChanged();
     if (command != m_commandRevision) return false;
     emit musicActivated();
@@ -260,14 +260,15 @@ void Oran7PlaybackViewModel::adoptCurrent()
     if (!m_enabled && !m_musicSuppressed) {
         // 启动恢复曲目尚未点击列表时，按稳定身份找回归属。
         const auto track = m_playback.currentTrack();
-        for (auto* model : {m_tracks.local(), m_tracks.integrated(), m_tracks.liked(), m_tracks.search()}) {
+        for (auto* model : {m_tracks.local(), m_tracks.integrated(), m_tracks.liked(), m_tracks.search(), m_tracks.qqLiked(), m_tracks.qqSearch()}) {
             for (int row = 0; row < model->count(); ++row) {
                 const auto fields = model->get(row);
                 const bool matches = track.songId > 0 ? fields.value("songId").toLongLong() == track.songId
                     : !track.path.isEmpty() && (fields.value("path").toString() == track.path || fields.value("url").toString() == track.path);
                 if (!matches) continue;
                 m_model = model; m_anchor = row; m_trackId = fields.value("trackId").toString();
-                m_owner = model == m_tracks.local() || model == m_tracks.integrated() ? "local" : "search";
+                m_owner = model == m_tracks.qqLiked() || model == m_tracks.qqSearch() ? "qqmusic"
+        : model == m_tracks.local() || model == m_tracks.integrated() ? "local" : "search";
                 m_enabled = true;
                 const auto command = m_commandRevision;
                 emit ownerChanged();

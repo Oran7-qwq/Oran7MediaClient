@@ -34,6 +34,13 @@ int main(int argc,char** argv) {
     check(Oran7AppConfig::normalize({},defaults,&normalized,&error)&&error.isEmpty(),"unversioned empty document migration");
     check(normalized==defaults,"all defaults come from single default.json");
     check(Oran7AppConfig::fromJson(normalized).toJson()==defaults,"typed roundtrip default schema");
+    {
+        auto c=Oran7AppConfig::fromJson(normalized);
+        check(!c.live.microphoneEnabled && c.live.systemVolume==100 && c.live.microphoneVolume==100,"live audio defaults migrate from default.json");
+        c.live.microphoneEnabled=true;c.live.systemVolume=32;c.live.microphoneVolume=67;
+        const auto restored=Oran7AppConfig::fromJson(c.toJson());
+        check(restored.live.microphoneEnabled && restored.live.systemVolume==32 && restored.live.microphoneVolume==67,"live microphone and gains survive config roundtrip");
+    }
     check(Oran7AppConfig::fromJson(normalized).recording.format=="mp4", "old config restores MP4 default format");
     {
         auto formatConfig=Oran7AppConfig::fromJson(normalized);
@@ -124,6 +131,15 @@ int main(int argc,char** argv) {
         binding.rememberTrack(song);binding.rememberMusicSource(song.path,true);
         auto restored=binding.restoredTrack();
         check(restored&&restored->songId==song.songId&&restored->title==song.title&&restored->isVip,"real typed binding network track restoration");
+        const auto qq = *Oran7Track::fromVariantMap({{"provider","qqmusic"},{"providerId","QQfixture"},
+            {"mediaMid","mediaQQfixture"},{"nativeId","123456789012345"},{"title","QQ song"},{"isVip",true}});
+        binding.rememberTrack(qq); binding.rememberMusicSource(qq.path,true);
+        const auto qqRestored = binding.restoredTrack();
+        check(qqRestored && qqRestored->provider=="qqmusic" && qqRestored->providerId=="QQfixture"
+            && qqRestored->nativeId==123456789012345LL && qqRestored->path==qq.path && qqRestored->isVip,
+            "QQ provider metadata and canonical entry survive persistence without temporary playback URL");
+        check(config.getLastUsedFile()==qq.path,"configuration accepts canonical QQ identity as a persistent music entry");
+        binding.rememberTrack(song); binding.rememberMusicSource(song.path,true);
         auto update=config.snapshot();update.lastMedia.songId=2;config.updateConfig(update);song.album="旧补全";binding.completePersistedDetails(song);
         check(config.snapshot().lastMedia.album=="专辑","stale metadata cannot overwrite current track");
         config.setMaxRecentFiles(2);config.addRecentFile("a");config.addRecentFile("b");config.addRecentFile("c");
@@ -197,7 +213,20 @@ int main(int argc,char** argv) {
         check(config.saveConfig()&&backups(path).size()==1,"first overwrite backs up original");
         check(bytes(directory.filePath(backups(path).first()))==original,"backup exact original bytes");
         check(json(path).value("schemaVersion").toInt()==2&&config.snapshot().auth.netease.musicU=="fixture-secret","migration version and login survive save");
-        saved=config.snapshot();saved.player.volume=93;config.updateConfig(saved);check(config.saveConfig()&&backups(path).size()==1,"one backup per loaded session");
+        saved=config.snapshot();saved.player.volume=93;config.updateConfig(saved);check(config.saveConfig()&&backups(path).size()==1,"ordinary saves do not add migration backups");
+    }
+    {
+        const auto target=directory.filePath("ordinary-save.json");
+        auto current=defaults;
+        current.remove("appearance"); // 当前版本补齐默认字段也不应该触发备份。
+        write(target,QJsonDocument(current).toJson());
+        for(int run=0;run<3;++run) {
+            Oran7AppConfigManager config(target,defaults);
+            check(config.loadConfig() && config.saveConfig() && backups(target).isEmpty(),"current schema defaults merge and startup save need no backup");
+            auto saved=config.snapshot();saved.player.volume=41+run;config.updateConfig(saved);
+            check(config.saveConfig() && json(target).value("playerVolume")==41+run && backups(target).isEmpty(),
+                  "repeated launches and ordinary atomic saves never create backups");
+        }
     }
     {
         const auto corruptPath=directory.filePath("corrupt.json");write(corruptPath,"{broken json");

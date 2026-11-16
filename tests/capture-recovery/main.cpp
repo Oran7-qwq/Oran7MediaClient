@@ -1,6 +1,9 @@
 #include "Oran7ScreenCapture.h"
 #include "Oran7DesktopCaptureWorker.h"
 #include "Oran7RecordingBackend.h"
+#include "Oran7AudioCaptureBackend.h"
+#include <QScopeGuard>
+#include "Live/Oran7LiveBackend.h"
 #include "Oran7AppConfigManager.h"
 #include <QGuiApplication>
 #include <QSignalSpy>
@@ -11,6 +14,53 @@
 #include <QTimer>
 #include <algorithm>
 
+static std::mutex liveAudioProbeMutex;
+static std::shared_ptr<Oran7LiveAudioControl> liveAudioProbe;
+static std::atomic_bool forceLiveFailure{false};
+// 退出审计：后台不依赖 GUI 消息，输出尾段结束前采集源必须存活。
+static std::atomic_bool shutdownAudit{false}, shutdownPreparing{false};
+static std::atomic_bool shutdownRecordEntered{false}, shutdownLiveEntered{false};
+static std::atomic_bool shutdownRecordCancelled{false}, shutdownRecordDone{false}, shutdownLiveDone{false};
+static std::atomic_bool shutdownOrderOk{true};
+QString Oran7LiveBackend::run(const Oran7LiveConfig&,std::shared_ptr<Oran7RecordingFeed>,
+                            const std::atomic_bool& cancelled,const Oran7RecordingCallbacks& cb, std::shared_ptr<Oran7LiveAudioControl> control, std::shared_ptr<Oran7AudioCaptureFeed> audioFeed) {
+    if(audioFeed){const auto error=Oran7AudioCaptureBackend::waitReady(audioFeed,cancelled);if(!error.isEmpty() || cancelled.load())return error;}
+    {std::lock_guard<std::mutex> lock(liveAudioProbeMutex);liveAudioProbe=std::move(control);}
+    shutdownLiveEntered=true;
+    if (!shutdownPreparing.load()) cb.started({});
+    while(!cancelled.load()){if(forceLiveFailure.load())return QStringLiteral("RTMP 发送失败、超时或已取消");QThread::msleep(1);}
+    if (shutdownAudit.load()) {
+        for(int i=0;i<300 && !shutdownRecordCancelled.load();++i) QThread::msleep(1);
+        if(!shutdownRecordCancelled.load()) shutdownOrderOk=false;
+        shutdownLiveDone=true;
+        cb.started({});cb.statistics({{"late",true}}); // 退出后的迟到消息不能复活会话。
+    }
+    return {};
+}
+static std::atomic_int audioCaptureStarts{0}, audioCaptureActive{0}, audioCaptureMax{0};
+static std::atomic_int audioCaptureFailure{0};
+static std::mutex audioSourceProbeMutex;
+static std::shared_ptr<Oran7AudioCaptureFeed> audioSourceProbe;
+void Oran7AudioEncoder::pushFrame(AVFrame* frame) { av_frame_free(&frame); }
+QString Oran7AudioCaptureBackend::run(std::shared_ptr<Oran7AudioCaptureFeed> feed,
+    std::shared_ptr<Oran7LiveAudioControl> control,const std::atomic_bool& cancel,const Oran7RecordingCallbacks& cb)
+{
+    ++audioCaptureStarts;const int count=++audioCaptureActive;audioCaptureMax.store(std::max(count,audioCaptureMax.load()));
+    int error=0;
+    const auto guard=qScopeGuard([&]{
+        if(shutdownAudit.load() && (!shutdownRecordDone.load() || !shutdownLiveDone.load())) shutdownOrderOk=false;
+        QThread::msleep(30);feed->close(error);--audioCaptureActive;
+    });
+    {std::lock_guard<std::mutex> lock(audioSourceProbeMutex);audioSourceProbe=feed;}
+    if(cancel.load())return {};
+    if(audioCaptureFailure.load()) {error=audioCaptureFailure.load();return errorMessage(error);}
+    feed->setOrigin(Oran7WasapiAudioWorker::clockNow100ns());
+    auto* f=av_frame_alloc();f->format=AV_SAMPLE_FMT_S16;f->sample_rate=48000;f->nb_samples=480;f->pts=0;
+    av_channel_layout_default(&f->ch_layout,2);av_frame_get_buffer(f,0);memset(f->data[0],0,1920);feed->submit(f);
+    cb.started({});
+    while(!cancel.load())QThread::msleep(2);
+    return {};
+}
 static std::atomic_int starts{0}, mode{0}, destructorDelay{0}, liveWorkers{0}, maxWorkers{0};
 static std::atomic<Oran7DesktopCaptureWorker*> latest{nullptr};
 static QVariantList outputs{QVariantMap{{"outputIndex", 0}, {"attached", true}, {"deviceName", "DISPLAY-A"}}};
@@ -39,6 +89,7 @@ void Oran7DesktopCaptureWorker::stop()
 }
 void Oran7DesktopCaptureWorker::cleanup()
 {
+    if(shutdownAudit.load() && (!shutdownRecordDone.load() || !shutdownLiveDone.load())) shutdownOrderOk=false;
     m_recordingFeed->close();
 }
 void Oran7DesktopCaptureWorker::start()
@@ -70,12 +121,24 @@ void Oran7DesktopCaptureWorker::start()
     else if (behavior != 5)
         emit firstFrameReady();
 }
-QString Oran7RecordingBackend::run(const Oran7RecordingConfig&, std::shared_ptr<Oran7RecordingFeed>,
-                                   const std::atomic_bool& cancelled, const Oran7RecordingCallbacks& cb)
+static std::mutex recordingAudioProbeMutex;
+static std::shared_ptr<Oran7LiveAudioControl> recordingAudioProbe;
+QString Oran7RecordingBackend::run(const Oran7RecordingConfig&, std::shared_ptr<Oran7RecordingFeed> feed,
+                                   const std::atomic_bool& cancelled, const Oran7RecordingCallbacks& cb, std::shared_ptr<Oran7LiveAudioControl> control, std::shared_ptr<Oran7AudioCaptureFeed> audioFeed)
 {
-    cb.started({});
+    if(audioFeed){const auto error=Oran7AudioCaptureBackend::waitReady(audioFeed,cancelled);if(!error.isEmpty() || cancelled.load())return error;}
+    { std::lock_guard<std::mutex> lock(recordingAudioProbeMutex); recordingAudioProbe=std::move(control); }
+    shutdownRecordEntered=true;
+    if (!shutdownPreparing.load()) cb.started({});
     while (!cancelled.load())
         QThread::msleep(1);
+    if(shutdownAudit.load()) {
+        shutdownRecordCancelled=true;
+        QThread::msleep(60); // 模拟无需 GUI 的混音尾段/文件收尾。
+        if(!feed->snapshot().alive || !audioFeed || !audioFeed->snapshot().alive) shutdownOrderOk=false;
+        shutdownRecordDone=true;
+        cb.started({});cb.stopping();
+    }
     return {};
 }
 QVariantMap Oran7RecordingBackend::settings(const Oran7RecordingConfig&)
@@ -164,10 +227,36 @@ int main(int argc, char** argv)
         until([] { return starts == 4; });
         QTest::qWait(30);
         check(stopped.isEmpty(), "second display change does not latch stopped state");
+        check(capture.applyAudioSettings({{"audioEnabled",true},{"microphoneEnabled",true},{"systemVolume",35},{"microphoneVolume",65}}).value("ok").toBool(),"save audio preset before creating recording generation");
         check(capture.startRecording(), "recording accepts start with recovered worker");
         until([&] { return capture.isRecording(); });
+        {
+            std::lock_guard<std::mutex> lock(recordingAudioProbeMutex);
+            check(recordingAudioProbe && recordingAudioProbe->get().microphoneEnabled && recordingAudioProbe->get().microphoneVolume==65 && recordingAudioProbe->get().systemVolume==35,
+                  "initial recording control loads saved microphone and gain before worker starts");
+        }
+
+        check(capture.previewAudioSettings({{"audioEnabled",false},{"microphoneEnabled",true},{"systemVolume",30},{"microphoneVolume",72}}).value("ok").toBool(),"local recording allows realtime shared audio changes");
+        check(capture.applyAudioSettings({{"audioEnabled",false},{"microphoneEnabled",true},{"systemVolume",30},{"microphoneVolume",72}}).value("ok").toBool() && !config.snapshot().recording.audioEnabled && config.snapshot().live.microphoneVolume==72,
+              "local audio settings persist together with legacy system switch");
+        const auto oldAudio=config.snapshot();config.saveFails=true;
+        check(!capture.applyAudioSettings({{"microphoneVolume",10}}).value("ok").toBool() && config.snapshot().live.microphoneVolume==oldAudio.live.microphoneVolume,"failed local audio save restores snapshot");
+        config.saveFails=false;
+        check(!capture.applyAudioSettings({{"microphoneVolume",101}}).value("ok").toBool() && !capture.applyAudioSettings({{"fps",30}}).value("ok").toBool(),"audio endpoint rejects invalid volume and video fields");
+        check(capture.isRecording(),"audio edits preserve recording state");
+        std::shared_ptr<Oran7LiveAudioControl> activeAudio;
+        {std::lock_guard<std::mutex> lock(recordingAudioProbeMutex);activeAudio=recordingAudioProbe;}
+        check(activeAudio && activeAudio->get().microphoneVolume==72 && activeAudio->get().microphoneEnabled,
+              "recording backend retains the same control snapshot after started callback and gain edits");
+        check(capture.previewAudioSettings({{"audioEnabled",true},{"microphoneEnabled",true},{"systemVolume",40},{"microphoneVolume",60}}).value("ok").toBool(),"both source levels can be previewed in recording");
+        check(activeAudio->get().microphoneVolume==60 && activeAudio->get().systemVolume==40,"hot gain reaches actual recording control");
+        activeAudio->publishLevels({Oran7AudioSourceLevel{.5f,false},Oran7AudioSourceLevel{.95f,true}});
+        until([&]{return capture.audioLevels().value("microphoneFullScale").toBool();});
+        check(capture.audioLevels().value("active").toBool() && capture.audioLevels().value("systemPeak").toDouble()>.49,"recording meters read real control snapshot independently of statistics");
+
         invalidate(latest.load(), "display changed during recording");
         until([&] { return !capture.recordingBusy(); });
+        check(!capture.audioLevels().value("active").toBool() && capture.audioLevels().value("systemPeak").toDouble()==0,"recording end clears peak display");
         until([] { return starts == 5; });
         check(errors.size() == 1 && errors.first().first().toString().contains(QString::fromUtf8("已停止录制")),
               "recording is closed with explanation instead of rebinding its feed");
@@ -279,6 +368,127 @@ int main(int argc, char** argv)
         check(capture.captureSettings().value("outputIndex").toInt() == 2,
               "missing display falls back to attached raw output after topology returns");
         capture.stop();
+    }
+    {
+        mode=0;
+        auto settings=config.snapshot();settings.live={"custom","rtmp://example.test/live","FICTIONAL",1920,1080,60,6000,true};
+        settings.recording.fps=30;config.updateConfig(settings);
+        Oran7ScreenCaptureController capture;capture.setVideoItem(&item);
+        check(capture.start(),"live preview starts");
+        until([&]{return capture.previewStateName()=="Running";});
+        check(capture.startLive(),"independent live session starts from running preview");
+        until([&]{return capture.liveBusy();});
+        check(capture.startRecording() && !capture.restartPreview(),"live permits local recording but blocks destructive preview restart");
+        until([&]{return capture.isRecording();});
+        check(capture.liveBusy(),"starting recording keeps live active");
+        capture.stopRecording();until([&]{return !capture.recordingBusy();});
+        check(capture.liveBusy(),"stopping recording keeps live active");
+        check(!capture.applyLiveSettings({{"fps",30}}).value("ok").toBool(),"live parameters locked while streaming");
+        check(!capture.applyCaptureSettings(2,60,true,false).value("ok").toBool(),"capture parameters locked while streaming");
+        until([&]{return capture.liveSession()->property("state").toString()=="Streaming";});
+        check(capture.previewLiveAudioSettings({{"microphoneEnabled",true},{"microphoneVolume",65},{"systemVolume",25}}).value("ok").toBool(), "audio gains update during live without config writes");
+        {
+            std::lock_guard<std::mutex> lock(liveAudioProbeMutex);
+            check(bool(liveAudioProbe),"live backend holds active audio control");
+            liveAudioProbe->publishLevels({Oran7AudioSourceLevel{.2f,false},Oran7AudioSourceLevel{.9f,true}});
+        }
+        until([&]{return capture.audioLevels().value("microphoneFullScale").toBool();});
+        check(capture.audioLevels().value("active").toBool() && capture.audioLevels().value("microphonePeak").toDouble()>.89,"streaming meter reads live session mailbox");
+        check(capture.applyLiveSettings({{"microphoneEnabled",true},{"microphoneVolume",65},{"systemVolume",25}}).value("ok").toBool() && config.snapshot().live.microphoneEnabled && config.snapshot().live.microphoneVolume==65,
+              "audio-only settings save while streaming");
+        check(!capture.previewLiveAudioSettings({{"microphoneVolume",101}}).value("ok").toBool() && !capture.previewLiveAudioSettings({{"microphoneEnabled",1}}).value("ok").toBool(), "invalid live audio level and bool types rejected");
+        capture.stopLive();until([&]{return !capture.liveBusy();});
+        const auto before=config.snapshot();config.saveFails=true;
+        check(!capture.applyLiveSettings({{"bitrateKbps",4000}}).value("ok").toBool() && config.snapshot().live.bitrateKbps==before.live.bitrateKbps,
+              "failed live save rolls back settings");config.saveFails=false;
+        check(capture.applyLiveSettings({{"fps",30},{"bitrateKbps",4000}}).value("ok").toBool() && config.snapshot().recording.fps==30,
+              "live settings save without rewriting recording options");
+        check(capture.startLive(),"live can retry after ordinary stop");capture.stop();
+        until([&]{return !capture.liveBusy();});
+    }
+    {
+        auto options=config.snapshot();options.recording.mode=0;options.recording.fps=60;options.live.fps=60;
+        options.capture.fps=60;config.updateConfig(options);
+        mode=0;
+        Oran7ScreenCaptureController capture;capture.setVideoItem(&item);
+        check(capture.start(),"video preview for persistent audio source fixture");
+        until([&]{return capture.previewStateName()=="Running";});
+        check(capture.applyAudioSettings({{"audioEnabled",true},{"microphoneEnabled",true},{"systemVolume",40},{"microphoneVolume",60}}).value("ok").toBool(),"set idle monitor source settings");
+        capture.setAudioMonitoringEnabled(true);
+        until([&]{return capture.audioLevels().value("active").toBool();});
+        const int opened=audioCaptureStarts.load();
+        std::shared_ptr<Oran7AudioCaptureFeed> original;
+        {std::lock_guard<std::mutex> lock(audioSourceProbeMutex);original=audioSourceProbe;}
+        check(!capture.recordingBusy() && !capture.liveBusy() && audioCaptureActive.load()==1,"idle monitoring never starts output sessions");
+        check(capture.startRecording(),"recording taps persistent audio source");until([&]{return capture.isRecording();});
+        check(audioCaptureStarts.load()==opened && original->snapshot().alive,"recording does not reopen the audio source");
+        check(capture.startLive(),"RTMP may start while recording is already active");
+        until([&]{return capture.liveSession()->property("state").toString()=="Streaming";});
+        check(capture.isRecording() && audioCaptureStarts.load()==opened,"two output sessions share one audio source");
+        forceLiveFailure=true;until([&]{return !capture.liveBusy();});
+        check(capture.isRecording() && audioCaptureStarts.load()==opened,"RTMP failure does not stop recording or shared capture");
+        forceLiveFailure=false;
+        check(capture.startLive(),"RTMP may retry while recording continues");
+        until([&]{return capture.liveSession()->property("state").toString()=="Streaming";});
+
+        capture.stopLive();until([&]{return !capture.liveBusy();});
+        check(capture.isRecording(),"stopping RTMP keeps local recording active");
+        capture.stopRecording();until([&]{return !capture.recordingBusy();});
+        check(capture.audioLevels().value("active").toBool() && original->snapshot().alive,"idle meters continue after recording stops");
+        check(capture.startLive(),"streaming taps the same persistent audio source");
+        until([&]{return capture.liveSession()->property("state").toString()=="Streaming";});
+        check(audioCaptureStarts.load()==opened,"RTMP start reuses capture devices");
+        capture.setAudioMonitoringEnabled(false);
+        check(original->snapshot().alive,"leaving workspace keeps active output audio source alive");
+        capture.stopLive();until([&]{return !capture.liveBusy() && audioCaptureActive.load()==0;});
+        check(!capture.audioLevels().value("active").toBool(),"hidden idle workspace releases capture and clears meters");
+        capture.setAudioMonitoringEnabled(true);until([&]{return capture.audioLevels().value("active").toBool();});
+        capture.setAudioMonitoringEnabled(false);QCoreApplication::processEvents();
+        check(capture.startRecording(),"output can start while old idle source is retiring");
+        until([&]{return capture.isRecording();});
+        check(audioCaptureMax.load()==1,"rapid source transitions never overlap capture generations");
+        capture.stopRecording();until([&]{return !capture.recordingBusy() && audioCaptureActive.load()==0;});
+        audioCaptureFailure=int(Oran7AudioMixPipeline::Error::Microphone);
+        capture.setAudioMonitoringEnabled(true);
+        until([&]{return !capture.audioLevels().value("error").toString().isEmpty();});
+        const int failedStarts=audioCaptureStarts.load();QTest::qWait(80);
+        check(audioCaptureStarts.load()==failedStarts,"failed detection does not retry in a loop");
+        capture.setAudioMonitoringEnabled(false);audioCaptureFailure=0;
+        capture.setAudioMonitoringEnabled(true);until([&]{return capture.audioLevels().value("active").toBool();});
+        capture.shutdown();check(audioCaptureActive.load()==0,"shutdown releases persistent source");
+    }
+    for(int phase=0;phase<3;++phase) {
+        auto options=config.snapshot();options.recording.mode=0;options.recording.fps=60;
+        options.live.fps=60;options.live.server="rtmp://example.test/live";options.live.streamKey="FICTIONAL";
+        config.updateConfig(options);mode=0;
+        shutdownRecordEntered=false;shutdownLiveEntered=false;shutdownRecordCancelled=false;
+        shutdownRecordDone=false;shutdownLiveDone=false;shutdownOrderOk=true;shutdownPreparing=phase==1;
+        Oran7ScreenCaptureController capture;capture.setVideoItem(&item);capture.start();
+        until([&]{return capture.previewStateName()=="Running";});
+        check(capture.startRecording() && capture.startLive(),"dual shutdown fixture starts both outputs");
+        until([]{return shutdownRecordEntered.load() && shutdownLiveEntered.load();});
+        if(phase==0) until([&]{return capture.isRecording() && capture.liveSession()->property("state")=="Streaming";});
+        shutdownAudit=true;
+        if(phase==2){capture.stopRecording();capture.stopLive();}
+        QElapsedTimer elapsed;elapsed.start();capture.shutdown();
+        check(elapsed.elapsed()<1500 && shutdownOrderOk.load(),"shutdown cancels both before waiting and retains sources through file tail");
+        check(shutdownRecordDone.load() && shutdownLiveDone.load() && audioCaptureActive.load()==0 && liveWorkers.load()==0,
+              "shutdown joins both outputs and releases audio/video workers without GUI event pumping");
+        shutdownAudit=false;shutdownPreparing=false;
+        QSignalSpy changed(&capture,&Oran7ScreenCaptureController::recordingStateChanged);
+        capture.shutdown();QTest::qWait(30);
+        check(changed.isEmpty() && !capture.startLive() && !capture.startRecording(),"repeated shutdown and late callbacks cannot restart outputs");
+    }
+    {
+        Oran7ScreenCaptureController capture;capture.setVideoItem(&item);capture.start();
+        until([&]{return capture.previewStateName()=="Running";});
+        check(capture.startRecording() && capture.startLive(),"immediate quit fixture accepts two output requests");
+        // 不处理排队的音频启动：直接在准备请求提交后关闭。
+        QElapsedTimer elapsed;elapsed.start();capture.shutdown();
+        check(elapsed.elapsed()<1500 && audioCaptureActive.load()==0 && liveWorkers.load()==0,
+              "quit before queued audio startup cancels both readiness waits and releases video");
+        const auto opened=audioCaptureStarts.load();QTest::qWait(30);
+        check(audioCaptureStarts.load()==opened,"queued audio startup cannot run after shutdown");
     }
     asyncChecks(item, config);
     std::printf("PASS: %d controller recovery checks\n", checks);

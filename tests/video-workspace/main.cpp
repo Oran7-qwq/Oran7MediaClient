@@ -329,5 +329,20 @@ QtObject {
     QMetaObject::invokeMethod(renderer, "tryAttachDelayed");
     QTest::qWait(30);
     check(client->property("renderScale").toInt()==1, "reattaching renderer preserves current Fill configuration");
+    check(find(page,"videoRtmpField") && find(page,"videoRtmpPlayButton"),"RTMP address entry exists in live section");
+    const int playsBeforeRtmp=client->property("playCount").toInt();
+    const int recordsBeforeRtmp=history.rowCount();
+    QMetaObject::invokeMethod(page,"playRtmp",Q_ARG(QVariant,QString("https://example.invalid/live")));
+    check(client->property("playCount").toInt()==playsBeforeRtmp,"invalid RTMP address does not start playback");
+    const QString pullUrl="rtmp://127.0.0.1:1935/live/fixture?token=FICTIONAL";
+    QMetaObject::invokeMethod(library,"playRtmpRequested",Q_ARG(QString,pullUrl));
+    check(playback->property("source").toString()==pullUrl && page->property("live").toBool() &&
+        page->property("roomNumber").toString().isEmpty(),"RTMP entry routes directly to player as live without Bilibili room");
+    check(page->property("displayTitle").toString()==QString::fromUtf8("RTMP 直播流") && history.rowCount()==recordsBeforeRtmp,
+        "RTMP key stays out of window title and persisted history");
+    QMetaObject::invokeMethod(page,"retry");
+    check(client->property("playCount").toInt()==playsBeforeRtmp+2 && playback->property("source").toString()==pullUrl,
+        "RTMP retry reopens direct stream instead of requesting empty Bilibili room");
+    check(warnings.isEmpty(),"RTMP entry has no QML warnings");
     std::puts("PASS: video workspace layout and routing");
 }

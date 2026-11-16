@@ -11,6 +11,35 @@ Window {
     property int autoStartCount: 0
     QtObject {
         id: fake
+        property QtObject liveSession: QtObject {
+            property bool busy: false
+            property string state: "Idle"
+            property string error: ""
+            property var statistics: ({})
+        }
+        readonly property bool liveBusy: liveSession.busy
+        property var liveOptions: ({platform:"custom",server:"rtmp://example.test/live",streamKey:"FICTIONAL",width:1920,height:1080,fps:60,bitrateKbps:6000,audioEnabled:true,microphoneEnabled:false,systemVolume:100,microphoneVolume:100})
+        property bool audioMonitoringEnabled: false
+        function setAudioMonitoringEnabled(value) { audioMonitoringEnabled=value }
+        property var audioLevels: ({active:false,systemPeak:0,microphonePeak:0,systemFullScale:false,microphoneFullScale:false})
+        property var previewAudio: ({})
+        readonly property var audioOptions: ({audioEnabled:liveOptions.audioEnabled,microphoneEnabled:liveOptions.microphoneEnabled,systemVolume:liveOptions.systemVolume,microphoneVolume:liveOptions.microphoneVolume})
+        function previewAudioSettings(values) {
+            if(previewBusy) return {ok:false,msg:"设置被拒绝"}
+            previewAudio=Object.assign({},values);return {ok:true}
+        }
+        function previewLiveAudioSettings(values) { return previewAudioSettings(values) }
+        function applyAudioSettings(values) {
+            if(reject || !previewAudioSettings(values).ok) return {ok:false,msg:"设置被拒绝"}
+            liveOptions=Object.assign({},liveOptions,values)
+            options=Object.assign({},options,{audioEnabled:liveOptions.audioEnabled})
+            liveSettingsChanged();recordingSettingsChanged()
+            return {ok:true,msg:"已保存"}
+        }
+        signal liveSettingsChanged()
+        function applyLiveSettings(values) { if (reject || (liveBusy && liveSession.state!=="Streaming")) return {ok:false,msg:"设置被拒绝"}; liveOptions=Object.assign({},liveOptions,values);return {ok:true,msg:"已保存"} }
+        function startLive() { if (liveBusy) return false;liveSession.state="Connecting";liveSession.busy=true;return true }
+        function stopLive() { liveSession.state="Stopping" }
         property bool recordingBusy: false
         property bool previewBusy: false
         property string previewState: "Running"
@@ -54,6 +83,8 @@ Window {
             if (reject || recordingBusy || values.fps > capture.fps) return {ok: false, msg: "设置被拒绝"}
             saves++
             options = Object.assign({}, values)
+            liveOptions=Object.assign({},liveOptions,{audioEnabled:options.audioEnabled})
+            liveSettingsChanged()
             recordingSettingsChanged()
             return {ok: true, msg: "已保存"}
         }
@@ -301,4 +332,16 @@ Window {
         state.reset()
         return 8
     }
+    function runLiveChecks() {
+        var local=JSON.stringify(fake.options)
+        workspace.editLive("bitrateKbps",4000)
+        if(!workspace.saveLive() || fake.liveOptions.bitrateKbps!==4000 || local!==JSON.stringify(fake.options)) throw new Error("live/local settings mixed")
+        fake.reject=true
+        workspace.editLive("bitrateKbps",5000)
+        if(workspace.saveLive() || fake.liveOptions.bitrateKbps!==4000 || !workspace.liveDirty)throw new Error("failed save lost draft")
+        fake.reject=false
+        if(!workspace.saveLive())throw new Error("explicit retry did not save")
+        return 3
+    }
+
 }

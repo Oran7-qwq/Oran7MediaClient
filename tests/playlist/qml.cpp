@@ -527,6 +527,32 @@ Window {
     property int loginRequests: 0
     property string lastQuery: ""
     readonly property var activeAccountPopup: BasicConfig.activeMusicAccountPopup
+    QtObject {
+        id: qqAccountFixture; objectName:"qqAccountFixture"
+        property bool loggedIn: false
+        property bool loginBusy: false
+        property string userName: ""
+        property string statusText: ""
+        property int starts: 0
+        property int cancels: 0
+        property int logouts: 0
+        function startLogin() { starts++; loginBusy=true }
+        function cancelLogin() { cancels++; loginBusy=false }
+        function logout() { logouts++; loggedIn=false }
+    }
+    QtObject {
+        id: qqMusicBackendFixture; objectName:"qqMusicBackendFixture"
+        property bool searchBusy: false
+        property bool likedBusy: false
+        property bool likedLoaded: true
+        property string errorMessage: ""
+        property int searches: 0
+        property int refreshes: 0
+        property int likes: 0
+        function search(keywords) { searches++ }
+        function fetchLiked(force) { refreshes++ }
+        function toggleLike(track) { likes++ }
+    }
     Oran7QQMusicStack {
         objectName:"qqMusicPage"; anchors.fill:parent
         onSearchRequested: function(keywords) { searchRequests++; lastQuery=keywords }
@@ -572,13 +598,28 @@ Window {
         && qqWindow->property("loginRequests").toInt()==0,
         "account button opens official-scan instructions without pretending login is available");
     qqWindow->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/qq-music-login.png");
-    qqPage->setProperty("serviceConnected",true);
+    auto* qqAccountFixture=qqWindow->findChild<QObject*>("qqAccountFixture");
+    check(qqAccountFixture,"independent QQ account fixture exists");
+    qqPage->setProperty("accountSession",QVariant::fromValue(qqAccountFixture));
     QTest::mouseClick(qqWindow,Qt::LeftButton,Qt::NoModifier,qqLoginStart->mapToScene(QPointF(40,20)).toPoint());
-    check(qqWindow->property("loginRequests").toInt()==1,"login click reaches QQ-specific intent");
+    check(qqWindow->property("loginRequests").toInt()==1 && qqAccountFixture->property("starts").toInt()==1
+        && qqPage->property("loginBusy").toBool(),"login click reaches injected QQ backend and reflects busy state");
     QTest::keyClick(qqWindow,Qt::Key_Escape);
     QTest::qWait(180);
     check(!qqPopup->property("visible").toBool()
-        && !qqWindow->property("activeAccountPopup").value<QObject*>(),"QQ login popup closes on Escape and releases its borrowed handle");
+        && !qqWindow->property("activeAccountPopup").value<QObject*>()
+        && qqAccountFixture->property("cancels").toInt()==1 && !qqPage->property("loginBusy").toBool(),
+        "QQ login popup closes on Escape, releases its borrowed handle and cancels backend login");
+    qqAccountFixture->setProperty("userName",QString::fromUtf8("QQ 测试用户"));
+    qqAccountFixture->setProperty("loggedIn",true);
+    check(qqPage->property("loggedIn").toBool()
+        && qqPage->property("userName").toString()==QString::fromUtf8("QQ 测试用户"),
+        "QQ backend account notifications update page state");
+    QMetaObject::invokeMethod(qqPopup,"open"); QTest::qWait(280);
+    QTest::mouseClick(qqWindow,Qt::LeftButton,Qt::NoModifier,qqLoginStart->mapToScene(QPointF(40,20)).toPoint());
+    check(qqAccountFixture->property("logouts").toInt()==1 && !qqPage->property("loggedIn").toBool(),
+        "QQ account logout button reaches its own backend");
+    QMetaObject::invokeMethod(qqPopup,"close"); QTest::qWait(180);
     qqWindow->setWidth(420);
     QTest::qWait(50);
     check(qqSearch->width()>60 && qqAccount->width()>=40
@@ -606,6 +647,20 @@ Window {
     check(navigationWindow->property("qqPageRequests").toInt()==1
         && navigation->property("itemSelected_index").toInt()==6,
         "QQ navigation emits its own page request and moves the selected slider");
+    auto* qqBackendFixture=qqWindow->findChild<QObject*>("qqMusicBackendFixture");
+    qqPage->setProperty("musicService",QVariant::fromValue(qqBackendFixture));
+    qqPage->setProperty("serviceConnected",true);
+    QMetaObject::invokeMethod(qqPage,"submitSearch");
+    QMetaObject::invokeMethod(qqPage,"likedRefreshRequested");
+    check(qqBackendFixture->property("searches").toInt()==1 && qqBackendFixture->property("refreshes").toInt()==1,
+        "QQ page search and refresh intents reach its independent injected business service");
+    library.qqSearch()->replaceTracks({QVariantMap{{"path","qqmusic://song/fixture"},{"title","QQ fixture"},
+        {"provider","qqmusic"},{"providerId","fixture"},{"nativeId","17"}}});
+    QMetaObject::invokeMethod(qqPage,"trackPlayRequested",Q_ARG(QVariant,QVariant::fromValue(library.qqSearch())),Q_ARG(int,0));
+    check(state.currentTrack().provider=="qqmusic" && state.currentTrack().providerId=="fixture" && queue.owner()=="qqmusic",
+        "QQ page playback intent uses the shared music queue with independent provider identity");
+    QMetaObject::invokeMethod(qqPage,"trackLikeRequested",Q_ARG(QVariant,library.qqSearch()->get(0)));
+    check(qqBackendFixture->property("likes").toInt()==1,"QQ page favorite intent reaches QQ service");
     // 页面应先于被借用的模型释放。
     qqPage->setProperty("likedModel",QVariant::fromValue<QObject*>(nullptr));
     qqPage->setProperty("searchModel",QVariant::fromValue<QObject*>(nullptr));

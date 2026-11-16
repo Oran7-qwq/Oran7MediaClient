@@ -27,6 +27,10 @@ Oran7AudioEncoder::~Oran7AudioEncoder()
 bool Oran7AudioEncoder::configure(const EncoderConfig &cfg, ErrorCallback onError)
 {
     _onError = std::move(onError);
+    if (cfg.maxFrameQueue < 1 || cfg.maxFrameQueue > 256 || cfg.maxPacketQueue < 1 || cfg.maxPacketQueue > 256)
+        return false;
+    _fifoClockStarted = false; _inputDrops.store(0); _packetDrops.store(0);
+
 
     _codec = avcodec_find_encoder_by_name(cfg.codecName.c_str());
     if (!_codec)
@@ -103,8 +107,9 @@ void Oran7AudioEncoder::pushFrame(AVFrame *frame)
     if(!frame) return;
     std::lock_guard<std::mutex> lock(_frame_mtx);
     if (!_running.load()) { av_frame_free(&frame); return; }
-    if(_frameQueue.size() >= kMaxFrameQueue)
+    if(_frameQueue.size() >= size_t(_cfg.maxFrameQueue))
     {
+        ++_inputDrops;
         AVFrame *drop = _frameQueue.front();
         _frameQueue.pop();
         av_frame_free(&drop);
@@ -162,7 +167,7 @@ void Oran7AudioEncoder::encodeLoop()
         if (_swr) swr_init(_swr);
     }
 
-    while(_running.load())
+    while(true)
     {
         AVFrame* frame = nullptr;
         {
@@ -170,7 +175,7 @@ void Oran7AudioEncoder::encodeLoop()
             _frameCond.wait(lock,[this](){
                 return !_frameQueue.empty() || !_running.load();
             });
-            if(!_running.load()) break;
+            if(!_running.load() && (!_cfg.drainInputOnStop || _frameQueue.empty())) break;
             if(_frameQueue.empty()) continue;
             frame = _frameQueue.front();
             _frameQueue.pop();
@@ -188,8 +193,10 @@ void Oran7AudioEncoder::processFrame(AVFrame *frame)
     const int16_t* src = (const int16_t*)frame->data[0];
 
     // FIFO 空时，记录这一帧的 PTS 作为下块输出的基准
-    if (_fifoUsed == 0)
+    if (!_fifoClockStarted || (!_cfg.continuousPts && _fifoUsed == 0)) {
         _fifoBasePts = frame->pts;
+        _fifoClockStarted = true;
+    }
 
     // 拼入 FIFO
     _fifoBuf.insert(_fifoBuf.end(), src, src + chunk);
@@ -244,7 +251,8 @@ void Oran7AudioEncoder::processFrame(AVFrame *frame)
             ret = avcodec_receive_packet(_avctx, pkt);
             if (ret == 0) {
                 std::lock_guard<std::mutex> lock(_pkt_mtx);
-                if (_pktQueue.size() >= kMaxPktQueued) {
+                if (_pktQueue.size() >= size_t(_cfg.maxPacketQueue)) {
+                    ++_packetDrops;
                     AVPacket* drop = _pktQueue.front();
                     _pktQueue.pop();
                     av_packet_free(&drop);
@@ -326,8 +334,9 @@ void Oran7AudioEncoder::flushFrames()
         ret = avcodec_receive_packet(_avctx, pkt);
         if (ret == 0) {
             std::lock_guard<std::mutex> lock(_pkt_mtx);
-            if (_pktQueue.size() >= kMaxPktQueued) {
-                AVPacket* drop = _pktQueue.front();
+            if (_pktQueue.size() >= size_t(_cfg.maxPacketQueue)) {
+                ++_packetDrops;
+                    AVPacket* drop = _pktQueue.front();
                 _pktQueue.pop();
                 av_packet_free(&drop);
             }

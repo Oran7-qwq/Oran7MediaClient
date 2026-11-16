@@ -387,7 +387,7 @@ struct Oran7AppConfig {
 - 新建 `src/cpp/Oran7Config/`，提供 Oran7AppConfig 及窗口/主题/播放器/抓屏/凭据/曲库/最近曲目分组与 Oran7ConfigKeys。纯配置实现只进 Oran7Core，EXE/插件共享 Manager，不新增单例。
 - 业务调用改用 snapshot/updateConfig；Manager 的归一化 JSON 是唯一存储。默认值只来自 default.json，递归补键/修复类型与范围，保留未知键、两套凭据、旧歌曲行和排序格式。版本缺失/v1 幂等升级 schemaVersion=2。
 - 首次访问 Manager 即加载，后续 loadConfig 不重复读盘；删除整合列表保存前的 reload，修复待保存音量被旧磁盘值覆盖的问题。
-- QSaveFile 原子保存，首次覆盖已有文件前备份原字节；损坏文件恢复前也必须备份。较新/非法版本或不可读原件禁止覆盖；失败保留脏数据供重试。窗口负坐标可保存，空本地顺序也可持久化。
+- QSaveFile 原子保存，日常保存及当前版本默认字段补齐不备份；仅旧 schema/遗留明文凭据迁移和损坏恢复前备份原字节。较新/非法版本或不可读原件禁止覆盖；失败保留脏数据供重试。窗口负坐标可保存，空本地顺序也可持久化。
 - 运行验收重点：旧配置首次启动、音量/窗口/主题重启恢复、整合列表及排序、登录状态、抓屏设置；不启动主程序代验收。P1-6/7 与 P1-9 均未提前实施。
 
 **验证**：Qt 6.7.3 / MinGW Release 全量及最终增量构建通过，EXE、Oran7Core 和 QML 插件均完成链接。78 项真实配置/迁移/备份/原子保存/ConfigBinding 检查与 47 项门面回归通过；使用临时文件和无窗口 QML 对象，不读写用户配置、不访问网络、不启动主程序。记录见 `build/p1-config-result.md`。

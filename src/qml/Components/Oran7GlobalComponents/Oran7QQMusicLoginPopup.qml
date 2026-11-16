@@ -101,6 +101,7 @@ Popup {
             Label {
                 Layout.fillWidth: true
                 text: root.loggedIn ? root.userName : qsTranslate("Oran7Ui", "官方网页扫码登录")
+                textFormat: Text.PlainText
                 font.family: root.uiFont.family
                 font.pixelSize: 16
                 font.bold: true

@@ -7,6 +7,7 @@
 | 分组 | 加密字段 | 仍保留为普通配置 |
 |---|---|---|
 | netease | 整个 netease_auth（含 MUSIC_U、__csrf、nickname 与未知扩展） | — |
+| qqmusic | 整个 qqmusic_auth（音乐域白名单 Cookie、user_id、nickname；2026-11-12 新增） | — |
 | bilibili | 整个 bilibili_auth（含 sessdata、bili_jct、用户 ID/名称与未知扩展） | — |
 | recording | whip_url、bearer_token、stun_url、turn_url、turn_user、turn_password、signaling_url、signaling_user、signaling_password | 模式、尺寸、帧率、码率、音频开关、输出目录/前缀、room_id/publisher_id 等非认证参数 |
 | legacy | user.password、非占位值的 user.username（若旧配置存在） | auto_login、remember_password 与默认占位用户名 default；旧 TCP 模块继续停用 |
@@ -28,7 +29,7 @@
 下次启动程序时，配置首次加载会识别旧明文，并按下列顺序迁移；本次开发验证不读取或迁移用户真实凭据。
 
 1. 将变化的凭据组写入新的、不可变的密文代际，QSaveFile 原子提交，关闭句柄后实际解密回读并校验。
-2. 按 P1-5 约定，首次覆盖已有 config.json 前保留原字节备份；备份失败则不替换普通配置。
+2. 迁移遗留明文凭据时保留原字节备份；备份失败则不替换普通配置。日常保存与默认字段补齐不生成备份。
 3. 移除普通配置中的凭据，连同新引用通过 QSaveFile 原子提交；成功后才更新内存中的已提交引用与基线。
 
 普通配置是唯一提交点。加密文件写好但步骤 2/3 失败或进程中断，旧配置仍引用旧密文，原登录态可恢复；未引用的新文件只是孤立密文，重启不会自动采用。保存失败保留内存修改，可重试。没有在两个文件之间依赖覆盖顺序的半更新状态。
@@ -56,3 +57,5 @@
 新增 `ctest --preset checks -R credentials`：真实 DPAPI 往返/完整性/分组绑定、旧格式启动迁移、内存快照、未知键保留、无明文落盘、重复迁移、实际 CookiePersistence、退出登录、密文损坏、无明文回退、按组重新登录、不可写目录、Windows 句柄阻止最终提交、提交失败重启恢复、旧实例覆盖保护与未知版本保护。
 
 26/26 项正式离线 CTest 通过（70.18 秒）；credentials 含 101 项断言。Release 构建通过，编译数据库确认存储仅由 Oran7Core 持有一份，系统导入包含 CRYPT32。实际登录、重启恢复和用户设置由用户启动主程序验收。
+
+RTMP L1 实施：新增 live DPAPI 组，保护 live.server 与 live.stream_key，地址与推流码成对原子提交，普通 JSON 不保存非空值。

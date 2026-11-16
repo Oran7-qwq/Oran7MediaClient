@@ -123,8 +123,11 @@ QString Oran7LogSink::redact(QString message)
 
     // 对敏感字段保守地隐藏该行剩余内容，覆盖 JSON、Header、QDebug 容器和普通 key=value。
     static const QRegularExpression fields(QStringLiteral(
-        R"((?im)(?<![\w])(?:["']?)(?:cookie(?:string)?|set-cookie|authorization|proxy-authorization|headers?|password|passwd|pwd|username|user_name|account|credentials?|secret|client_secret|(?:api|auth|access)[_-]?key|key|qrcode_key|unikey|params|body|payload|raw[_-]?response|response[_-]?body|session(?:id|[_-]?token)?|access[_-]?token|refresh[_-]?token|bearer[_-]?token|token|MUSIC_[UA]|__csrf|csrf(?:[_-]?token)?|SESSDATA|bili_jct|DedeUserID|buvid[34]|encSecKey|sign(?:ature)?|wsSecret|w_rid|ice-pwd|ice-ufrag|用户名|密码|口令|凭据)(?:["']?)\s*[:：=,]\s*[^\r\n]*)"));
+        R"((?im)(?<![\w])(?:["']?)(?:cookie(?:string)?|set-cookie|authorization|proxy-authorization|headers?|password|passwd|pwd|username|user_name|account|credentials?|stream[_-]?key|secret|client_secret|(?:api|auth|access)[_-]?key|key|qrcode_key|unikey|params|body|payload|raw[_-]?response|response[_-]?body|session(?:id|[_-]?token)?|access[_-]?token|refresh[_-]?token|bearer[_-]?token|token|MUSIC_[UA]|__csrf|csrf(?:[_-]?token)?|SESSDATA|bili_jct|DedeUserID|buvid[34]|encSecKey|sign(?:ature)?|wsSecret|w_rid|ice-pwd|ice-ufrag|用户名|密码|口令|凭据)(?:["']?)\s*[:：=,]\s*[^\r\n]*)"));
     message.replace(fields, QStringLiteral("[敏感字段已脱敏]"));
+    static const QRegularExpression qqFields(QStringLiteral(
+        R"((?im)(?<![\w])["']?(?:qm_keyst|qqmusic_key|music_key|wxskey|skey|p_skey|psrf_qqaccess_token|psrf_qqrefresh_token|wxrefresh_token)["']?\s*[:：=,]\s*[^\r\n]*)"));
+    message.replace(qqFields, QStringLiteral("[敏感字段已脱敏]"));
     static const QRegularExpression authorization(QStringLiteral(R"((?i)\b(?:Bearer|Basic)\s+[^\s"',;]+)"));
     message.replace(authorization, QStringLiteral("[认证信息已脱敏]"));
     static const QRegularExpression sdp(QStringLiteral(R"((?is)(?:\bv=0\r?\n|a=ice-(?:pwd|ufrag):).*)"));

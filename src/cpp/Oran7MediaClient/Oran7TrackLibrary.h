@@ -10,6 +10,8 @@ class Oran7TrackLibrary : public QObject
     Q_PROPERTY(Oran7TrackListModel* integrated READ integrated CONSTANT)
     Q_PROPERTY(Oran7TrackListModel* liked READ liked CONSTANT)
     Q_PROPERTY(Oran7TrackListModel* search READ search CONSTANT)
+    Q_PROPERTY(Oran7TrackListModel* qqLiked READ qqLiked CONSTANT)
+    Q_PROPERTY(Oran7TrackListModel* qqSearch READ qqSearch CONSTANT)
     Q_PROPERTY(Oran7TrackListModel* recommendations READ recommendations CONSTANT)
 public:
     explicit Oran7TrackLibrary(QObject* parent = nullptr);
@@ -18,6 +20,8 @@ public:
     Oran7TrackListModel* liked() const { return m_liked.get(); }
     Oran7TrackListModel* search() const { return m_search.get(); }
     Oran7TrackListModel* recommendations() const { return m_recommendations.get(); }
+    Oran7TrackListModel* qqLiked() const { return m_qqLiked.get(); }
+    Oran7TrackListModel* qqSearch() const { return m_qqSearch.get(); }
     void replaceRecommendations(const QVariantList& tracks);
     void replaceLocalTracks(const QVariantList& tracks);
     void restoreIntegratedTracks(const QVariantList& tracks);
@@ -42,5 +46,6 @@ private:
     std::unique_ptr<Oran7TrackListModel> m_liked;
     std::unique_ptr<Oran7TrackListModel> m_search;
     std::unique_ptr<Oran7TrackListModel> m_recommendations;
+    std::unique_ptr<Oran7TrackListModel> m_qqLiked, m_qqSearch;
     bool m_restoring = false;
 };

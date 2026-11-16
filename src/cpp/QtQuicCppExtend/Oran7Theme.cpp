@@ -71,6 +71,10 @@ void putToken(QJsonObject& object, const QString& token, const QVariant& value)
         vars[token] = QJsonValue::fromVariant(value);
         init["__vars__"] = vars;
         object["__init__"] = init;
+        // 旧全量主题可能在样式区留下同名值；它会覆盖新变量并阻止生成色板。
+        auto style = object.value("__style__").toObject();
+        style.remove(token);
+        object["__style__"] = style;
     }
     else
     {
@@ -354,6 +358,9 @@ void Oran7Theme::saveComponentToken(const QString& component, const QString& tok
         vars[token] = QJsonValue::fromVariant(value);
         init["__vars__"] = vars;
         object["__init__"] = init;
+        auto style = object.value("__style__").toObject();
+        style.remove(token);
+        object["__style__"] = style;
     }
     else
         putToken(object, token, value);

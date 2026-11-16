@@ -3,7 +3,10 @@
 #include "D3d11DeviceProvider.h"
 #include "Oran7AppConfigManager.h"
 #include "Oran7RecordingBackend.h"
+#include "Oran7AudioCaptureBackend.h"
 #include <QMetaEnum>
+#include <QQmlEngine>
+#include <cmath>
 #include <QHash>
 
 #include <dxgi.h>
@@ -21,9 +24,22 @@ QString ffErrStr(int err)
 
 // ================= Controller (lives in main/GUI thread) =================
 Oran7ScreenCaptureController::Oran7ScreenCaptureController(QObject* parent)
-    : QObject(parent), m_recording(std::make_unique<Oran7RecordingSession>())
+    : QObject(parent), m_live(std::make_unique<Oran7LiveSession>()), m_recording(std::make_unique<Oran7RecordingSession>())
 {
     av_log_set_level(AV_LOG_INFO);
+    const auto audio = Oran7AppConfigManager::ins().snapshot().live;
+    m_audioCaptureControl->set({audio.audioEnabled,audio.microphoneEnabled,audio.systemVolume,audio.microphoneVolume});
+    connect(m_audioCapture.get(),&Oran7RecordingSession::changed,this,[this] {
+        if (m_audioCapture->state()==Oran7RecordingSession::Oran7RecordingState::Error && m_runningAudioCaptureFeed==m_audioCaptureFeed)
+            m_audioCaptureFailed=true;
+        updateAudioMeterPolling();scheduleAudioCapture();
+    });
+    connect(this,&Oran7ScreenCaptureController::recordingStateChanged,this,&Oran7ScreenCaptureController::scheduleAudioCapture);
+    connect(this,&Oran7ScreenCaptureController::liveChanged,this,&Oran7ScreenCaptureController::scheduleAudioCapture);
+    m_audioMeterTimer.setInterval(50);
+    connect(&m_audioMeterTimer,&QTimer::timeout,this,&Oran7ScreenCaptureController::pollAudioLevels);
+    connect(this,&Oran7ScreenCaptureController::recordingStateChanged,this,&Oran7ScreenCaptureController::updateAudioMeterPolling);
+    connect(this,&Oran7ScreenCaptureController::liveChanged,this,&Oran7ScreenCaptureController::updateAudioMeterPolling);
     m_recoveryTimer.setSingleShot(true);
     m_recoveryTimer.setInterval(300);
     m_recoveryTimer.setParent(this);
@@ -52,6 +68,10 @@ Oran7ScreenCaptureController::Oran7ScreenCaptureController(QObject* parent)
                 else
                     recoverCapture(reason);
             });
+    QQmlEngine::setObjectOwnership(m_live.get(), QQmlEngine::CppOwnership);
+    connect(m_live.get(), &Oran7LiveSession::changed, this, [this] {
+        emit liveChanged(); if(!liveBusy()) schedulePreview();
+    });
     connect(m_recording.get(), &Oran7RecordingSession::changed, this,
             [this]
             {
@@ -149,7 +169,7 @@ bool Oran7ScreenCaptureController::start()
 }
 bool Oran7ScreenCaptureController::restartPreview()
 {
-    if (m_shuttingDown || !m_item || recordingBusy())
+    if (m_shuttingDown || !m_item || recordingBusy() || liveBusy())
         return false;
     m_previewRequested = true;
     m_previewError.clear();
@@ -172,6 +192,7 @@ void Oran7ScreenCaptureController::stop()
     m_retryDelay = false;
     m_recoveryAttempts = 0;
     stopRecording();
+    stopLive();
     teardownWorker();
     cancelPending(QStringLiteral("预览已停止，参数应用已取消"));
     schedulePreview();
@@ -181,13 +202,22 @@ void Oran7ScreenCaptureController::shutdown()
     if (m_shuttingDown)
         return;
     m_shuttingDown = true;
+    updateAudioMeterPolling();
     m_reapTimer.stop();
     m_previewRequested = false;
     m_recoveryTimer.stop();
     m_startTimer.stop();
-    teardownWorker();
     cancelPending(QStringLiteral("录屏服务已关闭"));
+    // 必须先取消两路，再等待任何一路。网络收尾不能延迟文件的停止时刻。
+    // 输出完成前保留源：文件仍需领取混音等待区中的尾段并写完容器。
+    m_recording->stop();
+    m_live->stop();
+    m_live->shutdown();
     m_recording->shutdown();
+    if (m_signaling)
+        m_signaling->stop();
+    m_audioCapture->shutdown();
+    teardownWorker();
     // 唯一允许等待的入口：退出时必须保证设备/渲染依赖覆盖所有 worker。
     if (m_thread)
     {
@@ -444,7 +474,7 @@ QVariantMap Oran7ScreenCaptureController::applyCaptureSettings(int outputIndex, 
     };
     if (m_shuttingDown)
         return rejected(QStringLiteral("录屏服务已关闭"));
-    if (recordingBusy())
+    if (recordingBusy() || liveBusy())
         return rejected(QStringLiteral("录制中不可修改抓屏参数，请先停止录制"));
     auto& config = Oran7AppConfigManager::ins();
     if (!config.isWritable())
@@ -548,6 +578,11 @@ void Oran7ScreenCaptureController::recoverCapture(const QString& reason)
         stopRecording();
         emit errorOccurred(QStringLiteral("显示模式变化，已停止录制并保存已有内容，正在恢复预览"));
     }
+    if (liveBusy())
+    {
+        stopLive();
+        emit errorOccurred(QStringLiteral("采集画面发生变化，直播已停止，请重新开始推流"));
+    }
     teardownWorker();
     if (++m_recoveryAttempts > 8)
     {
@@ -586,7 +621,9 @@ bool Oran7ScreenCaptureController::startRecording()
 {
     if (m_shuttingDown || recordingBusy() || m_pendingCapture || previewBusy())
         return false;
-    const auto options = Oran7AppConfigManager::ins().snapshot().recording;
+    const auto snapshot = Oran7AppConfigManager::ins().snapshot();
+    auto options = snapshot.recording;
+    if (liveBusy() && options.mode!=0) return false;
     if (options.fps > m_capSettings.fps)
     {
         emit errorOccurred(QStringLiteral("录制帧率不能超过采集帧率，请先应用更高的采集帧率或降低录制帧率"));
@@ -594,11 +631,17 @@ bool Oran7ScreenCaptureController::startRecording()
     }
     if (m_previewState != Oran7PreviewState::Running || !m_feed)
         return false;
+    if (options.mode == 0) {
+        options.audioEnabled = snapshot.live.audioEnabled;
+        m_recordingAudioControl = m_audioCaptureControl;
+
+    }
+    const auto audioSource = options.mode==0 ? prepareAudioCapture() : nullptr;
     const auto feed = m_feed;
     m_recordingOutputPath.clear();
     return m_recording->start(
-        [options, feed](const std::atomic_bool& cancelled, const Oran7RecordingCallbacks& callbacks)
-        { return Oran7RecordingBackend::run(options, feed, cancelled, callbacks); });
+        [options, feed, audioControl = m_recordingAudioControl, audioSource](const std::atomic_bool& cancelled, const Oran7RecordingCallbacks& callbacks)
+        { return Oran7RecordingBackend::run(options, feed, cancelled, callbacks, audioControl, audioSource); });
 }
 void Oran7ScreenCaptureController::stopRecording()
 {
@@ -629,14 +672,19 @@ QVariantMap Oran7ScreenCaptureController::applyRecordingSettings(const QVariantM
     const auto error = Oran7RecordingBackend::apply(values, &saved.recording);
     if (!error.isEmpty())
         return {{"ok", false}, {"msg", error}};
+    if (liveBusy() && saved.recording.mode!=0) return {{"ok",false},{"msg",QStringLiteral("预览切换或录制忙碌期间不可修改参数")}};
     if (saved.recording.fps > m_capSettings.fps)
         return {{"ok", false}, {"msg", QStringLiteral("录制帧率不能超过已应用的采集帧率，请先提高并应用采集帧率")}};
+    if (values.contains("audioEnabled")) saved.live.audioEnabled = saved.recording.audioEnabled;
     config.updateConfig(saved);
     if (!config.saveConfig())
     {
         const auto failure = config.lastError();
         config.updateConfig(previous);
         return {{"ok", false}, {"msg", failure}};
+    }
+    if (saved.live.audioEnabled!=previous.live.audioEnabled) {
+        setRuntimeAudio(saved.live);emit liveSettingsChanged();
     }
     emit recordingSettingsChanged();
     return {{"ok", true}, {"msg", QStringLiteral("录制参数已保存")}};
@@ -676,7 +724,7 @@ void Oran7ScreenCaptureController::drivePreview()
             emit stopped();
         return;
     }
-    if (recordingBusy())
+    if (recordingBusy() || liveBusy())
     {
         setPreviewState(Oran7PreviewState::Stopping);
         return;
@@ -818,4 +866,253 @@ void Oran7ScreenCaptureController::confirmPreview(quint64 generation)
         finishRequest(request->id, true, QStringLiteral("抓屏参数已应用"));
     if (generation == m_workerGen)
         emit started();
+}
+
+QVariantMap Oran7ScreenCaptureController::liveSettings() const
+{
+    const auto c = Oran7AppConfigManager::ins().snapshot().live;
+    return {{"platform", c.platform},       {"server", c.server},
+            {"streamKey", c.streamKey},     {"width", c.width},
+            {"height", c.height},           {"fps", c.fps},
+            {"bitrateKbps", c.bitrateKbps}, {"audioEnabled", c.audioEnabled},
+            {"microphoneEnabled",c.microphoneEnabled}, {"systemVolume",c.systemVolume}, {"microphoneVolume",c.microphoneVolume}};
+}
+namespace {
+QString oran7ParseWorkspaceAudio(const QVariantMap& values, Oran7LiveConfig& c)
+{
+    for (auto it = values.begin(); it != values.end(); ++it) {
+        if (it.key() == "audioEnabled" || it.key() == "microphoneEnabled") {
+            if (it.value().metaType().id() != QMetaType::Bool)
+                return QStringLiteral("音频参数类型错误");
+            if (it.key() == "audioEnabled") c.audioEnabled = it.value().toBool();
+            else c.microphoneEnabled = it.value().toBool();
+        } else if (it.key() == "systemVolume" || it.key() == "microphoneVolume") {
+            const auto type = it.value().metaType().id();
+            const double x = it.value().toDouble();
+            if ((type != QMetaType::Int && type != QMetaType::Double && type != QMetaType::LongLong) ||
+                !std::isfinite(x) || x < 0 || x > 100 || std::floor(x) != x)
+                return QStringLiteral("音量范围为 0～100%");
+            if (it.key() == "systemVolume") c.systemVolume = int(x);
+            else c.microphoneVolume = int(x);
+        } else return QStringLiteral("未知音频设置");
+    }
+    return {};
+}
+}
+bool Oran7ScreenCaptureController::audioSettingsLocked() const
+{
+    return m_shuttingDown || previewBusy() || (recordingBusy() && int(recordMode())!=0);
+}
+void Oran7ScreenCaptureController::setRuntimeAudio(const Oran7LiveConfig& c)
+{
+    const auto old = m_audioCaptureControl->get();
+    m_audioCaptureControl->set({c.audioEnabled,c.microphoneEnabled,c.systemVolume,c.microphoneVolume});
+    m_live->setAudioSettings(c);
+    m_recordingAudioControl->set({c.audioEnabled,c.microphoneEnabled,c.systemVolume,c.microphoneVolume});
+    if (old.systemEnabled!=c.audioEnabled || old.microphoneEnabled!=c.microphoneEnabled) m_audioCaptureFailed=false;
+    scheduleAudioCapture();
+}
+bool Oran7ScreenCaptureController::audioCaptureWanted() const
+{
+    const auto settings=m_audioCaptureControl->get();
+    return !m_shuttingDown && !(recordingBusy() && int(recordMode())!=0) &&
+        ((m_audioMonitoringRequested && (settings.systemEnabled || settings.microphoneEnabled)) || recordingBusy() || liveBusy());
+}
+void Oran7ScreenCaptureController::setAudioMonitoringEnabled(bool enabled)
+{
+    if (m_shuttingDown || m_audioMonitoringRequested==enabled) return;
+    m_audioMonitoringRequested=enabled;
+    if (enabled) m_audioCaptureFailed=false;
+    emit audioMonitoringChanged();updateAudioMeterPolling();scheduleAudioCapture();
+}
+void Oran7ScreenCaptureController::scheduleAudioCapture()
+{
+    if (m_shuttingDown || m_audioCaptureScheduled) return;
+    m_audioCaptureScheduled=true;
+    QTimer::singleShot(0,this,[this]{m_audioCaptureScheduled=false;driveAudioCapture();});
+}
+std::shared_ptr<Oran7AudioCaptureFeed> Oran7ScreenCaptureController::prepareAudioCapture()
+{
+    m_audioCaptureFailed=false;
+    if (!m_audioCaptureFeed || !m_audioCaptureFeed->snapshot().alive ||
+        (m_audioCapture->state()==Oran7RecordingSession::Oran7RecordingState::Stopping && m_audioCaptureFeed==m_runningAudioCaptureFeed))
+        m_audioCaptureFeed=std::make_shared<Oran7AudioCaptureFeed>();
+    scheduleAudioCapture();
+    return m_audioCaptureFeed;
+}
+void Oran7ScreenCaptureController::driveAudioCapture()
+{
+    if (m_shuttingDown) return; // 退出前排队的驱动消息不能再操作已 join 的音频会话。
+    if (!audioCaptureWanted()) {
+        m_audioCapture->stop();updateAudioMeterPolling();return;
+    }
+    if (m_audioCapture->busy() || m_audioCaptureFailed) return;
+    if (!m_audioCaptureFeed || !m_audioCaptureFeed->snapshot().alive)
+        m_audioCaptureFeed=std::make_shared<Oran7AudioCaptureFeed>();
+    m_runningAudioCaptureFeed=m_audioCaptureFeed;
+    m_audioCaptureControl->takeLevels();
+    const auto feed=m_audioCaptureFeed;
+    const auto control=m_audioCaptureControl;
+    m_audioCapture->start([feed,control](const std::atomic_bool& cancel,const Oran7RecordingCallbacks& callbacks) {
+        return Oran7AudioCaptureBackend::run(feed,control,cancel,callbacks);
+    });
+}
+void Oran7ScreenCaptureController::updateAudioMeterPolling()
+{
+    const auto state=m_audioCaptureFeed ? m_audioCaptureFeed->snapshot() : Oran7AudioCaptureFeed::Snapshot{false,false,0};
+    const bool active=audioCaptureWanted() && state.alive && state.ready &&
+        m_audioCapture->state()!=Oran7RecordingSession::Oran7RecordingState::Stopping;
+    if (active) {
+        if (!m_audioMeterTimer.isActive()) {m_audioMeterTimer.start();pollAudioLevels();}
+    } else {
+        m_audioMeterTimer.stop();
+        const auto error= !audioCaptureWanted() ? QString() : state.error ? Oran7AudioCaptureBackend::errorMessage(state.error)
+            : m_audioCaptureFailed ? m_audioCapture->error() : QString();
+        const QVariantMap cleared{{"active",false},{"systemPeak",0.0},{"microphonePeak",0.0},
+            {"systemFullScale",false},{"microphoneFullScale",false},{"error",error}};
+        if (m_audioLevels!=cleared) {m_audioLevels=cleared;emit audioLevelsChanged();}
+    }
+}
+void Oran7ScreenCaptureController::pollAudioLevels()
+{
+    if (!audioCaptureWanted() || !m_audioCaptureFeed || !m_audioCaptureFeed->snapshot().alive) {updateAudioMeterPolling();return;}
+    const auto levels=m_audioCaptureControl->takeLevels();
+    const QVariantMap next{{"active",true},{"systemPeak",double(levels[0].peak)},{"microphonePeak",double(levels[1].peak)},
+        {"systemFullScale",levels[0].fullScale},{"microphoneFullScale",levels[1].fullScale},{"error",QString()}};
+    if (m_audioLevels!=next) {m_audioLevels=next;emit audioLevelsChanged();}
+}
+QVariantMap Oran7ScreenCaptureController::audioSettings() const
+{
+    const auto c = Oran7AppConfigManager::ins().snapshot().live;
+    return {{"audioEnabled",c.audioEnabled},{"microphoneEnabled",c.microphoneEnabled},
+            {"systemVolume",c.systemVolume},{"microphoneVolume",c.microphoneVolume}};
+}
+QVariantMap Oran7ScreenCaptureController::previewAudioSettings(const QVariantMap& values)
+{
+    if (audioSettingsLocked())
+        return {{"ok",false},{"msg",QStringLiteral("预览切换或录制忙碌期间不可修改参数")}};
+    auto c = Oran7AppConfigManager::ins().snapshot().live;
+    const auto error = oran7ParseWorkspaceAudio(values,c);
+    if (!error.isEmpty()) return {{"ok",false},{"msg",error}};
+    setRuntimeAudio(c);
+    return {{"ok",true}};
+}
+QVariantMap Oran7ScreenCaptureController::applyAudioSettings(const QVariantMap& values)
+{
+    if (audioSettingsLocked())
+        return {{"ok",false},{"msg",QStringLiteral("预览切换或录制忙碌期间不可修改参数")}};
+    auto& manager = Oran7AppConfigManager::ins();
+    if (!manager.isWritable()) return {{"ok",false},{"msg",manager.lastError()}};
+    const auto previous = manager.snapshot();
+    auto next = previous;
+    const auto error = oran7ParseWorkspaceAudio(values,next.live);
+    if (!error.isEmpty()) return {{"ok",false},{"msg",error}};
+    // 历史音频键留在 live 组，工作台两种输出共用；兼容原录制系统声开关。
+    next.recording.audioEnabled = next.live.audioEnabled;
+    manager.updateConfig(next);
+    if (!manager.saveConfig()) {
+        const auto failure = manager.lastError(); manager.updateConfig(previous); setRuntimeAudio(previous.live);
+        return {{"ok",false},{"msg",failure}};
+    }
+    setRuntimeAudio(next.live);
+    emit liveSettingsChanged();
+    emit recordingSettingsChanged();
+    return {{"ok",true},{"msg",QStringLiteral("音频设置已保存")}};
+}
+QVariantMap Oran7ScreenCaptureController::applyLiveSettings(const QVariantMap& v)
+{
+    if (m_shuttingDown || (recordingBusy() && int(recordMode())!=0) || previewBusy() || (liveBusy() && m_live->state() != "Streaming"))
+        return {{"ok", false}, {"msg", QStringLiteral("请先停止录制或推流，再修改直播参数")}};
+    auto& manager = Oran7AppConfigManager::ins();
+    if (!manager.isWritable())
+        return {{"ok", false}, {"msg", manager.lastError()}};
+    const auto previous = manager.snapshot();
+    auto next = previous;
+    auto& c = next.live;
+    for (auto it = v.begin(); it != v.end(); ++it)
+    {
+        if (it.key() == "width" || it.key() == "height" || it.key() == "fps" || it.key() == "bitrateKbps" ||
+            it.key() == "systemVolume" || it.key() == "microphoneVolume")
+        {
+            const auto type = it.value().metaType().id();
+            const auto x = it.value().toDouble();
+            if ((type != QMetaType::Int && type != QMetaType::Double && type != QMetaType::LongLong) ||
+                !std::isfinite(x) || x < 0 || x > 50000 || std::floor(x) != x)
+                return {{"ok", false}, {"msg", QStringLiteral("请输入有效的直播整数参数")}};
+            if (it.key() == "width")
+                c.width = int(x);
+            else if (it.key() == "height")
+                c.height = int(x);
+            else if (it.key() == "fps")
+                c.fps = int(x);
+            else if (it.key() == "bitrateKbps")
+                c.bitrateKbps = int(x);
+            else if (it.key() == "systemVolume")
+                c.systemVolume = int(x);
+            else
+                c.microphoneVolume = int(x);
+        }
+        else if (it.key() == "audioEnabled" || it.key() == "microphoneEnabled")
+        {
+            if (it.value().metaType().id() != QMetaType::Bool)
+                return {{"ok", false}, {"msg", QStringLiteral("直播音频参数类型错误")}};
+            if (it.key() == "audioEnabled") c.audioEnabled = it.value().toBool();
+            else c.microphoneEnabled = it.value().toBool();
+        }
+        else if (it.key() == "platform" || it.key() == "server" || it.key() == "streamKey")
+        {
+            if (it.value().metaType().id() != QMetaType::QString)
+                return {{"ok", false}, {"msg", QStringLiteral("直播地址参数类型错误")}};
+            if (it.key() == "platform")
+                c.platform = it.value().toString();
+            else if (it.key() == "server")
+                c.server = it.value().toString().trimmed();
+            else
+                c.streamKey = it.value().toString().trimmed();
+        }
+        else
+            return {{"ok", false}, {"msg", QStringLiteral("未知直播设置")}};
+    }
+    const auto error = Oran7LiveSession::validate(c, false);
+    if (!error.isEmpty())
+        return {{"ok", false}, {"msg", error}};
+    const auto& old = previous.live;
+    if (liveBusy() && (c.platform != old.platform || c.server != old.server || c.streamKey != old.streamKey ||
+        c.width != old.width || c.height != old.height || c.fps != old.fps || c.bitrateKbps != old.bitrateKbps))
+        return {{"ok",false},{"msg",QStringLiteral("请先停止录制或推流，再修改直播参数")}};
+    manager.updateConfig(next);
+    if (!manager.saveConfig())
+    {
+        const auto error = manager.lastError();
+        manager.updateConfig(previous);
+        setRuntimeAudio(previous.live);
+        return {{"ok", false}, {"msg", error}};
+    }
+    setRuntimeAudio(c);
+    emit liveSettingsChanged();
+    return {{"ok", true}, {"msg", QStringLiteral("直播设置已保存")}};
+}
+bool Oran7ScreenCaptureController::startLive()
+{
+    qInfo().noquote() << "[RTMP] 收到开始推流请求";
+    if (m_shuttingDown || (recordingBusy() && int(recordMode())!=0) || liveBusy() || previewBusy() || m_pendingCapture) {
+        const auto reason = QStringLiteral("请先停止录制或推流，再修改直播参数");
+        qWarning().noquote() << "[RTMP] 请求被拒绝：" << reason;
+        emit errorOccurred(reason);
+        return false;
+    }
+    const auto c = Oran7AppConfigManager::ins().snapshot().live;
+    auto error = Oran7LiveSession::validate(c, true);
+    if (c.fps > m_capSettings.fps)
+        error = QStringLiteral("采集帧率不能低于直播帧率");
+    if (m_previewState != Oran7PreviewState::Running || !m_feed)
+        error = QStringLiteral("请先启动并等待抓屏预览就绪");
+    if (!error.isEmpty())
+    {
+        qWarning().noquote() << "[RTMP] 启动校验失败：" << error;
+        emit errorOccurred(error);
+        return false;
+    }
+    qInfo() << "[RTMP] 开始准备媒体输出" << c.width << c.height << c.fps << c.bitrateKbps;
+    return m_live->start(c, m_feed, prepareAudioCapture(), m_audioCaptureControl);
 }

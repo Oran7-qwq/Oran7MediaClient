@@ -230,6 +230,10 @@ Rectangle{
 
         // 切换整合：已整合 → 移出合集；未整合 → 加入合集
         function toggleIntegrated() {
+            if (Client.playback.currentTrack.provider === "qqmusic") {
+                Client.toggleTrackIntegration(Client.currentTrackFields());
+                return;
+            }
             var songId = Client.currentSongId();
             var fp = BasicConfig.currentMediaFilePath;
             if (BasicConfig.isIntegrated(songId, fp, fp)) {
@@ -286,11 +290,17 @@ Rectangle{
         property bool isPressed: false
 
         function checkLoved() {
+            if (Client.playback.currentTrack.provider === "qqmusic")
+                return Client.qqMusicService.isLiked(Client.playback.currentTrack.path);
             var songId = Client.currentSongId();
             return songId > 0 && BasicConfig.isNeteaseLiked(songId);
         }
 
         function refreshLoved() { _loved = checkLoved(); }
+        Connections {
+            target: typeof Client.tracks.qqLiked !== "undefined" ? Client.tracks.qqLiked : null
+            function onCountChanged() { loveImage.refreshLoved(); }
+        }
 
         Component.onCompleted: refreshLoved()
 
@@ -302,6 +312,10 @@ Rectangle{
 
         // 切换网易云喜欢：只同步到网易云服务器 + 更新全局网易云喜欢集合，不写本地"我喜欢的音乐"/config
         function toggleFavorite() {
+            if (Client.playback.currentTrack.provider === "qqmusic") {
+                Client.toggleTrackLike(Client.currentTrackFields());
+                return;
+            }
             Client.cloudMusic.toggleLike({songId: Client.currentSongId(),
                 cover: BasicConfig.currentMediaCoverFilePath, title: BasicConfig.currentMediaName,
                 artist: BasicConfig.currentMediaArtistAuthor, album: BasicConfig.currentMediaAlbum,

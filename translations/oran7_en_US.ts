@@ -134,7 +134,7 @@
         <translation>Start from the NetEase recommendations menu below</translation>
     </message>
     <message>
-        <location filename="Oran7UiMessages.h" line="+7"/>
+        <location filename="Oran7UiMessages.h" line="+46"/>
         <source>喜欢列表加载失败，请重试推荐</source>
         <translation>Could not load liked songs. Retry recommendations</translation>
     </message>
@@ -159,14 +159,74 @@
         <translation>No recommendations match your filters. Adjust filters and retry</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+553"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+632"/>
         <source> FPS，不低于录制帧率。
 修改后自动保存并更新预览。</source>
         <translation> FPS, at least the recording frame rate.
 Changes are saved and applied automatically.</translation>
     </message>
     <message>
-        <location line="+50"/>
+        <location line="+230"/>
+        <source>直播推流</source>
+        <translation>Live streaming</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>B站直播</source>
+        <translation>Bilibili Live</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>自定义 RTMP</source>
+        <translation>Custom RTMP</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>推流服务器地址</source>
+        <translation>Stream server URL</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>推流码</source>
+        <translation>Stream key</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>隐藏推流码</source>
+        <translation>Hide stream key</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>显示推流码</source>
+        <translation>Show stream key</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>清除推流凭据</source>
+        <translation>Clear stream credentials</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>直播画质</source>
+        <translation>Stream quality</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>直播码率 · kbps</source>
+        <translation>Stream bitrate · kbps</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>直播系统声音</source>
+        <translation>Stream system audio</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>与本地录制互斥；直播帧率不能超过采集帧率。</source>
+        <translation>Streaming and local recording are exclusive. Stream FPS must not exceed capture FPS.</translation>
+    </message>
+    <message>
+        <location line="-237"/>
         <source>录制格式</source>
         <translation>Recording format</translation>
     </message>
@@ -176,7 +236,7 @@ Changes are saved and applied automatically.</translation>
         <translation> FPS, up to the capture frame rate.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPageState.qml" line="+26"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPageState.qml" line="+27"/>
         <location filename="Oran7UiMessages.h" line="+52"/>
         <source>正在启动预览…</source>
         <translation>Starting preview…</translation>
@@ -194,7 +254,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Recovering preview…</translation>
     </message>
     <message>
-        <location line="+81"/>
+        <location line="+85"/>
         <location line="+3"/>
         <source> · 主屏</source>
         <translation> · Primary</translation>
@@ -206,7 +266,7 @@ Changes are saved and applied automatically.</translation>
         <translation> · Disconnected</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-617"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-623"/>
         <source>/小时 · 仅视频估算</source>
         <translation>/hour · Video estimate</translation>
     </message>
@@ -351,7 +411,7 @@ Changes are saved and applied automatically.</translation>
         <translation>⫸ Focused on C++, Qt Quick interfaces and FFmpeg media processing~</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+634"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+640"/>
         <source>上限 </source>
         <translation>Up to </translation>
     </message>
@@ -376,7 +436,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Chinese</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-630"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-636"/>
         <source>为复杂细节保留更多余量，文件很大，画质提升可能有限</source>
         <translation>More room for complex details; very large files with potentially limited quality gains.</translation>
     </message>
@@ -433,7 +493,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Save failed</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+697"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+705"/>
         <source>保存目录</source>
         <translation>Save folder</translation>
     </message>
@@ -448,7 +508,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Signaling username</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+221"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+347"/>
         <source>停止</source>
         <translation>Stop</translation>
     </message>
@@ -489,7 +549,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Refresh FPS: </translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-220"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-224"/>
         <location line="+1"/>
         <source>刷新显示器</source>
         <translation>Refresh displays</translation>
@@ -500,7 +560,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Live</translation>
     </message>
     <message>
-        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="+602"/>
+        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="+632"/>
         <source>刷新直播流</source>
         <translation>Refresh stream</translation>
     </message>
@@ -520,7 +580,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Animated gradient</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+101"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+103"/>
         <source>原始尺寸</source>
         <translation>Original size</translation>
     </message>
@@ -532,7 +592,7 @@ Changes are saved and applied automatically.</translation>
     </message>
     <message>
         <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7NetEaseLoginPopup.qml" line="+155"/>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7QQMusicLoginPopup.qml" line="+182"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7QQMusicLoginPopup.qml" line="+183"/>
         <source>取消登录</source>
         <translation>Cancel sign-in</translation>
     </message>
@@ -625,7 +685,7 @@ Changes are saved and applied automatically.</translation>
         <translation>A browser will open. Complete sign-in there.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="-191"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="-305"/>
         <source>就绪</source>
         <translation>Ready</translation>
     </message>
@@ -635,7 +695,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Left Shift + Delete: clear the focused field.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-202"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-204"/>
         <location line="+144"/>
         <source>已保存</source>
         <translation>Saved</translation>
@@ -656,12 +716,12 @@ Changes are saved and applied automatically.</translation>
         <translation>Apply failed</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+182"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+296"/>
         <source>开始录制</source>
         <translation>Record</translation>
     </message>
     <message>
-        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="-478"/>
+        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="-507"/>
         <source>文件路径无效</source>
         <translation>Invalid file path</translation>
     </message>
@@ -671,36 +731,46 @@ Changes are saved and applied automatically.</translation>
         <translation>File not found. Choose another file.</translation>
     </message>
     <message>
-        <location line="+22"/>
+        <location line="+26"/>
+        <source>请输入完整的 RTMP 拉流地址</source>
+        <translation>Enter a complete RTMP playback URL</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>RTMP 直播流</source>
+        <translation>RTMP live stream</translation>
+    </message>
+    <message>
+        <location line="+10"/>
         <source>请输入有效的房间号</source>
         <translation>Enter a valid room number.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7VideoLibraryPage.qml" line="+209"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7VideoLibraryPage.qml" line="+210"/>
         <location line="+219"/>
         <location line="+40"/>
-        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="+11"/>
+        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="+12"/>
         <source>直播间</source>
         <translation>Live room</translation>
     </message>
     <message>
         <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="+1"/>
-        <location line="+357"/>
+        <location line="+359"/>
         <source>正在连接直播间…</source>
         <translation>Connecting to live room…</translation>
     </message>
     <message>
-        <location line="-333"/>
+        <location line="-335"/>
         <source>直播连接失败，房间可能未开播，请重试</source>
         <translation>Connection failed. The room may be offline. Try again.</translation>
     </message>
     <message>
-        <location line="+62"/>
+        <location line="+63"/>
         <source>视频文件 (*.mp4 *.mkv *.mov *.avi *.flv *.webm *.ts *.m4v)</source>
         <translation>Video files (*.mp4 *.mkv *.mov *.avi *.flv *.webm *.ts *.m4v)</translation>
     </message>
     <message>
-        <location line="+195"/>
+        <location line="+196"/>
         <source>视频库</source>
         <translation>Video library</translation>
     </message>
@@ -760,17 +830,17 @@ Changes are saved and applied automatically.</translation>
         <translation>Recording and streaming</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+46"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+55"/>
         <source>录制后显示文件保存位置</source>
         <translation>The saved file path appears after recording</translation>
     </message>
     <message>
-        <location line="-228"/>
+        <location line="-351"/>
         <source>录制失败</source>
         <translation>Recording failed</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+203"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+205"/>
         <source>录制帧率上限 · FPS</source>
         <translation>Recording limit · FPS</translation>
     </message>
@@ -805,17 +875,17 @@ Changes are saved and applied automatically.</translation>
         <translation>Recording request rejected. Check the current state.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-60"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-62"/>
         <source>录制输出</source>
         <translation>Recording output</translation>
     </message>
     <message>
-        <location line="-182"/>
+        <location line="-186"/>
         <source>采集上限 %1 FPS</source>
         <translation>Capture limit %1 FPS</translation>
     </message>
     <message>
-        <location line="+39"/>
+        <location line="+43"/>
         <location line="+144"/>
         <source>待保存</source>
         <translation>Unsaved</translation>
@@ -842,12 +912,12 @@ Changes are saved and applied automatically.</translation>
     </message>
     <message>
         <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7FileDialog.qml" line="+8"/>
-        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="-358"/>
+        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="-359"/>
         <source>所有文件 (*)</source>
         <translation>All files (*)</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-550"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-554"/>
         <source>手动输入 0.1～200 Mbps，保留精确设置</source>
         <translation>Enter an exact bitrate from 0.1 to 200 Mbps.</translation>
     </message>
@@ -867,7 +937,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Capture FPS: </translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+542"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+546"/>
         <source>排查采集问题时开启。</source>
         <translation>Enable to diagnose capture problems.</translation>
     </message>
@@ -877,7 +947,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Sound volume</translation>
     </message>
     <message>
-        <location filename="../src/qml/RightPage/MainStackView/Oran7QQMusicStack.qml" line="+42"/>
+        <location filename="../src/qml/RightPage/MainStackView/Oran7QQMusicStack.qml" line="+55"/>
         <source>请输入歌曲、歌手或专辑</source>
         <translation>Enter a song, artist or album</translation>
     </message>
@@ -903,12 +973,12 @@ Changes are saved and applied automatically.</translation>
     </message>
     <message>
         <location line="+24"/>
-        <location line="+105"/>
+        <location line="+107"/>
         <source>扫码登录</source>
         <translation>Scan to sign in</translation>
     </message>
     <message>
-        <location line="-73"/>
+        <location line="-74"/>
         <location filename="../src/qml/RightPage/MainStackView/SearchMusicStack.qml" line="-8"/>
         <source>搜索结果</source>
         <translation>Search results</translation>
@@ -917,6 +987,11 @@ Changes are saved and applied automatically.</translation>
         <location line="+44"/>
         <source>正在加载喜欢的音乐…</source>
         <translation>Loading liked songs…</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>喜欢列表尚未同步</source>
+        <translation>Liked songs have not been synced</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -946,12 +1021,17 @@ Changes are saved and applied automatically.</translation>
     </message>
     <message>
         <location line="-1"/>
-        <location line="+39"/>
+        <location line="+41"/>
         <source>QQ 音乐服务暂未连接</source>
         <translation>QQ Music service is not connected</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-1"/>
+        <source>账号已登录，音乐服务尚未连接</source>
+        <translation>Account signed in; music service is not connected yet</translation>
+    </message>
+    <message>
+        <location line="+2"/>
         <source>已登录 QQ 音乐</source>
         <translation>Signed in to QQ Music</translation>
     </message>
@@ -971,7 +1051,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Playback controls</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+150"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+154"/>
         <source>文件保存</source>
         <translation>File output</translation>
     </message>
@@ -991,7 +1071,7 @@ Changes are saved and applied automatically.</translation>
         <translation>File recording creates a separate MP4. Streaming requires a valid WHIP service.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-731"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-739"/>
         <source>文件较小，适合静态演示；快速运动细节可能较少</source>
         <translation>Small files for static presentations; fast motion may lose detail.</translation>
     </message>
@@ -1031,7 +1111,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Hardware decoding: </translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+439"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+443"/>
         <source>显示器</source>
         <translation>Display</translation>
     </message>
@@ -1061,7 +1141,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Sign in ∧</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-183"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-187"/>
         <source>本地 MP4</source>
         <translation>Local MP4</translation>
     </message>
@@ -1071,7 +1151,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Local music</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7MusicPlayControls.qml" line="+428"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7MusicPlayControls.qml" line="+442"/>
         <location filename="../src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml" line="+553"/>
         <source>标准</source>
         <translation>Standard</translation>
@@ -1285,22 +1365,110 @@ Changes are saved and applied automatically.</translation>
         <translation>Reset to flat</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+190"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+304"/>
         <source>正在保存…</source>
         <translation>Saving…</translation>
     </message>
     <message>
-        <location line="-191"/>
+        <location line="-305"/>
         <source>正在保存文件，请稍候…</source>
         <translation>Saving file, please wait…</translation>
     </message>
     <message>
-        <location line="+182"/>
+        <location line="+236"/>
+        <location line="+31"/>
+        <source>麦克风</source>
+        <translation>Microphone</translation>
+    </message>
+    <message>
+        <location line="-61"/>
+        <source>系统声音音量</source>
+        <translation>System audio volume</translation>
+    </message>
+    <message>
+        <location line="-111"/>
+        <source>已静音</source>
+        <translation>Muted</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>正在等待音频检测就绪</source>
+        <translation>Waiting for audio monitoring to become ready</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>音量调整后、混音前的峰值：绿色正常，黄色偏高，红色接近满刻度</source>
+        <translation>Post-gain, pre-mix peak: green is normal, yellow is high, red is near full scale</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>输入触及满刻度，请检查声源音量</source>
+        <translation>Input reaches full scale; check the source volume</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>实时电平</source>
+        <translation> live level</translation>
+    </message>
+    <message>
+        <location line="+105"/>
+        <source>调整录制与推流的系统声音音量，不改变 Windows 音量</source>
+        <translation>Adjust system audio volume for recording and streaming without changing Windows volume</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <location line="+27"/>
+        <source>采集 Windows 默认麦克风，与系统声音混音后录制或推流</source>
+        <translation>Capture the default Windows microphone and mix it with system audio for recording or streaming</translation>
+    </message>
+    <message>
+        <location line="-2"/>
+        <source>麦克风音量</source>
+        <translation>Microphone volume</translation>
+    </message>
+    <message>
+        <location line="+22"/>
+        <location line="+56"/>
+        <source>正在停止推流…</source>
+        <translation>Stopping stream…</translation>
+    </message>
+    <message>
+        <location line="-55"/>
+        <source>取消连接</source>
+        <translation>Cancel connection</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>停止推流</source>
+        <translation>Stop streaming</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>开始推流</source>
+        <translation>Start streaming</translation>
+    </message>
+    <message>
+        <location line="+15"/>
         <source>正在准备…</source>
         <translation>Preparing…</translation>
     </message>
     <message>
-        <location line="-182"/>
+        <location line="+38"/>
+        <source>正在连接推流服务器…</source>
+        <translation>Connecting to stream server…</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>推流中</source>
+        <translation>Streaming</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>音频检测：%1</source>
+        <translation>Audio monitoring: %1</translation>
+    </message>
+    <message>
+        <location line="-340"/>
         <source>正在准备编码器与输出…</source>
         <translation>Preparing encoder and output…</translation>
     </message>
@@ -1414,18 +1582,18 @@ are synced with your NetEase Music account.</translation>
         <translation>Generating...</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+240"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+246"/>
         <source>画质设置</source>
         <translation>Video quality</translation>
     </message>
     <message>
         <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="+50"/>
-        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="+332"/>
+        <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="+333"/>
         <source>画面信息</source>
         <translation>Frame info</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-157"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-159"/>
         <source>画面来源</source>
         <translation>Capture source</translation>
     </message>
@@ -1458,27 +1626,18 @@ are synced with your NetEase Music account.</translation>
         <translation>Compact title bar</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+118"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+183"/>
+        <location line="+33"/>
         <source>系统声音</source>
         <translation>System audio</translation>
     </message>
     <message>
-        <location line="+16"/>
-        <source>系统声音录制音量（界面预览）</source>
-        <translation>System audio volume (UI preview)</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>系统声音音量调节尚未接入录制</source>
-        <translation>System audio volume is not connected to recording yet</translation>
-    </message>
-    <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+293"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+297"/>
         <source>系统视频目录</source>
         <translation>System Videos folder</translation>
     </message>
     <message>
-        <location line="-686"/>
+        <location line="-694"/>
         <source>约 </source>
         <translation>About </translation>
     </message>
@@ -1557,14 +1716,14 @@ are synced with your NetEase Music account.</translation>
         <translation>Backdrop Color</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+720"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+728"/>
         <source>自动追加后缀，避免覆盖。</source>
         <translation>A suffix is added to prevent overwriting.</translation>
     </message>
     <message>
         <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7EqualizerWindow.qml" line="-171"/>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-247"/>
-        <location line="+127"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-251"/>
+        <location line="+129"/>
         <location filename="../src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorSelectItem.qml" line="+15"/>
         <location filename="../src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml" line="+210"/>
         <source>自定义</source>
@@ -1576,7 +1735,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Custom size</translation>
     </message>
     <message>
-        <location line="-575"/>
+        <location line="-581"/>
         <source>自定义码率</source>
         <translation>Custom bitrate</translation>
     </message>
@@ -1591,7 +1750,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Local FLV</translation>
     </message>
     <message>
-        <location line="+191"/>
+        <location line="+195"/>
         <source>至少 </source>
         <translation>At least </translation>
     </message>
@@ -1611,7 +1770,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Video settings</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+117"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+119"/>
         <source>视频码率</source>
         <translation>Video bitrate</translation>
     </message>
@@ -1636,7 +1795,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Settings accent color</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-99"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-101"/>
         <source>诊断</source>
         <translation>Diagnostics</translation>
     </message>
@@ -1662,7 +1821,7 @@ are synced with your NetEase Music account.</translation>
         <translation>please input image path.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-521"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-525"/>
         <source>请输入有效码率以估算文件体积</source>
         <translation>Enter a valid bitrate to estimate file size</translation>
     </message>
@@ -1672,7 +1831,7 @@ are synced with your NetEase Music account.</translation>
         <translation>please input video path.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+468"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+472"/>
         <source>请选择已连接的显示器</source>
         <translation>Select a connected display</translation>
     </message>
@@ -1702,7 +1861,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Output width (both dimensions 0 use original size)</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+38"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+40"/>
         <source>输出尺寸</source>
         <translation>Output size</translation>
     </message>
@@ -1723,7 +1882,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Back</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-247"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-253"/>
         <source>还原设置</source>
         <translation>Restore settings</translation>
     </message>
@@ -1754,13 +1913,13 @@ are synced with your NetEase Music account.</translation>
         <translation>Fit</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+719"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+727"/>
         <location line="+1"/>
         <source>选择保存文件夹</source>
         <translation>Choose save folder</translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location line="+90"/>
         <source>选择录像保存目录</source>
         <translation>Choose recording folder</translation>
     </message>
@@ -1770,7 +1929,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Choose file</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-259"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-330"/>
         <source>采集帧率 · FPS</source>
         <translation>Capture rate · FPS</translation>
     </message>
@@ -1825,30 +1984,14 @@ are synced with your NetEase Music account.</translation>
         <translation>Color Picker</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+183"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+185"/>
         <source>高</source>
         <translation>Height</translation>
     </message>
     <message>
-        <location line="-79"/>
+        <location line="-81"/>
         <source>高级设置</source>
         <translation>Advanced</translation>
-    </message>
-    <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+19"/>
-        <source>麦克风·预览</source>
-        <translation>Mic · preview</translation>
-    </message>
-    <message>
-        <location line="+16"/>
-        <source>麦克风录制音量（界面预览）</source>
-        <translation>Microphone volume (UI preview)</translation>
-    </message>
-    <message>
-        <location line="-20"/>
-        <location line="+22"/>
-        <source>麦克风录音与音量调节尚未接入后端</source>
-        <translation>Microphone recording and volume are not connected to the backend yet</translation>
     </message>
     <message>
         <location filename="../src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml" line="+486"/>
@@ -1861,7 +2004,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Music</translation>
     </message>
     <message>
-        <location filename="../src/qml/RightPage/MainStackView/Oran7QQMusicStack.qml" line="-109"/>
+        <location filename="../src/qml/RightPage/MainStackView/Oran7QQMusicStack.qml" line="-112"/>
         <location filename="../src/qml/RightPage/MainStackView/SearchMusicStack.qml" line="+88"/>
         <source>我喜欢的音乐</source>
         <translation>Liked songs</translation>
@@ -1897,7 +2040,202 @@ are synced with your NetEase Music account.</translation>
         <translation>Capture source unavailable. Refresh the display list and select again.</translation>
     </message>
     <message>
-        <location line="-20"/>
+        <location line="-67"/>
+        <source>QQ 音乐喜欢列表加载不完整，请刷新重试</source>
+        <translation>QQ Music liked songs did not load completely. Refresh to try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐喜欢列表格式异常</source>
+        <translation>Unexpected QQ Music liked songs response</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐接口请求失败，请稍后重试</source>
+        <translation>QQ Music rejected the request. Try again later.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐搜索结果格式异常</source>
+        <translation>Unexpected QQ Music search response</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐播放地址打开失败，请重试</source>
+        <translation>Cannot open the QQ Music playback address. Try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐收藏请求创建失败，请稍后重试</source>
+        <translation>Cannot create the QQ Music favorite request. Try again later.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐歌曲详情加载失败</source>
+        <translation>Cannot load QQ Music song details</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐网络请求失败，请检查网络后重试</source>
+        <translation>QQ Music request failed. Check your connection and try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐返回了无效播放地址</source>
+        <translation>QQ Music returned an invalid playback address</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>该 QQ 音乐歌曲暂无可播放音源，请检查账号权限</source>
+        <translation>This QQ Music song has no playable source. Check your account access.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请先登录 QQ 音乐</source>
+        <translation>Sign in to QQ Music first</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请等待喜欢列表加载完成后重试</source>
+        <translation>Wait for liked songs to finish loading, then try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>官网登录入口尚未就绪，请在网页中点击登录</source>
+        <translation>The website sign-in entry is not ready. Click Sign in on the website.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>正在打开官网扫码登录窗口…</source>
+        <translation>Opening the official scan-to-sign-in dialog…</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请在官网登录窗口中使用 QQ 或微信扫码并确认</source>
+        <translation>Scan with QQ or WeChat in the official sign-in dialog and confirm.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐凭据无法恢复，请重新扫码登录</source>
+        <translation>Cannot restore your QQ Music credentials. Scan to sign in again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐用户</source>
+        <translation>QQ Music user</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐登录保存失败，请检查配置文件权限后重试</source>
+        <translation>Cannot save QQ Music sign-in. Check configuration file permissions and try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐登录响应异常，请稍后重试</source>
+        <translation>Unexpected QQ Music sign-in response. Try again later.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐登录已过期，请重新扫码登录</source>
+        <translation>Your QQ Music session expired. Scan to sign in again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐登录成功</source>
+        <translation>Signed in to QQ Music</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐登录验证失败，请检查网络后重试</source>
+        <translation>QQ Music sign-in verification failed. Check your connection and try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐登录验证超时，请检查网络后重试</source>
+        <translation>QQ Music sign-in verification timed out. Check your connection and try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>QQ 音乐退出登录保存失败，请检查配置文件权限</source>
+        <translation>Cannot save QQ Music sign-out. Check configuration file permissions.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>尚未通过登录验证，请完成网页中的扫码确认</source>
+        <translation>Sign-in is not verified yet. Complete the scan confirmation on the website.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>已扫码，正在验证 QQ 音乐账号…</source>
+        <translation>Scan received. Verifying your QQ Music account…</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>扫码登录已超时，请重新打开登录</source>
+        <translation>Sign-in timed out. Open sign-in again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>无法创建独立登录环境，请检查临时目录</source>
+        <translation>Cannot create a separate sign-in environment. Check the temporary folder.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>无法读取登录结果，请更新浏览器后重试</source>
+        <translation>Cannot read the sign-in result. Update your browser and try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>无法连接登录浏览器，请重试</source>
+        <translation>Cannot connect to the sign-in browser. Try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>未找到 Edge/Chrome 浏览器</source>
+        <translation>Edge or Chrome was not found</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>正在准备新的登录窗口…</source>
+        <translation>Preparing a new sign-in window…</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>正在恢复 QQ 音乐登录…</source>
+        <translation>Restoring QQ Music sign-in…</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>正在打开 QQ 音乐官方登录页…</source>
+        <translation>Opening the official QQ Music sign-in page…</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>登录浏览器启动失败，请重试</source>
+        <translation>Cannot start the sign-in browser. Try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>登录浏览器响应超时，请重试</source>
+        <translation>The sign-in browser did not respond. Try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>登录浏览器已关闭，请重新打开登录</source>
+        <translation>The sign-in browser was closed. Open sign-in again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>登录浏览器连接失败，请重试</source>
+        <translation>Cannot connect to the sign-in browser. Try again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请在官方网页中点击登录，使用 QQ 或微信扫码并确认</source>
+        <translation>Click Sign in on the official website, then scan with QQ or WeChat and confirm.</translation>
+    </message>
+    <message>
+        <location line="+9"/>
         <source>从 QQ 音乐搜索</source>
         <translation>Search QQ Music</translation>
     </message>
@@ -2077,7 +2415,237 @@ are synced with your NetEase Music account.</translation>
         <translation>Unable to open the recording output file</translation>
     </message>
     <message>
-        <location line="-49"/>
+        <location line="+1"/>
+        <source>RTMP 发送失败、超时或已取消</source>
+        <translation>RTMP transmission failed, timed out or was cancelled</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>RTMP 媒体头发送失败</source>
+        <translation>Failed to send RTMP media headers</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>RTMP 输出需要 H.264 视频和可选 AAC 音频</source>
+        <translation>RTMP requires H.264 video and optional AAC audio</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>RTMP 连接失败、超时或已取消</source>
+        <translation>RTMP connection failed, timed out or was cancelled</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>上传积压超过安全范围，推流已停止，请降低码率后重试</source>
+        <translation>Upload backlog exceeded the safe limit. Streaming stopped. Lower the bitrate and retry.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>推流已取消</source>
+        <translation>Streaming cancelled</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>推流数据包分配失败</source>
+        <translation>Failed to allocate stream packet</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>推流服务器须为有效 RTMP 地址；签名参数请放在推流码中</source>
+        <translation>Use a valid RTMP server URL. Put signature parameters in the stream key.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>无法创建 RTMP 封装器</source>
+        <translation>Cannot create RTMP muxer</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>无法创建推流媒体轨道</source>
+        <translation>Cannot create stream media tracks</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>未知直播设置</source>
+        <translation>Unknown streaming setting</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播上限为 2560×1440 / 60 FPS，码率范围 100～50000 kbps</source>
+        <translation>Streaming supports up to 2560×1440 at 60 FPS and 100–50000 kbps</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播地址参数类型错误</source>
+        <translation>Invalid streaming address parameter type</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播数据包分配失败</source>
+        <translation>Failed to allocate live packet</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播等待首批音视频发送超时</source>
+        <translation>Timed out waiting for initial audio and video packets</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播系统声音采集失败</source>
+        <translation>Failed to capture system audio for streaming</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播编码包超过安全上限</source>
+        <translation>Encoded stream packet exceeds the safe limit</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播编码参数不可用</source>
+        <translation>Stream encoding parameters unavailable</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播编码失败</source>
+        <translation>Stream encoding failed</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播编码或音频设备已停止</source>
+        <translation>Stream encoder or audio device stopped</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播视频编码器准备失败</source>
+        <translation>Failed to prepare stream video encoder</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播设置已保存</source>
+        <translation>Stream settings saved</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播音频参数类型错误</source>
+        <translation>Invalid stream audio parameter type</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播音频编码器准备失败</source>
+        <translation>Failed to prepare stream audio encoder</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请先停止录制或推流，再修改直播参数</source>
+        <translation>Stop recording or streaming before changing stream settings</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请先启动并等待抓屏预览就绪</source>
+        <translation>Start screen preview and wait until it is ready</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请同时设置推流地址和推流码</source>
+        <translation>Set the server URL and stream key together</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请输入有效的推流码</source>
+        <translation>Enter a valid stream key</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请输入有效的直播整数参数</source>
+        <translation>Enter valid integer stream settings</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>请选择有效的推流平台</source>
+        <translation>Select a valid streaming platform</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>采集帧率不能低于直播帧率</source>
+        <translation>Capture FPS must not be lower than stream FPS</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>采集源不可用</source>
+        <translation>Capture source unavailable</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>采集源已停止</source>
+        <translation>Capture source stopped</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>采集画面发生变化，直播已停止，请重新开始推流</source>
+        <translation>Capture source changed. Streaming stopped. Start streaming again.</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播音量范围为 0～100%</source>
+        <translation>Streaming volume must be between 0 and 100%</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>麦克风采集失败，请检查默认输入设备和麦克风权限</source>
+        <translation>Microphone capture failed. Check the default input device and microphone permissions</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>直播系统声音采集或混音失败</source>
+        <translation>Streaming system audio capture or mixing failed</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>音频参数类型错误</source>
+        <translation>Invalid audio parameter type</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>音量范围为 0～100%</source>
+        <translation>Volume must be between 0 and 100%</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>未知音频设置</source>
+        <translation>Unknown audio setting</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>音频设置已保存</source>
+        <translation>Audio settings saved</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>录制音频采集或混音失败</source>
+        <translation>Recording audio capture or mixing failed</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>音频采集或混音失败，请检查默认音频设备</source>
+        <translation>Audio capture or mixing failed. Check the default audio devices</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>等待音频采集就绪超时</source>
+        <translation>Timed out waiting for audio capture</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>音频输出接入失败</source>
+        <translation>Failed to attach audio output</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>推流期间不可修改采集参数，请先恢复已保存的画面来源设置</source>
+        <translation>Capture settings cannot change while streaming. Restore the saved capture source settings first.</translation>
+    </message>
+    <message>
+        <location line="-95"/>
         <source>显示模式变化，已停止录制并保存已有内容，正在恢复预览</source>
         <translation>Display mode changed. Recording stopped and saved; restoring preview.</translation>
     </message>
@@ -2326,7 +2894,17 @@ are synced with your NetEase Music account.</translation>
         <translation>Open local video</translation>
     </message>
     <message>
-        <location line="-406"/>
+        <location line="+47"/>
+        <source>RTMP 拉流地址（仅本次会话）</source>
+        <translation>RTMP playback URL (this session only)</translation>
+    </message>
+    <message>
+        <location line="+20"/>
+        <source>播放 RTMP</source>
+        <translation>Play RTMP</translation>
+    </message>
+    <message>
+        <location line="-473"/>
         <location line="+406"/>
         <source>进入直播间</source>
         <translation>Enter live room</translation>
@@ -2367,7 +2945,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Remove</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7QQMusicLoginPopup.qml" line="-99"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7QQMusicLoginPopup.qml" line="-100"/>
         <location filename="../src/qml/RightPage/MainStackView/Oran7QQMusicStack.qml" line="-22"/>
         <source>QQ 音乐登录</source>
         <translation>Sign in to QQ Music</translation>
@@ -2378,7 +2956,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Scan on the official sign-in page</translation>
     </message>
     <message>
-        <location line="+9"/>
+        <location line="+10"/>
         <source>QQ 音乐账号独立管理</source>
         <translation>Your QQ Music account is managed separately</translation>
     </message>

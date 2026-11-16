@@ -15,7 +15,7 @@ public:
         CoverRole, DurationMsRole, IsVipRole, IsLikedRole, IsIntegratedRole, PathRole,
         SongIdRole, SourceRole, IsSelectedRole, NeedsAnimateInRole,
         IconRole, MusicNameRole, MusicArtistRole, MusicAlbumRole, TimesizeRole,
-        FilepathRole, IsLovedRole
+        FilepathRole, IsLovedRole, ProviderRole, ProviderIdRole, MediaMidRole, NativeIdRole
     };
     Q_ENUM(Role)
     explicit Oran7TrackListModel(QObject* parent = nullptr);
@@ -40,7 +40,7 @@ public:
     QVariantList paths() const;
     QSet<qint64> songIds() const;
     QSet<QString> identityKeys() const { return m_keys; }
-    void updateMembership(const QSet<qint64>& liked, const QSet<QString>& integrated);
+    void updateMembership(const QSet<qint64>& liked, const QSet<QString>& integrated, const QSet<QString>& qqLiked = {});
     static QStringList identityKeys(qint64 songId, const QString& url, const QString& path);
 signals:
     void countChanged();
