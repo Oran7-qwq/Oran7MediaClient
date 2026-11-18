@@ -84,7 +84,7 @@ int main(int argc, char** argv)
               "startup surface has full geometry before the first native frame");
         const auto shot = startup->splashWindow()->grabWindow();
         check(!shot.isNull(), "production startup surface renders offscreen");
-        check(shot.pixelColor(200, 150) == QColor("#1c1f29"), "first splash frame is opaque and fully painted");
+        check(shot.pixelColor(200, 150) == QColor("#fafbfe"), "first splash frame is opaque and fully painted");
         shot.save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR) + "/startup.png");
         until([&] { return startup->mainWindow() && restored == 1; });
         QTest::qWait(40);
@@ -259,6 +259,8 @@ int main(int argc, char** argv)
         check(!startup->error().isEmpty() && !startup->finished() &&
                   (startup->splashWindow() ? startup->splashWindow()->isVisible() : quit.size() == 1),
               "failure stays visible or requests exit when startup window is unavailable");
+        if (failure == 0)
+            startup->splashWindow()->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR) + "/startup-error.png");
         if (startup->mainWindow())
         {
             check(!startup->mainWindow()->isVisible(), "failed main remains hidden");

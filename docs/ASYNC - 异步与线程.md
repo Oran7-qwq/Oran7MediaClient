@@ -39,7 +39,7 @@ GUI ──put req(REQ_START/PAUSE/SEEK)──▶ MessageQueue ◀──put event
 - Oran7PlaybackController::messageLoop 只持有所属 Native、固定代际和共享邮箱，读取状态/时长快照回 GUI。析构先失效邮箱 receiver，旧事件按代际丢弃；不执行 Client/Controller 实例成员。
 - 视频帧出核：`video_refresh` → 渲染桥共享最新帧邮箱 → GUI 取帧 → `D3D11VideoItem::submitFrame` → `update()`；回调只捕获邮箱/代际，不访问 Client。
 - 音频：SDL 回调线程里做重采样 + Sonic + 时钟推进。
-- 音频设备由 `Oran7SdlAudioDevice` 独占，内部控制锁串行 open/pause/close；回调不进入该控制锁。关闭时先清空所属句柄，再直接调用 SDL 的关闭接口，不持有 SDL 回调锁，不在关闭后操作旧 ID。普通切歌仍后台销毁播放器，GUI 不再逐次调用 `HeapCompact`。
+- 音频设备由 `Oran7SdlAudioDevice` 独占，其按需启动的后台 MTA 线程统一执行 SDL 子系统 init/quit 与设备 open/pause/close，避免在 GUI 初始化驱动或跨线程释放设备及 COM 引用。Native 解码／消息／退役线程同步提交控制操作，回调不进入控制锁；关闭先清空句柄，等待回调结束后才释放处理器，最后在控制线程归还子系统引用并退出。普通切歌仍后台销毁播放器，GUI 不等待控制线程，也不逐次执行 `HeapCompact`。慢于 250ms 的操作只记录 `[PlaybackAudio]` 阶段与耗时。
 - 快速切歌只保留最新打开目标；旧 Native 实例后台完全释放后才创建新实例，300ms 定时器到期不代表退役已完成。GUI 不等待后台 join；停止/退出会取消待打开目标。FFmpeg 网络读取通过原子退出标志和 `interrupt_callback` 取消，禁止在读线程 join 前跨线程 `avio_closep`；`avformat_close_input` 在 join 后统一释放输入与 I/O。
 
 **线程安全规则（现状）**：`abort_request`、`audio_volume`、`destroying_`、`mp_state_` 和播放器 isPlaying 是原子；`seek_req/seek_pos`、`paused`、`eof`、`Audio_EOF/Video_EOF`、`All_finished_`等**不是**，靠"读写恰好都在同一线程"或"容忍脏读"维持。新增字段必须显式选择：原子、加锁、或限定单线程。

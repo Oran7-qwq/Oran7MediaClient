@@ -120,27 +120,28 @@ Pane {
     readonly property bool violetSkin: Oran7Theme.Oran7ScreenCapture.workspaceSkin === "violet"
     property Component previewComponent
     // 工作台自行管理样式，调用方可覆盖；不借用下拉设置窗口的样式单例。
-    // 半透明冰蓝面板透出雪景，雾紫用于分组和交互。
-    property color panelColor: root.violetSkin ? "#9de5ebfa" : "#1e252f"
-    property color baseColor: root.violetSkin ? "#bbc9e6" : "#11161d"
-    property color textColor: root.violetSkin ? "#24304d" : "#e7edf5"
-    property color accentColor: root.violetSkin ? "#514887" : "#80a9db"
-    property real materialStrength: root.violetSkin ? 0.018 : 0.025
-    property real motifStrength: 0.10
+    property color panelColor: root.violetSkin ? "#9de5ebfa" : "#252830"
+    property color baseColor: root.violetSkin ? "#bbc9e6" : "#191b21"
+    property color textColor: root.violetSkin ? "#24304d" : "#e8ebf2"
+    property color accentColor: root.violetSkin ? "#514887" : "#89adfa"
+    property color selectionColor: root.violetSkin ? Qt.alpha(root.accentColor, 0.12) : "#3459a9"
+    property color actionColor: root.violetSkin ? root.groupColor : "#363b47"
+    property real materialStrength: root.violetSkin ? 0.018 : 0.006
+    property real motifStrength: 0.035
     property real avatarParallaxPadding: 30
     property bool avatarParallaxEnabled: true
-    property real avatarOpacity: root.violetSkin ? 0.52 : 0.18
+    property real avatarOpacity: root.violetSkin ? 0.52 : 0.28
     property color avatarTintColor: root.violetSkin ? "#51436f" : root.decorationColor
-    property color decorationColor: root.violetSkin ? "#b4bbdb" : "#a4b6cc"
-    property color paperColor: root.violetSkin ? "#c7c4e7" : "#d5dfec"
-    property color paperInkColor: root.violetSkin ? "#3c3a65" : "#263447"
-    property color recordingAccentColor: root.violetSkin ? "#85517f" : "#e7a399"
-    property color liveAccentColor: root.violetSkin ? "#466d85" : "#6dcbb7"
-    property color hoverColor: root.violetSkin ? "#cbd7ef" : "#2b394c"
-    property color groupColor: root.violetSkin ? "#d2d4ed" : "#242d39"
-    property color inputColor: root.violetSkin ? "#edf2fc" : "#161e29"
-    property color borderColor: root.violetSkin ? "#a1a9ca" : "#334154"
-    property color mutedTextColor: root.violetSkin ? "#4a5576" : "#a3afbf"
+    property color decorationColor: root.violetSkin ? "#b4bbdb" : "#a0a9ba"
+    property color paperColor: root.violetSkin ? "#c7c4e7" : "#3e4553"
+    property color paperInkColor: root.violetSkin ? "#3c3a65" : "#e0e5ef"
+    property color recordingAccentColor: root.violetSkin ? "#85517f" : "#f0878f"
+    property color liveAccentColor: root.violetSkin ? "#466d85" : "#62cd8c"
+    property color hoverColor: root.violetSkin ? "#cbd7ef" : "#444b5b"
+    property color groupColor: root.violetSkin ? "#d2d4ed" : "#2d313a"
+    property color inputColor: root.violetSkin ? "#edf2fc" : "#1b1e25"
+    property color borderColor: root.violetSkin ? "#a1a9ca" : "#3d4350"
+    property color mutedTextColor: root.violetSkin ? "#4a5576" : "#aeb7c7"
     property real controlHeight: 34
     property real controlPixelSize: 13
     // 这些标志只控制自定义输入区的展开，不复制设置草稿。
@@ -177,11 +178,11 @@ Pane {
         if (w === 1280 && h === 720) return 2
         return 3
     }
-    property color previewBackgroundColor: root.violetSkin ? "#27324a" : "#0f141c"
+    property color previewBackgroundColor: root.violetSkin ? "#27324a" : "#101216"
     property color previewTextColor: root.textColor
-    property color errorColor: root.violetSkin ? "#a13658" : "#ed8795"
+    property color errorColor: root.violetSkin ? "#a13658" : "#f38d98"
     property color toggleOffColor: root.violetSkin ? root.paperColor : root.inputColor
-    property color toggleBorderColor: root.violetSkin ? "#8d7ca7" : root.accentColor
+    property color toggleBorderColor: root.violetSkin ? "#8d7ca7" : root.borderColor
     property color toggleThumbColor: root.violetSkin ? root.accentColor : root.textColor
     property real toggleHeight: 20
     property string fontFamily: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
@@ -202,12 +203,15 @@ Pane {
     palette.windowText: root.textColor
     palette.buttonText: root.textColor
     palette.button: root.panelColor
-    palette.highlight: root.accentColor
+    palette.highlight: root.violetSkin ? root.accentColor : root.selectionColor
     background: Rectangle {
         id: workspaceBackground
         radius: 14
-        gradient: Gradient {
-            GradientStop { position: 0; color: Qt.lighter(root.baseColor, 1.35) }
+        color: root.violetSkin ? "#ffffff" : root.baseColor
+        gradient: root.violetSkin ? null : defaultBackgroundGradient
+        Gradient {
+            id: defaultBackgroundGradient
+            GradientStop { position: 0; color: Qt.lighter(root.baseColor, 1.12) }
             GradientStop { position: 0.4; color: root.baseColor }
             GradientStop { position: 1; color: Qt.darker(root.baseColor, 1.12) }
         }
@@ -225,6 +229,7 @@ Pane {
                 id: landscape
                 objectName: "recordingVioletLandscape"
                 anchors.fill: parent
+                // 原图共用于圆角底板与四块毛玻璃，自身不直接绘制以免覆盖圆角。
                 visible: false
                 source: root.violetSkin ? Qt.resolvedUrl("../../../../image/skins/violet/reference-snowfield.png") : ""
                 fillMode: Image.PreserveAspectCrop
@@ -241,11 +246,17 @@ Pane {
                 readonly property int imageStatus: landscape.status
 
                 function loadSnowfield() {
-                    if (available && String(source).length > 0)
+                    if (!available || !visible || String(source).length === 0)
+                        return
+                    // 再次启用时素材可能已经缓存，不会再发 imageLoaded，需主动重绘。
+                    if (isImageLoaded(source))
+                        requestPaint()
+                    else
                         loadImage(source)
                 }
 
                 onAvailableChanged: loadSnowfield()
+                onVisibleChanged: loadSnowfield()
                 onSourceChanged: loadSnowfield()
                 onImageLoaded: requestPaint()
                 onPaintedSizeChanged: if (visible) requestPaint()
@@ -259,7 +270,6 @@ Pane {
                     if (imageStatus !== Image.Ready || !isImageLoaded(source))
                         return
 
-                    // 用底框的圆角裁切图片，保持与磨砂层相同的居中取景。
                     c.beginPath()
                     c.roundedRect(0, 0, width, height, radius, radius)
                     c.clip()
@@ -278,13 +288,6 @@ Pane {
                     GradientStop { position: 0.65; color: "transparent" }
                     GradientStop { position: 1; color: "#42b6bae3" }
                 }
-            }
-            Rectangle {
-                visible: !root.violetSkin
-                x: parent.width * 0.28; y: -110
-                width: parent.width * 0.52; height: 156
-                rotation: -12; radius: 28
-                color: Qt.rgba(root.decorationColor.r, root.decorationColor.g, root.decorationColor.b, 0.055)
             }
             Oran7PointerParallax {
                 id: avatarPointer
@@ -345,7 +348,7 @@ Pane {
                         c.scale(width / outlineSize.width, height / outlineSize.height)
                         c.drawImage(avatar.source, 0, 0)
                         c.restore()
-                        // 只染原图的线条，透明区域继续透出雪景。
+                        // 只染原图的线条，透明区域继续透出工作台底色。
                         c.globalCompositeOperation = "source-in"
                         c.fillStyle = tint
                         c.fillRect(0, 0, width, height)
@@ -359,7 +362,7 @@ Pane {
             gradient: Gradient {
                 orientation: Gradient.Horizontal
                 GradientStop { position: 0; color: "transparent" }
-                GradientStop { position: 0.5; color: "#35ffffff" }
+                GradientStop { position: 0.5; color: root.violetSkin ? "#35ffffff" : "#16ffffff" }
                 GradientStop { position: 1; color: "transparent" }
             }
         }
@@ -437,8 +440,17 @@ Pane {
                 text: panel.sectionId
                 visible: !root.violetSkin
                 font.pixelSize: 66; font.bold: true; font.letterSpacing: -4
-                color: root.decorationColor; opacity: 0.055
+                color: root.decorationColor; opacity: 0.035
             }
+        }
+        Rectangle {
+            visible: !root.violetSkin
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
+            height: panelHeading.y + panelHeading.height + 8
+            topLeftRadius: panel.radius - 1
+            topRightRadius: topLeftRadius
+            color: root.groupColor
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.borderColor }
         }
         RowLayout {
             id: panelHeading
@@ -557,8 +569,8 @@ Pane {
         selectByMouse: true
         color: root.textColor
         placeholderTextColor: root.mutedTextColor
-        selectionColor: root.accentColor
-        selectedTextColor: root.inputColor
+        selectionColor: root.violetSkin ? root.accentColor : root.selectionColor
+        selectedTextColor: root.violetSkin ? root.inputColor : root.textColor
         font.pixelSize: root.controlPixelSize
         padding: 8
         background: Oran7StudioControlSurface {
@@ -634,7 +646,7 @@ Pane {
             height: 34
             highlighted: choice.highlightedIndex === index
             contentItem: Text { text: choice.textAt(index); color: root.textColor; font.pixelSize: root.controlPixelSize; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-            background: Rectangle { radius: 4; color: parent.highlighted ? root.hoverColor : "transparent" }
+            background: Rectangle { radius: 4; color: parent.highlighted ? (root.violetSkin ? root.hoverColor : root.selectionColor) : "transparent" }
         }
         popup: Popup {
             y: choice.height + 4
@@ -674,13 +686,13 @@ Pane {
                 padding: 2
                 contentItem: Text {
                     text: parent.text; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                    color: choices.selectedIndex === index ? root.accentColor : root.textColor
+                    color: root.violetSkin && choices.selectedIndex === index ? root.accentColor : root.textColor
                 }
                 background: Oran7StudioControlSurface {
                     polished: root.violetSkin; tintColor: root.accentColor
                     highlighted: choices.selectedIndex === index || parent.hovered; depressed: parent.down
                     radius: 5
-                    color: choices.selectedIndex === index ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12)
+                    color: choices.selectedIndex === index ? root.selectionColor
                         : parent.hovered ? root.hoverColor : root.inputColor
                     border.color: parent.activeFocus || choices.selectedIndex === index ? root.accentColor : root.borderColor
                 }
@@ -692,7 +704,7 @@ Pane {
         polished: root.violetSkin
         accentColor: root.accentColor
         textColor: root.textColor
-        surfaceColor: root.groupColor
+        surfaceColor: root.actionColor
         hoverColor: root.hoverColor
         borderColor: root.borderColor
         dangerColor: root.errorColor
@@ -917,7 +929,7 @@ Pane {
                             violetSkin: root.violetSkin
                             materialStrength: root.materialStrength
                             paperColor: root.paperColor; paperInkColor: root.paperInkColor
-                            titleSurfaceColor: root.inputColor
+                            titleSurfaceColor: root.violetSkin ? root.inputColor : root.groupColor
                             panelColor: root.panelColor
                             canvasColor: root.previewBackgroundColor
                             textColor: root.previewTextColor
@@ -961,8 +973,8 @@ Pane {
                             toggleHeight: root.toggleHeight
                             fontFamily: root.fontFamily
                             textPixelSize: root.textPixelSize
-                            meterNormalColor: root.violetSkin ? root.accentColor : "#63c6a6"
-                            meterWarningColor: root.violetSkin ? "#936728" : "#dcb76c"
+                            meterNormalColor: root.violetSkin ? root.accentColor : "#4bcb76"
+                            meterWarningColor: root.violetSkin ? "#936728" : "#f1c454"
                             meterPeakColor: root.errorColor
                         }
                     }
@@ -1026,7 +1038,7 @@ Pane {
                                                 Text { width: parent.width; text: modelData.name; color: root.textColor; font.pixelSize: 13; elide: Text.ElideRight }
                                                 Text { width: parent.width; text: modelData.details; color: root.mutedTextColor; font.pixelSize: 10; elide: Text.ElideRight }
                                             }
-                                            background: Rectangle { radius: 4; color: parent.highlighted ? root.hoverColor : "transparent" }
+                                            background: Rectangle { radius: 4; color: parent.highlighted ? (root.violetSkin ? root.hoverColor : root.selectionColor) : "transparent" }
                                         }
                                         onActivated: function(index) {
                                             if (root.pageState.monitors[index].attached) root.pageState.editCapture("outputIndex", root.pageState.monitors[index].outputIndex)
@@ -1149,6 +1161,7 @@ Pane {
                                     controller: root.controller; pageState: root.pageState
                                     commitAudio: function() { return root.saveLiveAudio() }
                                     accentColor: root.recordingAccentColor; textColor: root.textColor; mutedTextColor: root.mutedTextColor
+                                    actionColor: root.violetSkin ? root.inputColor : root.actionColor
                                     surfaceColor: root.inputColor; hoverColor: root.hoverColor; borderColor: root.borderColor; errorColor: root.errorColor
                                 }
                                 Oran7RecordingOutputCard {
@@ -1162,6 +1175,7 @@ Pane {
                                     commitAudio: function() { return root.saveLiveAudio() }
                                     commitLive: function() { return root.saveLive() }
                                     accentColor: root.liveAccentColor; textColor: root.textColor; mutedTextColor: root.mutedTextColor
+                                    actionColor: root.violetSkin ? root.inputColor : root.actionColor
                                     surfaceColor: root.inputColor; hoverColor: root.hoverColor; borderColor: root.borderColor; errorColor: root.errorColor
                                 }
                             }

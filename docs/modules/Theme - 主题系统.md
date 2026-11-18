@@ -4,7 +4,17 @@ tags: [module, theme]
 
 # Theme：主题系统
 
-P2-5（2026-10-26）：保留 `Oran7UI.Impl` 的共享主题实例、URI 与只读 Map 接口；主题引擎及表达式计算仅在 `Oran7UI_Impl` 编译，profile 文件管理仍在 `Oran7Core`。本阶段不修改页面布局。
+分阶段实施及离线试点见 [[THEME - 主题引擎与JSON组织重构方案]]。本文以下内容描述当前随应用加载的默认源、用户 profile 格式及运行行为。
+
+`Oran7UI.Impl` 提供共享主题实例及只读 Map。主题引擎及表达式计算编入 `Oran7UI_Impl`，profile 文件管理编入 `Oran7Core`。
+
+## 生产主题源
+
+- `Index.json` 声明 v1 源版本、两个公共文件和九个已注册组件。清单中的资源路径相对于清单解析。
+- `foundations.json` 定义字体、字号、圆角和动画时长。五个旧时长字段和进度滑块的 `moveThreshold` 沿用历史默认类型，同时允许写入有效的原生整数。
+- `colors.json` 定义浅色及深色基色、生成色板和全局语义色。应用旧色值覆盖时，引用它的语义色会重新求值。
+- 九份 `components/*.json` 各自声明 `__name__` 和令牌。音乐列表同时暴露当前模式的语义键和明确的 Light／Dark 别名。列表仍按列表背景亮度选取兼容色，以保留自定义背景的文字反差。
+- `Oran7ThemeSchema.cpp` 登记必填字段、类型、数值范围和枚举。新源完整验证后再替换已发布值。自定义旧源仍可用 `installIndexTheme`、`installComponentTheme` 载入。
 
 ## 数据与类型
 
@@ -29,38 +39,41 @@ P2-5（2026-10-26）：保留 `Oran7UI.Impl` 的共享主题实例、URI 与只�
 
 ## 深色模式
 
-`Oran7Theme.darkMode` 是唯一权威，Light/Dark/System 为 0/1/2，保存在当前 profile 的 `darkMode`。System 读取 Qt 6.7.3 的 `QStyleHints::colorScheme` 并监听变化；Unknown 按浅色处理。有效深色未变化时不发 isDarkChanged。
+`Oran7Theme.darkMode` 是唯一权威。Light、Dark、System 分别为 0、1、2，保存在当前 profile 的 `__globals__.darkMode`。System 读取 Qt 6.7.3 的 `QStyleHints::colorScheme` 并监听变化，Unknown 按浅色处理。有效深色未变化时不发 isDarkChanged。
 
-设置开关和 `Oran7MainUiSetting.isDarkMode` 直接绑定 `Oran7Theme.isDark`。旧 `Oran7MainGUI.isDarkMode` 只保留派生读取兼容；旧键的保存入口转换为唯一模式 setter。默认采用原 GUI 的深色模式。旧 profile 的该布尔键迁移到根 darkMode；源 JSON 已移除这个状态及废弃的设置窗口开关。
+设置开关和 `Oran7MainUiSetting.isDarkMode` 直接绑定 `Oran7Theme.isDark`。旧 `Oran7MainGUI.isDarkMode` 继续作为派生值，旧键的保存入口调用同一个 setter。默认采用原 GUI 的深色模式。迁移优先读取旧根级 `darkMode`，缺省时读取组件的旧布尔值。
 
 ## profile 差量与迁移
 
-目录沿用 `<exe>/../Config`，文件名 `profile-*.json`，避免自动搬动用户文件。新文档：
+目录沿用 `<exe>/../Config`，文件名为 `profile-*.json`。
 
 ```json
 {
-  "profileVersion": 2,
-  "darkMode": 0,
+  "__profileVersion__": 3,
+  "__globals__": { "darkMode": 0 },
+  "__primary__": { "__tokens__": { "durationFast": 88 } },
   "__component__": {
-    "Oran7ProgressSlider": { "__style__": { "moveThreshold": 5 } }
+    "Oran7ProgressSlider": { "__tokens__": { "moveThreshold": 5 } },
+    "Oran7MusicPlaylistView": {
+      "__modes__": { "dark": { "rowAccent": "#d3bb78" } }
+    }
   }
 }
 ```
 
-- 源 JSON 始终提供默认值，profile 只保存不同的覆盖和未知扩展；空默认 profile 只有 profileVersion。
-- 无版本旧全量 profile 首次加载时，移除与当前源默认值完全相同的项，保留差异及未知字段。旧文件不能表达“相同值是用户特意选择还是自动复制”，迁移将相同项解释为跟随默认值；原件先备份到 `.json.bak-<UUID>`。
-- 迁移/保存用 QSaveFile 原子提交。备份或提交失败保留原件；本轮可用内存差量，后续重试。损坏/未来版本文档禁止覆盖，损坏文档不能通过切换入口选中。
-- 保存全局变量写入正确的 __init__.__vars__，普通样式进入 __style__；加载时覆盖在首次计算前生效。
-- install* 为临时调整，reload/切换清除；save* 为持久覆盖。切换不保留前一个 profile 的覆盖或临时值。
-- 删除当前 profile 先成功切到默认 profile，再删除；默认 profile 禁止删除。复制/导入/导出使用差量，旧导入兼容迁移，未知格式拒绝。
+- 求值时依次应用源默认值、profile 通用覆盖、当前模式覆盖和临时预览。保存会移除与实际继承值相同的覆盖，空 profile 只含 `__profileVersion__`。未知扩展随文档往返，求值只接受源声明的字段。
+- 首次读取无版本全量和 v2 差量时，按旧 `__style__` 优先级和登记的模式键表迁移。旧原件先按字节备份为 `.json.bak-<SHA-256>`，然后由 QSaveFile 原子替换。内容相同的备份可用于迁移重试。
+- 遇到损坏、不可读或未来版本的文档，保留原件。旧格式转换成功但备份或提交失败时，可继续使用内存差量。普通保存、重置和缺省字段继承不生成备份。
+- `resetIndexToken`、`resetComponentToken` 和 `resetComponentTheme` 在写入成功后更新画面。默认重置通用覆盖和两个模式，传入 `currentModeOnly` 时仅删除当前模式覆盖。识别为旧模式别名的字段重置其明确指定的模式。`resetToDefaultTheme` 清空当前 profile 的覆盖和临时预览。
+- 导入旧文档会创建 v3 差量副本，重名自动加后缀。导出和复制保留已规范化的覆盖与扩展。删除当前 profile 前先成功切换到默认 profile。
 - profile 版本与主 config.json 的 schemaVersion=2 是两个独立协议。
 
 ## 资源与所有权
 
-主题源继续按既有 CMake 两个资源块嵌入（插件全量、EXE 子集），本阶段不合并资源。QML 工厂返回 CppOwnership，EXE 导入插件的同一实例，既有 post routine 在引擎销毁后清理。
+生产主题源由 QML 插件统一登记。共享核心中的 `legacy-profile-defaults.json` 冻结旧发布值，供无版本及 v2 profile 迁移使用。维护新版源时保留这一历史基准。QML 工厂返回 CppOwnership，既有 post routine 在引擎销毁后清理。
 
 ## 验证
 
-`tests/theme` 使用临时 profile、检查目录下的真实主题实例及离屏 QML，覆盖类型/空白往返、表达式与循环回退、分组通知计数、同值静默、类型变化、深色/系统模式、重载恢复、旧 profile 备份迁移、新默认键、导入导出及坏文件保护。真实插件实例/所有权继续由 qml-module 检查覆盖。
+`tests/theme` 使用临时配置，逐组比对新旧源两种模式的公开键、求值结果与 QVariant 类型，并检验源资源、用户覆盖、通知和无效值回退。旧 profile 迁移、故障保护及独立进程重启恢复继续由该检查覆盖。插件实例由 qml-module 检查覆盖，设置面板、列表、桌面歌词和录制工作台沿用各自的离屏检查。
 
 用户运行验收：深浅切换、颜色局部编辑、切换 profile、关闭重启恢复与旧 profile 首次迁移；本次不启动主程序或操作用户真实 profile。

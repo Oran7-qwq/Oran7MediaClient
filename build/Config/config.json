@@ -116,14 +116,14 @@
     },
     "credentialStorage": {
         "groups": {
-            "live": "e425bf5b-45b1-4258-a991-b4273b3c4418",
+            "live": "a77a7697-6bb2-4e12-ac4b-acfed62735e8",
             "netease": "27199e7f-b17e-4d8d-aee9-d3ef73b46ff0",
             "qqmusic": "1e9b2e9d-5364-4df8-8b88-f84d45289ad4"
         },
         "version": 1
     },
     "general": {
-        "developerMode": false
+        "developerMode": true
     },
     "integratedMusic": {
         "list": [
@@ -189,18 +189,18 @@
             }
         ]
     },
-    "last_media_album": "Untitled world",
-    "last_media_artist": "ReoNa",
-    "last_media_cover": "http://p1.music.126.net/Q84Gse18X1ix-uxN0jw85g==/109951167919629933.jpg",
+    "last_media_album": "Falling Into Feelings",
+    "last_media_artist": "Lunak",
+    "last_media_cover": "https://p1.music.126.net/X--faCIa7Ovgm-tKR9WKog==/109951173282092742.jpg",
     "last_media_isvip": true,
     "last_media_mediaMid": "",
-    "last_media_name": "Untitled world",
+    "last_media_name": "Falling Into Feelings",
     "last_media_nativeId": "0",
     "last_media_provider": "",
     "last_media_providerId": "",
-    "last_media_songid": 1455699833,
-    "last_media_timesize": "247",
-    "last_used_file": "http://m801.music.126.net/20261118105633/5f250128f6163c89a3b13e864dd51061/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/32069521340/aa1d/5183/807d/395b5157eb630f1518bf07ad4cf3b0e1.mp3?vuutv=JQFLVccauSr5sGgRBE6DNSVQUpoVFJQhLiNRNCaU4nWJEmKWBOAWcMvFShvRDfldlxc++E51dIJDfilNpz1P+hNs0xDakY/nVkd4B34UHDg=",
+    "last_media_songid": 3386346120,
+    "last_media_timesize": "134",
+    "last_used_file": "http://m701.music.126.net/20261118183708/1222a497317eda6fb4d7ba60dfa6166a/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/80469001489/45f5/efee/c3b1/aa93674eb6db856a7a1e63eefa36e3a9.mp3?vuutv=Yld+///yxyQ/oeaTjbRfz4W6Oi9YrowRwvW3TeeTGkzoALcDhsBGz8iP+MN/nA3LJDtBvWRCzWPU3CqZWC1NwbLDS5YMrj1R7bvwRncrqjI=",
     "last_used_file_isvip": true,
     "live": {
         "audio_enabled": true,
@@ -259,7 +259,7 @@
     "schemaVersion": 2,
     "screen_capture": {
         "debug_log": false,
-        "draw_mouse": true,
+        "draw_mouse": false,
         "fps": 120,
         "output_index": 0
     },
@@ -272,21 +272,21 @@
         "history": [
             {
                 "completed": false,
+                "durationMs": 579883,
+                "lastOpenedAt": "2026-11-18T04:53:29.078Z",
+                "mediaKind": "local",
+                "positionMs": 21594,
+                "target": "C:/Users/funny/QtProject.doc/MediaTestSrc/4K极致_8K__120fps_带来全球最美的_HDR.mp4",
+                "title": "4K极致_8K__120fps_带来全球最美的_HDR.mp4"
+            },
+            {
+                "completed": false,
                 "durationMs": 130261,
                 "lastOpenedAt": "2026-11-18T02:17:52.103Z",
                 "mediaKind": "local",
                 "positionMs": 103637,
                 "target": "C:/Users/funny/Videos/Oran7-20261118-101525-lGcDrT.mp4",
                 "title": "Oran7-20261118-101525-lGcDrT.mp4"
-            },
-            {
-                "completed": false,
-                "durationMs": 579883,
-                "lastOpenedAt": "2026-11-17T04:56:04.754Z",
-                "mediaKind": "local",
-                "positionMs": 12631,
-                "target": "C:/Users/funny/QtProject.doc/MediaTestSrc/4K极致_8K__120fps_带来全球最美的_HDR.mp4",
-                "title": "4K极致_8K__120fps_带来全球最美的_HDR.mp4"
             },
             {
                 "completed": false,
@@ -300,12 +300,12 @@
         ]
     },
     "window": {
-        "height": 635,
+        "height": 821,
         "maximized": false,
         "position": {
-            "x": 484,
-            "y": 308
+            "x": 77,
+            "y": 727
         },
-        "width": 1183
+        "width": 1515
     }
 }

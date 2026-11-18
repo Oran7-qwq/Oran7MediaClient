@@ -6,9 +6,6 @@
 #include <QJsonObject>
 #include <QStringList>
 
-#include "Oran7GlobalHelper.h"
-class Oran7Theme;
-
 /**
  * @brief Oran7ThemeProfileManager - 主题配置文件管理器
  *
@@ -37,15 +34,10 @@ public:
     QString themeProfilesDir() const;
 
     /**
-     * @brief 确保主题目录存在，不存在则创建
-     */
-    void ensureThemeProfilesDir();
-
-    /**
      * @brief 首次运行时初始化默认主题
      *        创建空差量 profile，不复制源主题
      */
-    void initializeDefaultTheme(Oran7Theme *q);
+    void initializeDefaultTheme();
 
     /**
      * @brief 加载指定主题配置
@@ -61,7 +53,8 @@ public:
      * @param theme 主题配置 JSON 对象
      * @return 保存成功返回 true
      */
-    bool saveThemeProfile(const QString& profileName, const QJsonObject& theme);
+    bool saveThemeProfile(const QString& profileName, const QJsonObject& theme,
+                          const QJsonObject* defaults = nullptr, QJsonObject* saved = nullptr);
 
     /**
      * @brief 获取所有可用的主题配置列表

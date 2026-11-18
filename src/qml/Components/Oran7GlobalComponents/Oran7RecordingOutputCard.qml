@@ -17,6 +17,7 @@ Rectangle {
     property color textColor: "#e7edf5"
     property color mutedTextColor: "#a3afbf"
     property color surfaceColor: "#161e29"
+    property color actionColor: root.surfaceColor
     property color hoverColor: "#2b394c"
     property color borderColor: "#334154"
     property color errorColor: "#ed8795"
@@ -27,7 +28,10 @@ Rectangle {
     implicitHeight: 96
     gradient: Gradient {
         orientation: Gradient.Horizontal
-        GradientStop { position: 0; color: Qt.tint(root.surfaceColor, Qt.rgba(root.accentColor.r,root.accentColor.g,root.accentColor.b,root.busy ? 0.16 : 0.06)) }
+        GradientStop {
+            position: 0
+            color: Qt.tint(root.surfaceColor, Qt.alpha(root.accentColor, root.busy ? 0.16 : root.violetSkin ? 0.06 : 0))
+        }
         GradientStop { position: 1; color: root.surfaceColor }
     }
     radius: 8
@@ -46,7 +50,7 @@ Rectangle {
         Oran7StudioMotif {
             visible: !root.violetSkin
             width: 100; height: 100; x: parent.width - 82; y: -16
-            ink: root.accentColor; opacity: root.busy ? 0.13 : 0.06
+            ink: root.accentColor; opacity: root.busy ? 0.10 : 0.025
             energized: root.busy; signalColor: root.accentColor
         }
     }
@@ -61,7 +65,8 @@ Rectangle {
             }
             Label {
                 text: root.live ? "LIVE" : "REC"; font.pixelSize: 10; font.bold: true
-                color: root.violetSkin && root.busy ? "#ffffff" : root.paperInkColor; leftPadding: 5; rightPadding: 5; topPadding: 1; bottomPadding: 1
+                color: root.busy ? (root.violetSkin ? "#ffffff" : root.surfaceColor) : root.paperInkColor
+                leftPadding: 5; rightPadding: 5; topPadding: 1; bottomPadding: 1
                 background: Rectangle { radius: 3; color: root.busy ? root.accentColor : root.paperColor }
             }
             Label { Layout.fillWidth: true; Layout.minimumWidth: 0; text: root.live ? qsTranslate("Oran7Ui", "直播推流") : qsTranslate("Oran7Ui", "本地录制"); font.pixelSize: 12; font.bold: true; color: root.textColor; elide: Text.ElideRight }
@@ -92,8 +97,11 @@ Rectangle {
                 polished: root.violetSkin
                 objectName: root.live ? "startLiveStreaming" : "startLocalRecording"
                 Layout.fillWidth: true; Layout.minimumWidth: 0
-                implicitHeight: 30; font.pixelSize: 12; cornerRadius: 5; primary: true
-                accentColor: root.accentColor; textColor: root.textColor; surfaceColor: root.surfaceColor; hoverColor: root.hoverColor; borderColor: root.borderColor
+                implicitHeight: 30; font.pixelSize: 12; font.bold: true; cornerRadius: 5
+                primary: root.violetSkin
+                destructive: !root.violetSkin && root.live && root.busy
+                accentColor: root.accentColor; textColor: root.textColor; dangerColor: root.errorColor
+                surfaceColor: root.actionColor; hoverColor: root.hoverColor; borderColor: root.borderColor
                 text: root.live ? (root.busy ? (root.sessionState === "Stopping" ? qsTranslate("Oran7Ui", "正在停止推流…") : root.sessionState === "Connecting" ? qsTranslate("Oran7Ui", "取消连接") : qsTranslate("Oran7Ui", "停止推流")) : qsTranslate("Oran7Ui", "开始推流"))
                     : root.sessionState === "Preparing" ? qsTranslate("Oran7Ui", "正在准备…") : qsTranslate("Oran7Ui", "开始录制")
                 enabled: root.live ? root.session && (root.busy ? root.sessionState !== "Stopping" : root.controller.previewBusy !== true && !root.pageState.applying && !(root.controller.recordingBusy && Number(root.pageState.outputSaved.mode) !== 0)) : !root.pageState.outputBusy

@@ -2,17 +2,18 @@
 #include "Oran7Theme_p.h"
 #include "Oran7ThemeEvaluator_p.h"
 #include "Oran7ThemeProfileManager.h"
+#include "Oran7ThemeProfile.h"
 #include "Oran7AppConfigManager.h"
-#include <QFile>
-#include <QFileInfo>
-#include <QJsonDocument>
 #include <QGuiApplication>
 #include <QStyleHints>
 #include <QQmlEngine>
+#include <algorithm>
 
 Oran7Theme* Oran7Theme::s_instance = nullptr;
 namespace
 {
+using namespace Oran7ThemeProfile;
+
 bool sameValues(const QVariantMap& a, const QVariantMap& b)
 {
     if (a.size() != b.size())
@@ -25,72 +26,143 @@ bool sameValues(const QVariantMap& a, const QVariantMap& b)
     }
     return true;
 }
-QJsonObject readObject(const QString& path)
+QVariantMap evaluateSource(const Oran7ThemeSource& source, QVariantMap raw, const QVariantMap& inherited, bool dark,
+                          const QVariantMap& defaults = {}, bool* valid = nullptr,
+                          const QString& editedKey = {})
 {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return {};
-    const auto doc = QJsonDocument::fromJson(file.readAll());
-    return doc.isObject() ? doc.object() : QJsonObject();
-}
-QJsonObject readSource(const QString& path)
-{
-    auto result = readObject(path);
-    if (result.isEmpty())
-        result = readObject(Oran7GlobalHelper::getConfigDir() + "/themeJson/" + QFileInfo(path).fileName());
-    return result;
-}
-void merge(QJsonObject& target, const QJsonObject& source)
-{
-    for (auto it = source.begin(); it != source.end(); ++it)
+    if (!source.versioned)
+        return Oran7ThemeEvaluator(std::move(raw), inherited, dark, defaults).evaluate();
+
+    const auto report = [&](const QString& key, const QString& reason)
     {
-        if (it->isObject() && target.value(it.key()).isObject())
+        if (valid && (editedKey.isEmpty() || source.affects(editedKey, key)))
+            *valid = false;
+        qWarning().noquote() << "主题源" << source.fieldFile(key) << "/" << (source.name.isEmpty() ? "Primary" : source.name)
+                             << "/" << source.fieldLocation(key, dark) << "：" << reason
+                             << (defaults.contains(key) ? "，使用默认值" : "，跳过该值");
+    };
+    for (auto it = raw.begin(); it != raw.end();)
+    {
+        if (!source.hasField(it.key()))
         {
-            auto child = target.value(it.key()).toObject();
-            merge(child, it->toObject());
-            target[it.key()] = child;
+            report(it.key(), QStringLiteral("未知字段"));
+            it = raw.erase(it);
         }
         else
-            target[it.key()] = it.value();
+            ++it;
     }
+    return Oran7ThemeEvaluator(std::move(raw), inherited, dark, defaults,
+        [&](const QString& key, const QVariant& value)
+        {
+            if (source.accepts(key, value))
+                return true;
+            report(key, value.isValid() ? QStringLiteral("类型错误或超出范围")
+                                        : QStringLiteral("引用或表达式无效"));
+            return false;
+        }).evaluate();
 }
-QVariantMap tokens(const QJsonObject& object)
+
+bool validDefaults(const Oran7ThemeSource& source, const QVariantMap& inherited, bool dark,
+                   QVariantMap* values = nullptr)
 {
-    auto result = object.value("__init__").toObject()["__vars__"].toObject().toVariantMap();
-    const auto style = object.value("__style__").toObject().toVariantMap();
-    for (auto it = style.begin(); it != style.end(); ++it)
-        result[it.key()] = it.value();
-    return result;
+    bool valid = true;
+    auto raw = source.raw(dark);
+    if (source.versioned)
+        for (auto field = source.fields.cbegin(); field != source.fields.cend(); ++field)
+            if (field->required && !raw.contains(field.key()))
+            {
+                qWarning().noquote() << "主题源" << source.fieldFile(field.key()) << "/" << source.name << "/"
+                                     << source.fieldLocation(field.key(), dark)
+                                     << "：缺少模式默认值，保留已发布主题";
+                valid = false;
+            }
+    auto evaluated = evaluateSource(source, std::move(raw), inherited, dark, {}, &valid);
+    if (values)
+        *values = std::move(evaluated);
+    return valid;
 }
-void putToken(QJsonObject& object, const QString& token, const QVariant& value)
+
+bool validBundle(const Oran7ThemeSources& sources)
 {
-    auto init = object.value("__init__").toObject();
-    auto vars = init.value("__vars__").toObject();
-    if (vars.contains(token))
+    if (!sources.primary.versioned &&
+        std::none_of(sources.components.cbegin(), sources.components.cend(),
+                     [](const auto& component) { return component.versioned; }))
+        return true;
+    for (bool dark : {false, true})
     {
-        vars[token] = QJsonValue::fromVariant(value);
-        init["__vars__"] = vars;
-        object["__init__"] = init;
-        // 旧全量主题可能在样式区留下同名值；它会覆盖新变量并阻止生成色板。
-        auto style = object.value("__style__").toObject();
-        style.remove(token);
-        object["__style__"] = style;
+        QVariantMap primary;
+        if (!validDefaults(sources.primary, {}, dark, &primary))
+            return false;
+        for (const auto& component : sources.components)
+            if (component.versioned && !validDefaults(component, primary, dark))
+                return false;
     }
-    else
+    return true;
+}
+bool validEdit(const Oran7ThemeSource& source, const Oran7ThemeSource& primary, const QJsonObject& profile,
+               const QJsonObject& overrides, const QString& key)
+{
+    if (!source.hasField(key))
     {
-        auto style = object.value("__style__").toObject();
-        style[token] = QJsonValue::fromVariant(value);
-        object["__style__"] = style;
+        qWarning().noquote() << "主题源" << source.path << "/" << source.name << "/" << key << "：未知字段，未保存";
+        return false;
     }
+    if (!source.versioned)
+        return true;
+    auto candidate = overrides;
+    auto canonical = key;
+    if (explicitMode(source.name, canonical).isEmpty())
+        // 通用值可能同时被两个模式覆盖。验证时直接检查本次写入的这一层。
+        for (bool dark : {false, true})
+        {
+            const auto mode = modeName(dark);
+            auto tokens = layer(candidate, mode);
+            tokens.remove(canonical);
+            setLayer(candidate, mode, tokens);
+        }
+    for (bool dark : {false, true})
+    {
+        const auto globals = source.name.isEmpty() ? QVariantMap{}
+            : evaluateSource(primary, primary.raw(dark, profile.value("__primary__").toObject()), {}, dark);
+        bool valid = true;
+        evaluateSource(source, source.raw(dark, candidate), globals, dark, {}, &valid, key);
+        if (!valid)
+            return false;
+    }
+    return true;
+}
+bool putToken(QJsonObject& group, const QString& component, QString token, const QVariant& input)
+{
+    const auto value = QJsonValue::fromVariant(input);
+    if ((!value.isBool() && !value.isDouble() && !value.isString()) || token.startsWith("__"))
+        return false;
+    const auto mode = explicitMode(component, token);
+    auto tokens = layer(group, mode);
+    tokens[token] = value;
+    setLayer(group, mode, tokens);
+    return true;
+}
+void clearComponentPreview(QVariantMap& preview, const QString& component, QString token, const QStringList& modes)
+{
+    preview.remove(token);
+    if (!explicitMode(component, token).isEmpty())
+        return;
+    if (component == "Oran7MusicPlaylistView")
+        for (const auto& alias : PlaylistAliases)
+            if (token == QLatin1String(alias.key))
+            {
+                if (modes.contains(modeName(false)))
+                    preview.remove(QLatin1String(alias.light));
+                if (modes.contains(modeName(true)))
+                    preview.remove(QLatin1String(alias.dark));
+                break;
+            }
 }
 Oran7Theme::DarkMode profileMode(const QJsonObject& profile)
 {
-    if (profile.contains("darkMode"))
-    {
-        const int mode = profile.value("darkMode").toInt(-1);
-        if (mode >= 0 && mode <= 2)
-            return static_cast<Oran7Theme::DarkMode>(mode);
-    }
+    const int mode = profile.value("__globals__").toObject().value("darkMode").toInt(-1);
+    if (mode >= 0 && mode <= 2)
+        return static_cast<Oran7Theme::DarkMode>(mode);
     return Oran7Theme::Dark;
 }
 } // namespace
@@ -116,63 +188,32 @@ void Oran7ThemePrivate::rebuild(const QString& component)
     Q_Q(Oran7Theme);
     QStringList changed;
     bool primaryChanged = false;
+    const bool dark = q->isDark();
     if (component.isEmpty())
     {
-        auto effective = index;
-        auto overrides = profile;
-        overrides.remove("__component__");
-        overrides.remove("profileVersion");
-        overrides.remove("darkMode");
-        merge(effective, overrides);
-        auto raw = tokens(effective);
-        const auto base = effective.value("__init__").toObject()["__base__"].toObject();
-        for (auto it = base.begin(); it != base.end(); ++it)
-        {
-            const auto parts = it->toString().split('|');
-            if (parts.size() == 2)
-                raw[it.key()] = parts[q->isDark() ? 1 : 0];
-            else
-                qWarning() << "主题基础色格式无效:" << it.key();
-        }
-        for (auto it = transientGlobal.begin(); it != transientGlobal.end(); ++it)
-            raw[it.key()] = it.value();
-        auto defaultRaw = tokens(index);
-        const auto defaultBase = index.value("__init__").toObject()["__base__"].toObject();
-        for (auto it = defaultBase.begin(); it != defaultBase.end(); ++it)
-        {
-            const auto parts = it->toString().split('|');
-            if (parts.size() == 2)
-                defaultRaw[it.key()] = parts[q->isDark() ? 1 : 0];
-        }
-        const auto defaults = Oran7ThemeEvaluator(defaultRaw, {}, q->isDark()).evaluate();
-        primary = Oran7ThemeEvaluator(raw, {}, q->isDark(), defaults).evaluate();
+        const auto& source = sources.primary;
+        const auto defaults = evaluateSource(source, source.raw(dark), {}, dark);
+        primary = evaluateSource(source, source.raw(dark, profile.value("__primary__").toObject(), globalPreview(dark)),
+                                 {}, dark, defaults);
         primaryChanged = !sameValues(primary, q->m_Primary);
         if (primaryChanged)
             q->m_Primary = primary;
     }
-    const auto refs = index.value("__component__").toObject();
     const auto overrides = profile.value("__component__").toObject();
     for (auto it = groups.begin(); it != groups.end(); ++it)
     {
         const auto name = it.key();
         if (!component.isEmpty() && component != name)
             continue;
-        auto source = readSource(refs[name].toString());
-        if (source.isEmpty())
-        {
-            qWarning() << "主题组件资源无效:" << name;
+        const auto source = sources.components.constFind(name);
+        if (source == sources.components.cend())
             continue;
-        }
-        const auto defaults = Oran7ThemeEvaluator(tokens(source), primary, q->isDark()).evaluate();
-        merge(source, overrides[name].toObject());
-        auto raw = tokens(source);
-        const auto temporary = transient.value(name);
-        for (auto t = temporary.begin(); t != temporary.end(); ++t)
-            raw[t.key()] = t.value();
-        auto result = Oran7ThemeEvaluator(raw, primary, q->isDark(), defaults).evaluate();
+        const auto defaults = evaluateSource(*source, source->raw(dark), primary, dark);
+        auto result = evaluateSource(*source, source->raw(dark, overrides[name].toObject(), transient.value(name)),
+                                     primary, dark, defaults);
         // 旧读取接口只作派生别名，深色状态只由 darkMode 决定。
         if (name == "Oran7MainGUI")
-            result["isDarkMode"] = q->isDark();
+            result["isDarkMode"] = dark;
         if (!sameValues(*it->values, result))
         {
             *it->values = std::move(result);
@@ -182,16 +223,35 @@ void Oran7ThemePrivate::rebuild(const QString& component)
     // 所有结果先提交，再通知；绑定不会读到前后两套主题的混合快照。
     if (primaryChanged)
         emit q->PrimaryChanged();
-    for (const auto& name : changed)
+    for (const auto& name : std::as_const(changed))
         groups[name].notify();
 }
 
 bool Oran7ThemePrivate::saveProfile(const QJsonObject& value)
 {
-    if (!Oran7ThemeProfileManager::instance().saveThemeProfile(m_currentThemeProfile, value))
-        return false;
-    profile = Oran7ThemeProfileManager::instance().loadThemeProfile(m_currentThemeProfile);
-    return true;
+    QJsonObject components;
+    for (auto it = sources.components.cbegin(); it != sources.components.cend(); ++it)
+        components[it.key()] = it->profileDefaults();
+    const QJsonObject defaults{{"__primary__", sources.primary.profileDefaults()}, {"__component__", components}};
+    if (profiles.saveThemeProfile(m_currentThemeProfile, value, &defaults, &profile))
+        return true;
+    qWarning() << "主题 profile 保存失败，保留当前设置:" << m_currentThemeProfile;
+    return false;
+}
+
+QVariantMap Oran7ThemePrivate::globalPreview(bool dark) const
+{
+    auto preview = transientBaseColors.value(dark);
+    for (auto it = transientGlobal.cbegin(); it != transientGlobal.cend(); ++it)
+        preview[it.key()] = it.value();
+    return preview;
+}
+
+void Oran7ThemePrivate::clearPreview()
+{
+    transient.clear();
+    transientGlobal.clear();
+    transientBaseColors.clear();
 }
 void Oran7ThemePrivate::refreshDark(bool oldDark, Oran7Theme::DarkMode oldMode)
 {
@@ -204,11 +264,17 @@ void Oran7ThemePrivate::refreshDark(bool oldDark, Oran7Theme::DarkMode oldMode)
         emit q->darkModeChanged();
 }
 
-Oran7Theme::Oran7Theme(QObject* parent) : QObject(parent), d_ptr(new Oran7ThemePrivate(this))
+Oran7Theme::Oran7Theme(QObject* parent)
+    : Oran7Theme(Oran7ThemeProfileManager::instance(), Oran7AppConfigManager::ins(), parent)
+{
+}
+
+Oran7Theme::Oran7Theme(Oran7ThemeProfileManager& profiles, Oran7AppConfigManager& appConfig, QObject* parent)
+    : QObject(parent), d_ptr(new Oran7ThemePrivate(this, profiles, appConfig))
 {
     Q_D(Oran7Theme);
     d->initializeComponentPropertyHash();
-    d->m_currentThemeProfile = Oran7AppConfigManager::ins().snapshot().appearance.themeProfile;
+    d->m_currentThemeProfile = appConfig.snapshot().appearance.themeProfile;
     connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this,
             [this](Qt::ColorScheme scheme)
             {
@@ -254,7 +320,9 @@ void Oran7Theme::setDarkMode(DarkMode mode)
     if (mode < Light || mode > System || d->m_darkMode == mode)
         return;
     auto value = d->profile;
-    value["darkMode"] = int(mode);
+    auto globals = value.value("__globals__").toObject();
+    globals["darkMode"] = int(mode);
+    value["__globals__"] = globals;
     if (!d->saveProfile(value))
         return;
     const bool oldDark = isDark();
@@ -283,44 +351,64 @@ QString Oran7Theme::currentThemeProfile() const
 }
 QStringList Oran7Theme::availableThemeProfiles() const
 {
-    return Oran7ThemeProfileManager::instance().getAvailableThemeProfiles();
+    Q_D(const Oran7Theme);
+    return d->profiles.getAvailableThemeProfiles();
 }
+void Oran7ThemePrivate::reload(const QString& path)
+{
+    auto next = Oran7ThemeSources::read(path, groups.keys());
+    if (!next || !validBundle(*next))
+    {
+        qWarning() << "主题清单无效，保留当前主题:" << path;
+        return;
+    }
+    profiles.initializeDefaultTheme();
+    auto nextProfile = profiles.loadThemeProfile(m_currentThemeProfile);
+    if (nextProfile.isEmpty())
+        nextProfile = profile.isEmpty() ? QJsonObject{{"__profileVersion__", 3}} : profile;
+    applySources(std::move(*next), path, std::move(nextProfile));
+}
+
+void Oran7ThemePrivate::applySources(Oran7ThemeSources next, const QString& path, QJsonObject nextProfile)
+{
+    Q_Q(Oran7Theme);
+    const bool oldDark = q->isDark();
+    const auto oldMode = m_darkMode;
+    sources = std::move(next);
+    indexPath = path;
+    clearPreview();
+    profile = std::move(nextProfile);
+    m_darkMode = profileMode(profile);
+    refreshDark(oldDark, oldMode);
+}
+
 void Oran7Theme::reloadTheme()
 {
     Q_D(Oran7Theme);
-    auto source = readSource(d->themIndexJsonPath);
-    if (source.isEmpty())
-    {
-        qWarning() << "无法加载主题 Index";
-        return;
-    }
-    const bool oldDark = isDark();
-    const auto oldMode = d->m_darkMode;
-    d->index = source;
-    d->transient.clear();
-    d->transientGlobal.clear();
-    auto& profiles = Oran7ThemeProfileManager::instance();
-    profiles.initializeDefaultTheme(this);
-    d->profile = profiles.loadThemeProfile(d->m_currentThemeProfile);
-    d->m_darkMode = profileMode(d->profile);
-    d->refreshDark(oldDark, oldMode);
+    d->reload(d->indexPath);
 }
 void Oran7Theme::setCurrentThemeProfile(const QString& name)
 {
     Q_D(Oran7Theme);
-    if (name == d->m_currentThemeProfile || !Oran7ThemeProfileManager::instance().isThemeProfileReadable(name))
+    if (name == d->m_currentThemeProfile)
         return;
-    auto saved = Oran7AppConfigManager::ins().snapshot();
+    auto next = Oran7ThemeSources::read(d->indexPath, d->groups.keys());
+    if (!next || !validBundle(*next))
+        return;
+    auto nextProfile = d->profiles.loadThemeProfile(name);
+    if (nextProfile.isEmpty())
+        return;
+    const auto previous = d->appConfig.snapshot();
+    auto saved = previous;
     saved.appearance.themeProfile = name;
-    const auto previous = Oran7AppConfigManager::ins().snapshot();
-    Oran7AppConfigManager::ins().updateConfig(saved);
-    if (!Oran7AppConfigManager::ins().saveConfig())
+    d->appConfig.updateConfig(saved);
+    if (!d->appConfig.saveConfig())
     {
-        Oran7AppConfigManager::ins().updateConfig(previous);
+        d->appConfig.updateConfig(previous);
         return;
     }
     d->m_currentThemeProfile = name;
-    reloadTheme();
+    d->applySources(std::move(*next), d->indexPath, std::move(nextProfile));
     emit currentThemeProfileChanged();
 }
 void Oran7Theme::installComponentToken(const QString& component, const QString& token, const QVariant& value)
@@ -344,31 +432,19 @@ void Oran7Theme::saveComponentToken(const QString& component, const QString& tok
         setDarkMode(value.toBool() ? Dark : Light);
         return;
     }
-    if (!d->groups.contains(component))
+    const auto source = d->sources.components.constFind(component);
+    if (source == d->sources.components.cend())
         return;
     auto profile = d->profile;
     auto components = profile.value("__component__").toObject();
-    auto source = readSource(d->index.value("__component__").toObject()[component].toString());
-    auto object = components[component].toObject();
-    // 使用默认结构判断变量区，profile 不复制整份组件。
-    if (source.value("__init__").toObject()["__vars__"].toObject().contains(token))
-    {
-        auto init = object.value("__init__").toObject();
-        auto vars = init.value("__vars__").toObject();
-        vars[token] = QJsonValue::fromVariant(value);
-        init["__vars__"] = vars;
-        object["__init__"] = init;
-        auto style = object.value("__style__").toObject();
-        style.remove(token);
-        object["__style__"] = style;
-    }
-    else
-        putToken(object, token, value);
-    components[component] = object;
+    auto group = components.value(component).toObject();
+    if (!putToken(group, component, token, value))
+        return;
+    components[component] = group;
     profile["__component__"] = components;
-    if (d->saveProfile(profile))
+    if (validEdit(*source, d->sources.primary, profile, group, token) && d->saveProfile(profile))
     {
-        d->transient[component].remove(token);
+        clearComponentPreview(d->transient[component], component, token, {modeName(false), modeName(true)});
         d->rebuild(component);
     }
 }
@@ -381,42 +457,43 @@ void Oran7Theme::installIndexToken(const QString& token, const QString& value)
 void Oran7Theme::saveIndexToken(const QString& token, const QVariant& value)
 {
     Q_D(Oran7Theme);
-    auto object = d->profile;
-    if (d->index.value("__init__").toObject()["__vars__"].toObject().contains(token))
-    {
-        auto init = object.value("__init__").toObject();
-        auto vars = init.value("__vars__").toObject();
-        vars[token] = QJsonValue::fromVariant(value);
-        init["__vars__"] = vars;
-        object["__init__"] = init;
-    }
-    else
-        putToken(object, token, value);
-    if (d->saveProfile(object))
+    auto valueToSave = d->profile;
+    auto group = valueToSave.value("__primary__").toObject();
+    if (!putToken(group, {}, token, value))
+        return;
+    valueToSave["__primary__"] = group;
+    if (validEdit(d->sources.primary, d->sources.primary, valueToSave, group, token) &&
+        d->saveProfile(valueToSave))
     {
         d->transientGlobal.remove(token);
+        for (auto& mode : d->transientBaseColors)
+            mode.remove(token);
         d->rebuild();
     }
+}
+
+namespace
+{
+void installBaseColors(Oran7ThemePrivate& theme, const QString& key, const QString& colors)
+{
+    const auto pair = colors.split('|');
+    if (pair.size() != 2 || !QColor(pair[0]).isValid() || !QColor(pair[1]).isValid())
+        return;
+    theme.transientBaseColors[false][key] = pair[0];
+    theme.transientBaseColors[true][key] = pair[1];
+    theme.transientGlobal.remove(key);
+    theme.rebuild();
+}
 }
 void Oran7Theme::installThemeColorTextBase(const QString& colors)
 {
     Q_D(Oran7Theme);
-    auto init = d->index.value("__init__").toObject();
-    auto base = init.value("__base__").toObject();
-    base["colorTextBase"] = colors;
-    init["__base__"] = base;
-    d->index["__init__"] = init;
-    d->rebuild();
+    installBaseColors(*d, "colorTextBase", colors);
 }
 void Oran7Theme::installThemeColorBgBase(const QString& colors)
 {
     Q_D(Oran7Theme);
-    auto init = d->index.value("__init__").toObject();
-    auto base = init.value("__base__").toObject();
-    base["colorBgBase"] = colors;
-    init["__base__"] = base;
-    d->index["__init__"] = init;
-    d->rebuild();
+    installBaseColors(*d, "colorBgBase", colors);
 }
 void Oran7Theme::installThemePrimaryColorBase(const QColor& color)
 {
@@ -449,32 +526,32 @@ void Oran7Theme::installThemeComponentColorBase(const QString& component, const 
 void Oran7Theme::installIndexTheme(const QString& path)
 {
     Q_D(Oran7Theme);
-    const auto next = path.isEmpty() ? QString(":/config/themeJson/Index.json") : path;
-    if (next != d->themIndexJsonPath)
-    {
-        d->themIndexJsonPath = next;
-        reloadTheme();
-    }
+    const auto next = path.isEmpty() ? QString(Oran7ThemeSources::DefaultIndex) : path;
+    if (next != d->indexPath)
+        d->reload(next);
 }
 void Oran7Theme::installComponentTheme(const QString& component, const QString& path)
 {
     Q_D(Oran7Theme);
-    if (!d->groups.contains(component) || readSource(path).isEmpty())
+    if (!d->groups.contains(component))
         return;
-    auto refs = d->index.value("__component__").toObject();
-    refs[component] = path;
-    d->index["__component__"] = refs;
+    auto source = Oran7ThemeSources::readComponent(path, component);
+    if (!source)
+        return;
+    if (source->versioned)
+        for (bool dark : {false, true})
+        {
+            const auto& primary = d->sources.primary;
+            const auto globals = evaluateSource(primary, primary.raw(dark, d->profile.value("__primary__").toObject(), d->globalPreview(dark)), {}, dark);
+            if (!validDefaults(*source, globals, dark))
+                return;
+        }
+    d->sources.components.insert(component, std::move(*source));
     d->rebuild(component);
 }
 bool Oran7Theme::createThemeProfile(const QString& name, const QString& source)
 {
-    auto& p = Oran7ThemeProfileManager::instance();
-    if (availableThemeProfiles().contains(name) || !availableThemeProfiles().contains(source))
-        return false;
-    const bool ok = p.saveThemeProfile(name, p.loadThemeProfile(source));
-    if (ok)
-        emit availableThemeProfilesChanged();
-    return ok;
+    return duplicateThemeProfile(source, name);
 }
 bool Oran7Theme::deleteThemeProfile(const QString& name)
 {
@@ -487,25 +564,28 @@ bool Oran7Theme::deleteThemeProfile(const QString& name)
         if (name == d->m_currentThemeProfile)
             return false;
     }
-    if (!Oran7ThemeProfileManager::instance().deleteThemeProfile(name))
+    if (!d->profiles.deleteThemeProfile(name))
         return false;
     emit availableThemeProfilesChanged();
     return true;
 }
 bool Oran7Theme::duplicateThemeProfile(const QString& source, const QString& name)
 {
-    const bool ok = Oran7ThemeProfileManager::instance().duplicateThemeProfile(source, name);
+    Q_D(Oran7Theme);
+    const bool ok = d->profiles.duplicateThemeProfile(source, name);
     if (ok)
         emit availableThemeProfilesChanged();
     return ok;
 }
 bool Oran7Theme::exportThemeProfile(const QString& name, const QString& path)
 {
-    return Oran7ThemeProfileManager::instance().exportThemeProfile(name, path);
+    Q_D(Oran7Theme);
+    return d->profiles.exportThemeProfile(name, path);
 }
 QString Oran7Theme::importThemeProfile(const QString& path, const QString& name)
 {
-    const auto result = Oran7ThemeProfileManager::instance().importThemeProfile(path, name);
+    Q_D(Oran7Theme);
+    const auto result = d->profiles.importThemeProfile(path, name);
     if (!result.isEmpty())
         emit availableThemeProfilesChanged();
     return result;
@@ -513,6 +593,106 @@ QString Oran7Theme::importThemeProfile(const QString& path, const QString& name)
 void Oran7Theme::resetToDefaultTheme()
 {
     Q_D(Oran7Theme);
-    if (d->saveProfile({}))
-        reloadTheme();
+    if (!d->saveProfile(QJsonObject{{"__profileVersion__", 3}}))
+        return;
+    const bool oldDark = isDark();
+    const auto oldMode = d->m_darkMode;
+    d->clearPreview();
+    d->m_darkMode = profileMode(d->profile);
+    d->refreshDark(oldDark, oldMode);
+}
+
+bool Oran7ThemePrivate::resetGroup(const QString& component, QString token, bool currentModeOnly)
+{
+    Q_Q(Oran7Theme);
+    const auto local = sources.components.constFind(component);
+    if (!component.isEmpty() && local == sources.components.cend())
+        return false;
+    const auto& source = component.isEmpty() ? sources.primary : *local;
+    if (!token.isEmpty() && !source.hasField(token))
+        return false;
+    const auto originalToken = token;
+    auto next = profile;
+    auto components = next.value("__component__").toObject();
+    auto group = component.isEmpty() ? next.value("__primary__").toObject() : components.value(component).toObject();
+    const auto explicitLayer = explicitMode(component, token);
+    const auto modes = !explicitLayer.isEmpty() ? QStringList{explicitLayer}
+        : currentModeOnly ? QStringList{modeName(q->isDark())}
+                          : QStringList{QString{}, modeName(false), modeName(true)};
+    for (const auto& mode : modes)
+    {
+        auto tokens = layer(group, mode);
+        if (token.isEmpty())
+        {
+            for (auto it = tokens.begin(); it != tokens.end();)
+            {
+                if (source.hasField(it.key()))
+                    it = tokens.erase(it);
+                else
+                    ++it;
+            }
+        }
+        else
+            tokens.remove(token);
+        setLayer(group, mode, tokens);
+    }
+    if (component.isEmpty())
+        next["__primary__"] = group;
+    else
+    {
+        components[component] = group;
+        next["__component__"] = components;
+    }
+    if (!saveProfile(next))
+        return false;
+
+    if (component.isEmpty())
+    {
+        transientGlobal.remove(token);
+        if (!currentModeOnly)
+            transientBaseColors[!q->isDark()].remove(token);
+        transientBaseColors[q->isDark()].remove(token);
+    }
+    else if (token.isEmpty())
+        transient.remove(component);
+    else
+        clearComponentPreview(transient[component], component, originalToken, modes);
+    rebuild(component);
+    return true;
+}
+
+bool Oran7Theme::resetComponentToken(const QString& component, const QString& token, bool currentModeOnly)
+{
+    Q_D(Oran7Theme);
+    if (component.isEmpty() || token.isEmpty())
+        return false;
+    if (component == "Oran7MainGUI" && token == "isDarkMode")
+    {
+        if (currentModeOnly)
+            return false;
+        auto next = d->profile;
+        auto globals = next.value("__globals__").toObject();
+        globals.remove("darkMode");
+        next["__globals__"] = globals;
+        if (!d->saveProfile(next))
+            return false;
+        const bool oldDark = isDark();
+        const auto oldMode = d->m_darkMode;
+        d->m_darkMode = profileMode(d->profile);
+        d->refreshDark(oldDark, oldMode);
+        return true;
+    }
+    return d->resetGroup(component, token, currentModeOnly);
+}
+
+bool Oran7Theme::resetComponentTheme(const QString& component, bool currentModeOnly)
+{
+    Q_D(Oran7Theme);
+    return !component.isEmpty() && d->resetGroup(component, {}, currentModeOnly);
+}
+
+bool Oran7Theme::resetIndexToken(const QString& token, bool currentModeOnly)
+{
+    Q_D(Oran7Theme);
+    return !token.isEmpty() && d->resetGroup({}, token, currentModeOnly);
 }

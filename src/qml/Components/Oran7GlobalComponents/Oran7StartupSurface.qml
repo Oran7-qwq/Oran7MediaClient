@@ -10,47 +10,84 @@ Rectangle {
     property string errorText: ""
     property bool failed: false
     property bool animate: true
-    property color accentColor: "#beb7ff"
-    property color backgroundColor: "#1c1f29"
+    property color accentColor: "#6979bc"
+    property color backgroundColor: "#fafbfe"
     property string fontFamily: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
     signal cancelRequested()
     implicitWidth: 460
     implicitHeight: 300
     radius: 22
     color: backgroundColor
-    border.color: "#343949"
-    Rectangle { x: 32; y: 0; width: 56; height: 3; radius: 1; color: root.accentColor }
+    border.color: "#dfe4ed"
+
+    // 品牌区与状态区分开，保持启动画面轻量。
+    Row {
+        x: 32; y: 29; spacing: 8
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: 6; height: 6; radius: 3
+            color: root.accentColor
+        }
+        Text {
+            text: "ORAN7 / MEDIA"
+            color: "#7b8498"
+            font.family: root.fontFamily; font.pixelSize: 10; font.letterSpacing: 1.4
+        }
+    }
     Button {
         id: closeButton
         objectName: "startupClose"
         anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 14
-        width: 28; height: 28
-        text: "×"
+        width: 30; height: 30
         Accessible.name: qsTranslate("Oran7Ui", "退出")
         onClicked: root.cancelRequested()
-        contentItem: Text { text: closeButton.text; color: "#969cad"; font.pixelSize: 21; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-        background: Rectangle { radius: 8; color: closeButton.hovered ? "#18ffffff" : "transparent"; border.color: closeButton.activeFocus ? root.accentColor : "transparent" }
+        contentItem: Item {
+            Repeater {
+                model: [45, -45]
+                Rectangle {
+                    required property int modelData
+                    anchors.centerIn: parent
+                    width: 12; height: 1.4; radius: 0.7
+                    rotation: modelData
+                    antialiasing: true
+                    color: closeButton.hovered ? "#a44956" : "#7b8498"
+                }
+            }
+        }
+        background: Rectangle {
+            radius: 9
+            color: closeButton.down ? "#f2dfe3" : closeButton.hovered ? "#f7ebee" : "transparent"
+            border.color: closeButton.activeFocus ? root.accentColor : "transparent"
+            Behavior on color { ColorAnimation { duration: 130 } }
+        }
     }
     Column {
-        x: 32; y: 44; width: parent.width - 64
-        spacing: 5
-        Text { text: "Oran柒"; color: "#f1f1f7"; font.family: "华文琥珀"; font.pixelSize: 38 }
-        Text { text: "MediaClient"; color: root.accentColor; font.family: root.fontFamily; font.pixelSize: 15; font.letterSpacing: 1.5 }
+        x: 32; y: 73; width: parent.width - 164
+        spacing: 3
+        Text { text: "Oran柒"; color: "#29334b"; font.family: "华文琥珀"; font.pixelSize: 38 }
+        Text { text: "MediaClient"; color: root.accentColor; font.family: root.fontFamily; font.pixelSize: 14; font.letterSpacing: 2 }
+    }
+    Rectangle {
+        x: 20; y: 176
+        width: parent.width - 40; height: parent.height - y - 20
+        radius: 15
+        color: root.failed ? "#fcf0f1" : "#f0f3f9"
+        border.color: root.failed ? "#f0dce0" : "#e8ecf3"
     }
     Text {
         id: status
         objectName: "startupStatus"
-        x: 32; y: 160; width: parent.width - 64
+        x: 36; y: 190; width: parent.width - 72
         text: qsTranslate("Oran7Ui", root.stageText)
-        color: root.failed ? "#f29b9b" : "#e0e3ed"
+        color: root.failed ? "#a44956" : "#35415b"
         font.family: root.fontFamily; font.pixelSize: 14
         elide: Text.ElideRight
     }
     Rectangle {
         id: track
         objectName: "startupActivityTrack"
-        x: 32; y: 195; width: parent.width - 64; height: 3; radius: 2
-        color: "#323746"
+        x: 36; y: 222; width: parent.width - 72; height: 3; radius: 2
+        color: "#dde3ef"
         clip: true
         visible: !root.failed
         property real flowPosition: 0
@@ -86,9 +123,10 @@ Rectangle {
     }
     Text {
         objectName: "startupDetail"
-        x: 32; y: 216; width: parent.width - 64; height: 60
+        x: 36; y: root.failed ? 219 : 241
+        width: parent.width - 72; height: root.failed ? 48 : 30
         text: root.failed ? qsTranslate("Oran7Ui", root.errorText) : qsTranslate("Oran7Ui", "界面就绪后自动进入")
-        color: "#9299ad"
+        color: root.failed ? "#925e67" : "#6d7890"
         font.family: root.fontFamily; font.pixelSize: 11
         wrapMode: Text.Wrap
         maximumLineCount: 3

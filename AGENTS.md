@@ -51,7 +51,7 @@ Windows-only Qt 6.7.3 (MinGW) C++17 + QML media player. Not a git repo — no co
 - Oran7RecordingWorkspace/Oran7RecordingToolbar 的样式通过自身 property 及显式传参控制，不绑定 Oran7MainUiSetting；复用设置积木时应覆盖其默认的下拉 GUI 样式参数。
 - 用户要求保留 Oran7LyricsFloatingWindow 原有的 layer + DropShadow 外围阴影及参数，不把歌词布局/防抖修改扩大到替换阴影实现。
 - All app QML is embedded via `qml.qrc` and loaded from `qrc:/main.qml`. New `.qml` files must be added to `qml.qrc` manually (no glob); same for images/sounds in `res.qrc`.
-- Theme JSONs `config/themeJson/*.json` are embedded TWICE — two `qt_add_resources` blocks in CMakeLists.txt, both under prefix `/`. They deliberately DIFFER: the `Oran7UI_Impl` block carries the full list (9 theme JSONs + `default.json`), the EXE block only a subset (Index/MainGUI/CaptionBar/ProgressSlider/MusicPlaylistView + `default.json`). Add new theme JSONs to the plugin block (and to the EXE block only if needed); `:/config/themeJson/Index.json` is loaded by `Oran7Theme::reloadTheme()` with a `../Config/themeJson/` filesystem fallback.
+- T4／T5：`Oran7UI_Impl` 统一嵌入 v1 Index、foundations、colors 和九个组件 JSON，新增字段登记 `Oran7ThemeSchema.cpp`。`Oran7Core` 单独嵌入 `legacy-profile-defaults.json` 作为无版本及 v2 迁移基准；修改新版默认值时保留旧基准。EXE 配置资源保留 `default.json`。旧自定义源仍由主题安装接口支持，音乐列表兼容色继续按列表背景亮度使用。
 - `shaders/` are compiled by `qt_add_shaders` (`video.vert/frag`, `gradientText.frag`). `bgra2rgba_*.hlsl` are raw sources for the D3D11 renderer, not compiled by CMake.
 - QML plugin output dir `Oran7UI/Impl/` (with `Oran7UI_Implplugin.dll`) is generated inside the build dir.
 
@@ -59,7 +59,7 @@ Windows-only Qt 6.7.3 (MinGW) C++17 + QML media player. Not a git repo — no co
 - Forces Direct3D11 scene graph, `QSG_RENDER_LOOP=basic`, transparent window (default alpha buffer), GL 3.3 compat surface. Changing these can break the windowless/translucent UI.
 - `QT_MEDIA_BACKEND=windows` (Media Foundation) is forced — must stay, the bundled FFmpeg DLLs clash with Qt Multimedia's ffmpeg plugin.
 - Crashes write a full-memory minidump `Oran7MediaClient_crash.dmp` next to the exe.
-- User config lives at `<exe>/../Config/config.json` (i.e. `build/Config/config.json` when run from the build dir); defaults come from embedded `:/config/default.json`. Theme profiles (`profile-*.json`) go to QStandardPaths AppDataLocation.
+- User config lives at `<exe>/../Config/config.json` (i.e. `build/Config/config.json` when run from the build dir); defaults come from embedded `:/config/default.json`. Theme profiles (`profile-*.json`) are stored in the same Config directory.
 
 ## Packaging / release
 - **`oran7_pkt.bat`** is the current packaging script (replaces the stale `package_release.bat`/`.sh`, which still point at the broken 6.7.2 kit and are NOT updated). Usage: `oran7_pkt.bat -idir <build dir> -odir <output dir>` — `-idir` defaults to `build/Desktop_Qt_6_7_3_MinGW_64_bit-Release`, `-odir` to `C:\Users\funny\Desktop\Oran7MediaClient-Release\Oran7MediaClient`. Run without args to be prompted interactively for both paths (Enter accepts the default). If a previous run recorded its dirs in `oran7_pkt.ini` (beside the script), it asks `[Y/N]` to reuse them (Enter = Y). It runs windeployqt, copies MinGW/MSYS2 OpenSSL DLLs, writes `qt.conf` + README, and copies the `Oran7UI/` plugin dir. Qt path is fixed at `D:/Qt/6.7.3/mingw_64`. Manual walkthrough in `PACKAGING_GUIDE.md` (already updated to 6.7.3).
@@ -78,7 +78,7 @@ Windows-only Qt 6.7.3 (MinGW) C++17 + QML media player. Not a git repo — no co
 
 - P2-3：Oran7CredentialStore 只编译进 Oran7Core，CryptProtectData/CryptUnprotectData 当前用户范围 + UI_FORBIDDEN；config.json.credentials/<UUID>.dpapi 为不可变密文，普通 config 的 credentialStorage v1 分组引用是提交点。先加密回读验证，再原子提交公开配置（仅遗留明文迁移备份原件）；不直接写 snapshot().toJson()。有引用但解密失败绝不回退旧明文，普通保存保留失败组引用，重新登录按组替换；clearCredentialGroup 提交空代际。非阻塞写锁及引用比对阻止旧实例复活登录态。历史备份/旧密文不自动销毁，不读取真实凭据作测试；tests/credentials 使用临时目录与虚构值。ReleasePackage 排除用户配置、备份、密文、日志、测试材料与 dmp；不要执行打包验收或主程序启动。
 
-- P2-5：主题仅插件编译，Oran7ThemeEvaluator 保留类型并按依赖求值；GROUP 显式回调、临时快照比较键/值/类型，先提交所有快照再仅通知变化组，组内仍为 Map 粒度。darkMode 唯一权威（Light/Dark/System），QML 绑定 isDark，旧组件键仅派生。profileVersion=2 差量沿用 Config 路径，旧全量先备份再 QSaveFile 原子迁移，坏文件/未来版本不可覆盖；切换清空临时值与旧覆盖。不恢复字符串信号反射、自定义旧表或 profile 全量复制。tests/theme 只用临时/检查目录，不读写用户 profile。
+- P2-5／T3：主题仅插件编译，Oran7ThemeEvaluator 保留类型并按依赖求值；GROUP 显式回调、临时快照比较键/值/类型，先提交所有快照再仅通知变化组，组内仍为 Map 粒度。darkMode 唯一权威（Light/Dark/System），QML 绑定 isDark，旧组件键仅派生。profile 差量为 `__profileVersion__=3`，沿用 Config 路径；无版本全量及 v2 先备份再经 QSaveFile 原子迁移，坏文件/未来版本不可覆盖。切换清空临时值，字段和组件重置只删除对应覆盖。tests/theme 使用临时目录和独立测试进程，不读写用户 profile。
 
 - P2-6：Oran7UiPreferences 为 main 拥有的栈对象，仅 Oran7Core 编译，CppOwnership 借给 QML，QPointer 观察引擎；不是全局单例。仅 zh_CN/en_US；appearance.language/fontFamily/fontPixelSize 默认来自 default.json，保存成功才切换，失败恢复快照。TS 经 LinguistTools 编译并嵌入 Core；QML 用 qsTranslate("Oran7Ui",源文案)，动态消息/模型在显示层翻译，不改协议键/路径/曲目或录制草稿。通用字体走带 fontChanged 通知的 Oran7UiPreferences.font（Qt 6.7.3 的 Qt.application.font 为 CONSTANT，不能做动态字号绑定）；隔离 fixture 缺少服务时才回退。LeftPage 的 Oran柒 / MediaClient 标题硬编码“华文琥珀”，不跟随主题；其他装饰字体保留主题角色。仅显式 oran7_update_translations 更新 TS；动态源文案登记 translations/Oran7UiMessages.h，离线 checks 不读写用户配置。
 

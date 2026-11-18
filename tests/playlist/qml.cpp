@@ -113,6 +113,24 @@ Window {
     auto* root=find(window->contentItem(),"playlist");auto* list=find(root,"playlistListView");
     check(list && list->property("count").toInt()==20,"real model delegates instantiate");
     auto* row=find(list,"playlistRow");check(row && !row->property("itemTitle").toString().isEmpty(),"extracted delegate resolves roles");
+    check(row->property("index").toInt()==0 && row->opacity()>0.99,"first delegate initially renders without an entry request");
+    library.search()->setAnimationPending(0,true);
+    check(QTest::qWaitFor([&]{return row->opacity()>0.99 && !row->property("isAnimating").toBool()
+              && !row->property("needsAnimateIn").toBool();},900),
+          "entry request arriving after first delegate creation cannot leave row zero transparent");
+    library.search()->setAnimationPending(0,true);
+    check(QTest::qWaitFor([&]{return row->property("isAnimating").toBool();},500),
+          "repeated model request still reaches the existing delegate");
+    row->setProperty("animationEnabled",false);
+    check(row->opacity()>0.99 && !row->property("isAnimating").toBool()
+              && !row->property("needsAnimateIn").toBool(),"disabling entry animation restores an opaque row immediately");
+    library.search()->setAnimationPending(0,true);
+    check(QTest::qWaitFor([&]{return row->opacity()>0.99 && !row->property("needsAnimateIn").toBool();},500),
+          "disabled entry effect consumes pending request without hiding the row");
+    row->setProperty("animationEnabled",true);
+    QMetaObject::invokeMethod(root,"animateItemsFromIndex",Q_ARG(QVariant,0));
+    check(QTest::qWaitFor([&]{return row->opacity()>0.99 && !row->property("isAnimating").toBool();},900),
+          "page activation animation keeps first row visible after its previous animation requests");
     auto* cover=find(row,"playlistCover");
     auto* coverContent=find(cover,"roundedImageContent");
     check(find(cover,"roundedImageMeasurer")->property("source").toUrl().isEmpty() &&

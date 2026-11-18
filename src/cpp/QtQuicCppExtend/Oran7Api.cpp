@@ -111,7 +111,7 @@ QVariantList Oran7Api::screenWorkAreas() const
     auto screens = QGuiApplication::screens();
     if (auto* primary = QGuiApplication::primaryScreen(); screens.removeOne(primary)) screens.prepend(primary);
     QVariantList result;
-    for (auto* screen : screens) {
+    for (auto* screen : std::as_const(screens)) {
         const auto area = screen->availableGeometry();
         if (!area.isEmpty()) result.append(QVariant::fromValue(QRectF(area)));
     }
@@ -123,7 +123,7 @@ QVariantList Oran7Api::screenGeometries() const
     auto screens = QGuiApplication::screens();
     if (auto* primary = QGuiApplication::primaryScreen(); screens.removeOne(primary)) screens.prepend(primary);
     QVariantList result;
-    for (auto* screen : screens) {
+    for (auto* screen : std::as_const(screens)) {
         const auto area = screen->geometry(); // 完整桌面，包含任务栏；与窗口使用同一套逻辑坐标。
         if (!area.isEmpty()) result.append(QVariant::fromValue(QRectF(area)));
     }

@@ -2,10 +2,52 @@
 #include <SDL2/SDL.h>
 #include <QCoreApplication>
 #include <QProcess>
+#include <QElapsedTimer>
+#include <QThread>
+#include <QTimer>
+#include <windows.h>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
+#include <future>
+#include <vector>
+
+namespace {
+struct Oran7DeviceAudit {
+    std::vector<std::thread::id> owners;
+    std::promise<void> opening, closing, allowOpen, allowClose;
+    std::shared_future<void> openGate = allowOpen.get_future().share();
+    std::shared_future<void> closeGate = allowClose.get_future().share();
+    bool slowOpen = true, slowClose = true, mta = false;
+    int initializations = 0, releases = 0;
+};
+Oran7DeviceAudit* audit = nullptr;
+int SDLCALL auditInitialize(Uint32) {
+    audit->owners.push_back(std::this_thread::get_id());
+    ++audit->initializations;
+    using Query = HRESULT (WINAPI*)(int*, int*);
+    auto query = reinterpret_cast<Query>(GetProcAddress(GetModuleHandleW(L"ole32.dll"), "CoGetApartmentType"));
+    int apartment = -1, qualifier = -1;
+    audit->mta = query && SUCCEEDED(query(&apartment, &qualifier)) && apartment == 1;
+    return 0;
+}
+void SDLCALL auditQuit(Uint32) {
+    audit->owners.push_back(std::this_thread::get_id()); ++audit->releases;
+}
+SDL_AudioDeviceID SDLCALL auditOpen(const char*, int, const SDL_AudioSpec* wanted, SDL_AudioSpec* obtained, int) {
+    audit->owners.push_back(std::this_thread::get_id());
+    if (audit->slowOpen) { audit->opening.set_value(); audit->openGate.wait(); }
+    if (wanted->format == AUDIO_F32SYS) { SDL_SetError("synthetic format rejection"); return 0; }
+    *obtained = *wanted;
+    return 17;
+}
+void SDLCALL auditPause(SDL_AudioDeviceID, int) { audit->owners.push_back(std::this_thread::get_id()); }
+void SDLCALL auditClose(SDL_AudioDeviceID) {
+    audit->owners.push_back(std::this_thread::get_id());
+    if (audit->slowClose) { audit->closing.set_value(); audit->closeGate.wait(); }
+}
+}
 
 static int checks = 0;
 static void check(bool ok, const char* message)
@@ -41,6 +83,59 @@ static void waitForCallbacks(const std::atomic<int>& callbacks, int previous)
     const auto start = SDL_GetTicks64();
     while (callbacks.load() <= previous && SDL_GetTicks64() - start < 1000) SDL_Delay(1);
     check(callbacks.load() > previous, "dummy audio callback runs");
+}
+
+static void checkControlThread(const SDL_AudioSpec& wanted)
+{
+    Oran7DeviceAudit state;
+    audit = &state;
+    auto opening = state.opening.get_future(), closing = state.closing.get_future();
+    Oran7SdlAudioDevice::Oran7Backend backend;
+    backend.initialize = auditInitialize; backend.quit = auditQuit;
+    backend.open = auditOpen; backend.pause = auditPause; backend.close = auditClose;
+    auto device = std::make_unique<Oran7SdlAudioDevice>(backend);
+    SDL_AudioSpec obtained{};
+    std::thread::id caller;
+    int beats = 0;
+    QTimer heartbeat;
+    QObject::connect(&heartbeat, &QTimer::timeout, &heartbeat, [&] { ++beats; });
+    heartbeat.start(5);
+    auto pump = [&](auto predicate) {
+        QElapsedTimer timer; timer.start();
+        while (!predicate() && timer.elapsed() < 1500) { QCoreApplication::processEvents(); QThread::msleep(1); }
+        check(predicate(), "bounded synthetic audio control wait");
+    };
+    auto opened = std::async(std::launch::async, [&] {
+        caller = std::this_thread::get_id();
+        return device->open(wanted, obtained, 0);
+    });
+    pump([&] { return opening.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready; });
+    const int beforeOpen = beats;
+    pump([&] { return beats >= beforeOpen + 5; });
+    check(opened.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready,
+          "GUI event loop continues while synthetic driver open is blocked");
+    state.allowOpen.set_value();
+    check(opened.get(), "synthetic device opens after releasing driver gate");
+    device->setPaused(false); device->setPaused(true);
+    auto closed = std::async(std::launch::async, [&] { device->close(); });
+    pump([&] { return closing.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready; });
+    const int beforeClose = beats;
+    pump([&] { return beats >= beforeClose + 5; });
+    check(closed.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready,
+          "GUI event loop continues while synthetic driver close is blocked");
+    state.allowClose.set_value(); closed.get();
+    state.slowOpen = state.slowClose = false;
+    auto f32 = wanted; f32.format = AUDIO_F32SYS;
+    check(!device->open(f32, obtained, 0) && std::string(SDL_GetError()) == "synthetic format rejection",
+          "worker SDL error reaches caller for F32 fallback");
+    check(device->open(wanted, obtained, 0), "S16 retry reuses owned runtime");
+    device.reset();
+    check(state.mta && state.initializations == 1 && state.releases == 1,
+          "owned worker initializes MTA and pairs its SDL runtime reference");
+    const auto owner = state.owners.front();
+    check(owner != caller && owner != std::this_thread::get_id(), "audio owner differs from caller and GUI threads");
+    for (const auto id : state.owners) check(id == owner, "init/open/pause/close/quit share one audio owner thread");
+    audit = nullptr;
 }
 
 int main(int argc, char** argv)
@@ -84,6 +179,7 @@ int main(int argc, char** argv)
         check(baseline.waitForFinished(2000), "terminate only isolated deadlock reproducer");
     }
     check(oldHangs, "old lock-close order reproduces a deadlock with bundled SDL");
+    checkControlThread(wanted);
 
     Oran7SdlAudioDevice device;
     device.setPaused(false);

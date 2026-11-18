@@ -30,6 +30,8 @@ ApplicationWindow {
     minimumWidth: 990
     minimumHeight: 564
 
+    readonly property var preferences: typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences : null
+
     Oran7HdrWindowOutput { window: mainWindow }
 
     readonly property bool startupManaged: typeof Oran7Startup !== "undefined" && Oran7Startup !== null
@@ -478,6 +480,17 @@ ApplicationWindow {
                         openCaptionBtn.openIngState = false;
                     }
                 }
+            }
+
+            Label{
+                id:devDescribeLabel
+                anchors.left: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                visible: mainWindow.preferences.developerMode
+                text: "Oran7MediaClient Dev v0.2"
+                color: "white"
+                font.pixelSize: 14
+                font.bold: true
             }
         }
 

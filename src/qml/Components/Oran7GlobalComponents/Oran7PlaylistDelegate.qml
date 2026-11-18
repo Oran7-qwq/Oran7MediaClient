@@ -451,7 +451,7 @@ Rectangle {
     property bool itemIsLoved: model.isLiked === true
     property bool itemIsIntegrated: view.showIntegrateButton && model.isIntegrated === true
     property string itemUrl: model.url ? model.url : ""
-    property bool needsAnimateIn: model.needsAnimateIn === true
+    readonly property bool needsAnimateIn: model.needsAnimateIn === true
 
     property bool itemIsSelected: model.index === listView.itemSelected_index //bind
     property bool itemIsHovered: model.index === listView.itemHovered_index //bind
@@ -460,35 +460,57 @@ Rectangle {
     // --- item opacity Animation ---
     property bool animationEnabled: true
     property bool isAnimating: false
-    opacity: playlistItem.needsAnimateIn ? 0 : 1
+    property bool entryAnimationReady: false
+    // 模型字段表示待处理请求，不能直接把整行绑定为透明。
+    // 第一个委托通常先于页面激活动画建立，后到的请求也必须处理。
+    opacity: 1
+    onNeedsAnimateInChanged: {
+        if (entryAnimationReady && needsAnimateIn) Qt.callLater(processEntryRequest)
+    }
+    onAnimationEnabledChanged: {
+        if (entryAnimationReady && !animationEnabled) {
+            fadeInAnimation.stop()
+            finishAnimateIn()
+        }
+    }
     Component.onCompleted: {
+        playlistItem.entryAnimationReady = true;
         playlistItem.updateHighlight();
         if (playlistItem.needsAnimateIn)
+            Qt.callLater(playlistItem.processEntryRequest);
+    }
+    function processEntryRequest() {
+        // 离开模型角色求值栈后再消费请求，避免 dataChanged 同步重入该绑定。
+        if (playlistItem.entryAnimationReady && playlistItem.needsAnimateIn)
             playlistItem.animateIn();
     }
     function animateIn() {
-        if (playlistItem.animationEnabled && !playlistItem.isAnimating) {
+        if (!playlistItem.entryAnimationReady) return;
+        // 开始处理时就消费标记，不在动画结束后按可能已变化的行号回写模型。
+        // 委托属性保持只读绑定，后续页面激活／追加请求仍能正常通知它。
+        if (playlistItem.needsAnimateIn && view.listModel && index >= 0 && index < view.listModel.count)
+            view.listModel.setAnimationPending(index, false);
+        if (!playlistItem.animationEnabled) {
+            fadeInAnimation.stop();
+            finishAnimateIn();
+        } else if (!playlistItem.isAnimating) {
             playlistItem.isAnimating = true;
             fadeInAnimation.start();
         }
     }
-    SequentialAnimation {
+    function finishAnimateIn() {
+        playlistItem.isAnimating = false;
+        playlistItem.opacity = 1;
+    }
+    NumberAnimation {
         id: fadeInAnimation
-        NumberAnimation {
-            target: playlistItem
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
-        }
-        ScriptAction {
-            script: {
-                playlistItem.isAnimating = false;
-                playlistItem.needsAnimateIn = false;
-                view.listModel.setAnimationPending(index, false);
-            }
-        }
+        target: playlistItem
+        property: "opacity"
+        from: 0
+        to: 1
+        duration: 300
+        easing.type: Easing.OutCubic
+        onStopped: playlistItem.finishAnimateIn()
     }
     //-----------------------------  Connections -----------------------------//
     Connections {

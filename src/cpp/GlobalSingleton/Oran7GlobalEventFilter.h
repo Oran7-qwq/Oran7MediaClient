@@ -54,8 +54,10 @@ private:
     QTimer m_hotkeyDispatchTimer;
     QString m_pendingHotkey;
 
-    bool __GlobelKeyLogINFO__ = true;
-    bool __GlobelKeyLogINFO__Detail__ = false;
+    static bool keyLoggingEnabled();
+    static bool detailedKeyLoggingEnabled();
+    static constexpr bool __ShowKeyLog__ = false;
+    static constexpr bool __ShowDetailedKeyLog__ = false;
 };
 
 #endif // ORAN7GLOBALEVENTFILTER_H

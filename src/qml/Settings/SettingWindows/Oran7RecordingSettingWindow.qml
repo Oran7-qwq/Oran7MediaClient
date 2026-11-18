@@ -22,7 +22,6 @@ Oran7SettingsPanel {
     function closeSkinPopup() { if (activeSkinChoice) activeSkinChoice.popup.close() }
     onVisibleChanged: if (!visible) closeSkinPopup()
 
-    // 独立阴影，避免 layer.effect 在退出销毁时触发 Qt5Compat 的 data 警告。
     DropShadow {
         anchors.fill: settingsRoot
         source: settingsRoot

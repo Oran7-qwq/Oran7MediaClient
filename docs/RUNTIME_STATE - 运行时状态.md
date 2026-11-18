@@ -201,7 +201,7 @@ P2-5：源 JSON + 当前 profile v2 差量 → 唯一 darkMode（手动或系统
 | `screen_capture` | `output_index/fps/draw_mouse/debug_log` | 抓屏控制器 | fps 越界回退 60，索引会按当前枚举钳制 |
 | `integratedMusic.list` | 数组 | `Oran7MediaClient::saveIntegratedMusic` | P1-5 默认提供空数组，列表行格式保留 |
 
-主题 profile：`profile-<name>.json`，P2-5 起为 profileVersion=2 差量；旧全量文件先备份迁移。
+主题 profile 保存为 `profile-<name>.json`。T3 使用 `__profileVersion__=3` 差量，无版本全量和 v2 文件先备份，再原子迁移。
 
 ## 7. 改进优先级
 

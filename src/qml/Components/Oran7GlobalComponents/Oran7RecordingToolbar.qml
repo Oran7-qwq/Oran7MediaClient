@@ -78,7 +78,7 @@ Rectangle {
         Oran7StudioMotif {
             visible: !root.violetSkin
             width: 110; height: 110; x: parent.width - 120; y: -43
-            ink: root.textColor; opacity: 0.055
+            ink: root.textColor; opacity: 0.028
             energized: !!root.audioLevels.active; signalColor: root.meterNormalColor
         }
     }

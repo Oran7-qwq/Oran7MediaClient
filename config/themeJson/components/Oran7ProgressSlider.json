@@ -1,0 +1,7 @@
+{
+    "__schemaVersion__": 1,
+    "__name__": "Oran7ProgressSlider",
+    "__tokens__": {
+        "moveThreshold": "2"
+    }
+}

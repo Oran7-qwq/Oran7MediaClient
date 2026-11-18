@@ -28,35 +28,37 @@ Oran7GlobalEventFilter::Oran7GlobalEventFilter(QObject *parent)
         }
     });
 
-    if(__GlobelKeyLogINFO__)
-    {
-        connect(this, &Oran7GlobalEventFilter::escapeKeyPressed, this, []()
-                { INFO_LOG << "ESC key is pressed."; });
-        connect(this, &Oran7GlobalEventFilter::escapeKeyReleased, this, []()
-                { INFO_LOG << "ESC key is released."; });
-        connect(this, &Oran7GlobalEventFilter::upKeyPressed, this, []()
-                { INFO_LOG << "UP key is pressed."; });
-        connect(this, &Oran7GlobalEventFilter::downKeyPressed, this, []()
-                { INFO_LOG << "DOWN key is pressed."; });
-        connect(this, &Oran7GlobalEventFilter::leftKeyPressed, this, []()
-                { INFO_LOG << "LEFT key is pressed."; });
-        connect(this, &Oran7GlobalEventFilter::rightKeyPressed, this, []()
-                { INFO_LOG << "RIGHT key is pressed."; });
+    // 输出时读取开发者模式，设置开关立即生效。
+    const auto connectKeyLog = [this](auto signal, const char* message) {
+        connect(this, signal, this, [message]() {
+            if (keyLoggingEnabled())
+                INFO_LOG << message;
+        });
+    };
+    connectKeyLog(&Oran7GlobalEventFilter::escapeKeyPressed, "ESC key is pressed.");
+    connectKeyLog(&Oran7GlobalEventFilter::escapeKeyReleased, "ESC key is released.");
+    connectKeyLog(&Oran7GlobalEventFilter::upKeyPressed, "UP key is pressed.");
+    connectKeyLog(&Oran7GlobalEventFilter::downKeyPressed, "DOWN key is pressed.");
+    connectKeyLog(&Oran7GlobalEventFilter::leftKeyPressed, "LEFT key is pressed.");
+    connectKeyLog(&Oran7GlobalEventFilter::rightKeyPressed, "RIGHT key is pressed.");
+    connectKeyLog(&Oran7GlobalEventFilter::upKeyReleased, "UP key is released.");
+    connectKeyLog(&Oran7GlobalEventFilter::downKeyReleased, "DOWN key is released.");
+    connectKeyLog(&Oran7GlobalEventFilter::leftKeyReleased, "LEFT key is released.");
+    connectKeyLog(&Oran7GlobalEventFilter::rightKeyReleased, "RIGHT key is released.");
+    connect(this, &Oran7GlobalEventFilter::keyCombinationTriggered, this, [](const QString& name) {
+        if (keyLoggingEnabled())
+            INFO_LOG << name + " key is pressed.";
+    });
+}
 
-        connect(this, &Oran7GlobalEventFilter::upKeyReleased, this, []()
-                { INFO_LOG << "UP key is released."; });
-        connect(this, &Oran7GlobalEventFilter::downKeyReleased, this, []()
-                { INFO_LOG << "DOWN key is released."; });
-        connect(this, &Oran7GlobalEventFilter::leftKeyReleased, this, []()
-                { INFO_LOG << "LEFT key is released."; });
-        connect(this, &Oran7GlobalEventFilter::rightKeyReleased, this, []()
-                { INFO_LOG << "RIGHT key is released."; });
+bool Oran7GlobalEventFilter::keyLoggingEnabled()
+{
+    return __ShowKeyLog__ && Oran7GlobalHelper::developerMode();
+}
 
-
-        connect(this, &Oran7GlobalEventFilter::keyCombinationTriggered, this, [](QString CombinationS)
-                { INFO_LOG << CombinationS+" key is pressed."; });
-
-    }
+bool Oran7GlobalEventFilter::detailedKeyLoggingEnabled()
+{
+    return __ShowDetailedKeyLog__ && Oran7GlobalHelper::developerMode();
 }
 
 Oran7GlobalEventFilter::~Oran7GlobalEventFilter()
@@ -79,10 +81,10 @@ void Oran7GlobalEventFilter::registerGlobalHotkeys()
         if (RegisterHotKey(nullptr, nextId, mods, vk)) {
             m_globalHotkeys.insert(name);
             m_hotkeyIdToName.insert(nextId, name);
-            if (__GlobelKeyLogINFO__)
+            if (keyLoggingEnabled())
                 INFO_LOG << "GlobalHotkey registered: " << name << " (id=" << nextId << ")";
         } else {
-            if (__GlobelKeyLogINFO__)
+            if (keyLoggingEnabled())
                 INFO_LOG << "GlobalHotkey FAILED: " << name << " err=" << int(GetLastError());
         }
         ++nextId;
@@ -142,7 +144,7 @@ bool Oran7GlobalEventFilter::eventFilter(QObject *obj, QEvent *event)
 
         // 忽略长按产生的自动重复事件
         if (keyEvent->isAutoRepeat()) {
-            if(__GlobelKeyLogINFO__Detail__)
+            if (detailedKeyLoggingEnabled())
                 INFO_LOG << "eventFilter: Ignoring auto-repeat event for key=" << keyEvent->key()
                         << ", type=" << (event->type() == QEvent::KeyPress ? "Press" : "Release");
             return QObject::eventFilter(obj, event); // 返回 false 让其他处理器也能处理
@@ -162,24 +164,19 @@ void Oran7GlobalEventFilter::handleKeyPress(int key)
 {
     // 检查是否已经按下（防止重复处理）
     if (m_pressedKeys.value(key, false)) {
-        if(__GlobelKeyLogINFO__Detail__)
+        if (detailedKeyLoggingEnabled())
             INFO_LOG << "handleKeyPress: Key " << key << " already pressed, ignoring";
         return;
     }
 
-    // 记录按键为按下状态
     m_pressedKeys[key] = true;
 
-    if(__GlobelKeyLogINFO__Detail__)
+    if (detailedKeyLoggingEnabled())
         INFO_LOG << "handleKeyPress: Key " << key << " pressed (non-repeat)";
 
-    // 发送全局键盘事件信号
     emit globalKeyEvent(key, true);
-
-    // 检查组合键
     checkKeyCombinations();
 
-    // 处理单键事件
     switch (key)
     {
     case Qt::Key_Escape:
@@ -208,17 +205,17 @@ void Oran7GlobalEventFilter::handleKeyPress(int key)
 
 void Oran7GlobalEventFilter::handleKeyRelease(int key)
 {
-    if(__GlobelKeyLogINFO__Detail__)
+    if (detailedKeyLoggingEnabled())
         INFO_LOG << "handleKeyRelease: key=" << key << ", m_pressedKeys[" << key << "]=" << m_pressedKeys.value(key, false);
 
     // 如果按键已经不在按下状态，忽略这个释放事件
     if (!m_pressedKeys.value(key, false)) {
-        if(__GlobelKeyLogINFO__Detail__)
+        if (detailedKeyLoggingEnabled())
             INFO_LOG << "handleKeyRelease: Key " << key << " already released, ignoring";
         return;
     }
 
-    if(__GlobelKeyLogINFO__Detail__)
+    if (detailedKeyLoggingEnabled())
         INFO_LOG << "handleKeyRelease: Key " << key << " released (non-repeat)";
 
     // 发送全局键盘事件信号
@@ -249,7 +246,7 @@ void Oran7GlobalEventFilter::handleKeyRelease(int key)
     // 清除按键状态
     m_pressedKeys[key] = false;
 
-    if(__GlobelKeyLogINFO__Detail__)
+    if (detailedKeyLoggingEnabled())
         INFO_LOG << "handleKeyRelease: Cleared pressed state for key=" << key;
 }
 

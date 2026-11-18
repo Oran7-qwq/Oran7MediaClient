@@ -175,6 +175,8 @@ set(ORAN7_CORE_SOURCES
     src/cpp/GlobalSingleton/Oran7AppConfigManager.cpp
     src/cpp/GlobalSingleton/Oran7ThemeProfileManager.h
     src/cpp/GlobalSingleton/Oran7ThemeProfileManager.cpp
+    src/cpp/GlobalSingleton/Oran7ThemeProfile.h
+    src/cpp/GlobalSingleton/Oran7ThemeProfile.cpp
 )
 
 # 共享服务清单同时决定 EXE 排除项，新增服务不能再被 glob 编进第二份。
@@ -194,6 +196,8 @@ target_include_directories(Oran7Core
 
 qt_add_resources(Oran7Core "oran7_translations" PREFIX "/i18n"
     BASE "${CMAKE_CURRENT_BINARY_DIR}" FILES ${ORAN7_QM_FILES})
+qt_add_resources(Oran7Core "oran7_legacy_theme" PREFIX "/"
+    FILES config/themeJson/legacy-profile-defaults.json)
 
 target_link_libraries(Oran7Core PUBLIC Qt6::Core Qt6::Gui Qt6::Qml)
 target_link_libraries(Oran7Core PRIVATE crypt32)
@@ -220,6 +224,10 @@ set(ORAN7_QML_SOURCES
         src/cpp/QtQuicCppExtend/Oran7FileHelper.h
         src/cpp/QtQuicCppExtend/Oran7FileHelper.cpp
         src/cpp/QtQuicCppExtend/Oran7ThemeEvaluator_p.h
+        src/cpp/QtQuicCppExtend/Oran7ThemeSource_p.h
+        src/cpp/QtQuicCppExtend/Oran7ThemeSource.cpp
+        src/cpp/QtQuicCppExtend/Oran7ThemeSchema_p.h
+        src/cpp/QtQuicCppExtend/Oran7ThemeSchema.cpp
         src/cpp/QtQuicCppExtend/Oran7Theme_p.h
         src/cpp/QtQuicCppExtend/Oran7ThemeFunctions.h
         src/cpp/QtQuicCppExtend/Oran7ThemeFunctions.cpp
@@ -243,9 +251,6 @@ qt_add_qml_module(Oran7UI_Impl
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Oran7UI/Impl"
     QML_FILES
         # 这里可以添加需要导出的 QML 文件
-    RESOURCES
-        # 添加主题 JSON 资源到 QML 模块
-        # src/resource/themeJson/Index.json
     SOURCES ${ORAN7_QML_SOURCES}
 )
 
@@ -255,15 +260,17 @@ qt_add_resources(Oran7UI_Impl "resource"
       PREFIX "/"
       FILES
           config/themeJson/Index.json
-          config/themeJson/Oran7MainGUI.json
-          config/themeJson/Oran7CaptionBar.json
-          config/themeJson/Oran7ProgressSlider.json
-          config/themeJson/Oran7MusicPlaylistView.json
-          config/themeJson/Oran7MusicPlayControls.json
-          config/themeJson/Oran7MusicLyricsWindow.json
-          config/themeJson/Oran7VideoPlayer.json
-          config/themeJson/Oran7ScreenCapture.json
-          config/themeJson/Oran7MusicLyricsIsland.json
+          config/themeJson/foundations.json
+          config/themeJson/colors.json
+          config/themeJson/components/Oran7MainGUI.json
+          config/themeJson/components/Oran7CaptionBar.json
+          config/themeJson/components/Oran7ProgressSlider.json
+          config/themeJson/components/Oran7MusicPlaylistView.json
+          config/themeJson/components/Oran7MusicPlayControls.json
+          config/themeJson/components/Oran7MusicLyricsWindow.json
+          config/themeJson/components/Oran7VideoPlayer.json
+          config/themeJson/components/Oran7ScreenCapture.json
+          config/themeJson/components/Oran7MusicLyricsIsland.json
 
           config/default.json
 )
@@ -338,12 +345,6 @@ qt_add_shaders(Oran7MediaClient "shaders"
 qt_add_resources(Oran7MediaClient "config_resource"
       PREFIX "/"
       FILES
-          config/themeJson/Index.json
-          config/themeJson/Oran7MainGUI.json
-          config/themeJson/Oran7CaptionBar.json
-          config/themeJson/Oran7ProgressSlider.json
-          config/themeJson/Oran7MusicPlaylistView.json
-
           config/default.json
 )
 # =======================================================

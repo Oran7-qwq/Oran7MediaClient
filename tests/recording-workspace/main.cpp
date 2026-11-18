@@ -124,9 +124,11 @@ int main(int argc, char** argv) {
         && workspace->property("panelColor").value<QColor>() != initialPanelColor, "violet skin applies without recreating workspace");
     auto* snowfield = findItem(workspace, "recordingVioletLandscape");
     auto* roundedSnowfield = findItem(workspace, "recordingRoundedSnowfield");
-    check(snowfield && snowfield->property("status").toInt() == 1 && roundedSnowfield
-          && roundedSnowfield->isVisible() && roundedSnowfield->size() == workspace->size(),
-          "rounded violet snowfield covers the workspace");
+    auto* workspaceBackground = workspace->property("background").value<QQuickItem*>();
+    check(snowfield && snowfield->property("status").toInt() == 1 && !snowfield->isVisible()
+          && workspaceBackground && workspaceBackground->property("color").value<QColor>() == QColor("#ffffff")
+          && roundedSnowfield && roundedSnowfield->isVisible() && roundedSnowfield->size() == workspace->size(),
+          "rounded snowfield and frosted cards share the image over a white fallback");
     auto* frost = findItem(workspace, "recordingFrostedCards");
     auto frostMatchesSnowfield = [&] {
         const QRectF sampled = frost->property("backdropRect").toRectF();
@@ -137,7 +139,7 @@ int main(int argc, char** argv) {
         const auto offset = sampled.topLeft() - snowfield->mapToItem(frost, imageOrigin);
         return sampled.size() == painted && qAbs(offset.x()) < 1 && qAbs(offset.y()) < 1;
     };
-    check(frost && frost->isVisible() && frostMatchesSnowfield(), "frost aligns with the visible snowfield");
+    check(frost && frost->isVisible() && frostMatchesSnowfield(), "frost retains the shared snowfield framing");
     auto* avatar = findItem(workspace, "recordingStudioAvatar");
     check(avatar && avatar->isVisible() && avatar->opacity() > 0.45
           && workspace->property("avatarTintColor").value<QColor>() == QColor("#51436f"),
@@ -169,6 +171,8 @@ int main(int argc, char** argv) {
     check(violetWide.pixelColor(0, 0) == windowColor && violetWide.pixelColor(rightEdge, 0) == windowColor
         && violetWide.pixelColor(0, bottomEdge) == windowColor && violetWide.pixelColor(rightEdge, bottomEdge) == windowColor
         && violetWide.pixelColor(rightEdge / 2, 0) != windowColor, "snowfield and tint leave all four corners transparent");
+    check(violetWide.pixelColor(5, violetWide.height() / 2) != QColor("#ffffff"),
+          "workspace margin displays the snowfield instead of a blank white base");
     violetWide.save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/violet-wide.png");
     auto* standby = findItem(preview, "recordingPreviewStandby");
     check(standby && !standby->isVisible(), "working capture has no standby overlay");
@@ -224,6 +228,14 @@ int main(int argc, char** argv) {
         "default skin restores exact original palette");
     check(avatar->isVisible() && !roundedSnowfield->isVisible() && !frost->isVisible(),
         "default skin restores original decoration");
+    theme.insert("Oran7ScreenCapture", QVariantMap{{"ScaleMode", "Fit"}, {"workspaceSkin", "violet"}});
+    settle();
+    check(window->grabWindow().pixelColor(5, window->height() / 2) == violetWide.pixelColor(5, violetWide.height() / 2)
+          && snowfield->property("status").toInt() == 1 && !snowfield->isVisible()
+          && roundedSnowfield->isVisible() && frost->isVisible() && frostMatchesSnowfield() && avatar->isVisible(),
+          "returning to snowfield skin repaints the same landscape, frosted cards and avatar");
+    theme.insert("Oran7ScreenCapture", QVariantMap{{"ScaleMode", "Fit"}, {"workspaceSkin", "default"}});
+    settle();
     clickSkinAudio();
     check(skinAudioEdits.count() == 3 && skinAudio->property("checked").toBool() != initialAudioEnabled,
         "default switch retains original mouse interaction after changing skins");

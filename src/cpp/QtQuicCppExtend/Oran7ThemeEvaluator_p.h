@@ -7,13 +7,17 @@
 #include <QScopedValueRollback>
 #include <QVariantMap>
 #include <cmath>
+#include <functional>
 
 // 每次计算独立持有输入与结果；引用按依赖解析，不依赖 JSON 键的排序。
 class Oran7ThemeEvaluator
 {
   public:
-    Oran7ThemeEvaluator(QVariantMap raw, QVariantMap inherited, bool dark, QVariantMap fallback = {})
-        : m_raw(std::move(raw)), m_values(std::move(inherited)), m_fallback(std::move(fallback)), m_dark(dark)
+    using Validator = std::function<bool(const QString&, const QVariant&)>;
+    Oran7ThemeEvaluator(QVariantMap raw, QVariantMap inherited, bool dark, QVariantMap fallback = {},
+                        Validator validator = {})
+        : m_raw(std::move(raw)), m_values(std::move(inherited)), m_fallback(std::move(fallback)),
+          m_validator(std::move(validator)), m_dark(dark)
     {
     }
 
@@ -45,9 +49,25 @@ class Oran7ThemeEvaluator
         }
         m_active.insert(key);
         auto value = expression(m_raw.value(key), key);
+        if (m_validator && !m_validator(key, value))
+        {
+            value = {};
+            const auto prefix = key + "-";
+            for (auto it = m_generated.begin(); it != m_generated.end();)
+                if (it->startsWith(prefix))
+                {
+                    m_values.remove(*it);
+                    it = m_generated.erase(it);
+                }
+                else
+                    ++it;
+        }
         if (!value.isValid())
         {
-            qWarning() << "主题表达式无效，使用回退值，token:" << key;
+            if (!m_validator)
+                qWarning() << "主题表达式无效，使用回退值，token:" << key;
+            if (m_validator)
+                m_values.remove(key);
             value = m_fallback.value(key);
             // 生成器失败时也恢复其序列，避免下游引用丢失默认色板/字号。
             const auto prefix = key + "-";
@@ -180,6 +200,7 @@ class Oran7ThemeEvaluator
     }
     QVariantMap m_raw, m_values, m_fallback;
     QSet<QString> m_active, m_done, m_generated;
+    Validator m_validator;
     bool m_dark;
     int m_depth = 0;
 };

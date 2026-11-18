@@ -19,7 +19,7 @@ add_executable(sdl_audio_checks sdl-audio.cpp
 target_compile_definitions(sdl_audio_checks PRIVATE SDL_MAIN_HANDLED)
 target_include_directories(sdl_audio_checks PRIVATE
     "${ROOT}/src/cpp/Oran7MediaPlayer" "${FFMPEG_ROOT_DIR}/include")
-target_link_libraries(sdl_audio_checks PRIVATE Qt6::Core "${FFMPEG_ROOT_DIR}/lib/SDL2.lib")
+target_link_libraries(sdl_audio_checks PRIVATE Qt6::Core "${FFMPEG_ROOT_DIR}/lib/SDL2.lib" ole32)
 
 find_package(Qt6 REQUIRED COMPONENTS Network)
 set(NATIVE "${ROOT}/src/cpp/Oran7MediaPlayer")
@@ -35,7 +35,7 @@ target_include_directories(native_io_checks PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(native_io_checks PRIVATE Oran7Core Qt6::Core Qt6::Network
     "${FFMPEG_ROOT_DIR}/lib/avformat.lib" "${FFMPEG_ROOT_DIR}/lib/avcodec.lib"
     "${FFMPEG_ROOT_DIR}/lib/avutil.lib" "${FFMPEG_ROOT_DIR}/lib/swresample.lib"
-    "${FFMPEG_ROOT_DIR}/lib/swscale.lib" "${FFMPEG_ROOT_DIR}/lib/SDL2.lib" d3d11 dxgi)
+    "${FFMPEG_ROOT_DIR}/lib/swscale.lib" "${FFMPEG_ROOT_DIR}/lib/SDL2.lib" d3d11 dxgi ole32)
 
 # 真实 Native/FFmpeg，合成 WAV + dummy SDL；不启动主程序、不访问账号或硬件设备。
 get_target_property(memorySources native_io_checks SOURCES)

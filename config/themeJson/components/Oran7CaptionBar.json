@@ -1,0 +1,17 @@
+{
+    "__schemaVersion__": 1,
+    "__name__": "Oran7CaptionBar",
+    "__tokens__": {
+        "colorPrimaryBase": "$genColor(#Preset_Volcano)",
+        "iconColorBase": "$genColor(#ffffff)",
+        "textColorBase": "$genColor(#ffffff)",
+        "textColor": "#ffffff",
+        "selectedColor": "@colorPrimaryBase-6",
+        "hoveredColor": "@colorPrimaryBase-4",
+        "isSimpleMode": true,
+        "blurEffectEnabled": true,
+        "saturation": 0.3,
+        "brightness": 0.1,
+        "contrast": 0.3
+    }
+}

@@ -79,7 +79,7 @@ file(GLOB_RECURSE NCM_SOURCES ... "src/ncm/*.cpp" "src/ncm/*.h")
 |---|---|---|
 | `qml.qrc` | 全部应用 QML（`qrc:/main.qml` 入口） | 新增 `.qml` **手动**登记，无 glob |
 | `res.qrc` | `image/`、`sound/`、`app.rc`；P2-1 已移除停用的 `bgra2rgba_*.hlsl` | 新增图片/声音手动登记 |
-| `config/themeJson/*.json` | 主题 | **两处** `qt_add_resources`，清单不同（插件全量 / EXE 子集） |
+| `config/themeJson/` | 主题 | 插件嵌入完整生产主题源；共享核心嵌入旧 profile 迁移基准 |
 | `config/default.json` | 默认配置 | 两处都含 |
 | `shaders/*.vert|frag` | 运行时着色器 | 由 `qt_add_shaders` 编译成 `.qsb` |
 
@@ -129,7 +129,7 @@ P0 已将 RightPage/BottomPage 识别到的外部 id 引用改为显式属性或
 
 - [ ] 把工具链路径改为 `-D` 缓存变量（带默认值），去掉 `CMakeLists.txt` 里的绝对路径。
 - [ ] `Oran7UI_Impl` 的 `SOURCES` 也改 glob + 显式排除，避免手写清单漂移。
-- [ ] 合并双份主题资源注册。
+- [x] 将生产主题资源统一到 QML 插件。
 - [ ] 把 `QtQuicCppExtend` 抽成独立静态库，EXE 与插件都链接，消除双重编译。
 - [ ] 给纯逻辑模块（`Oran7LrcParser`、`WeapiCrypto`、主题表达式、生成器、`NcmJsonMapper`）加 CTest 单测。
 - [ ] 加 `.clang-format`/`.clang-tidy` 与最小 CI（编译 + 单测）。

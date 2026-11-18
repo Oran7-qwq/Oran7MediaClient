@@ -1,0 +1,39 @@
+{
+    "__schemaVersion__": 1,
+    "__name__": "Oran7MusicPlaylistView",
+    "__tokens__": {
+        "colorPrimaryBase": "$genColor(#Preset_Volcano)",
+        "textColorBase": "$genColor(#2a1a22)",
+        "rowBackgroundColor": "#ede7db",
+        "rowTextColor": "",
+        "rowAccentColor": "#22d3ee",
+        "listViewFontPixelSize": 16,
+        "rowSurface": "$alpha(@rowSurfaceBase, 0.78)",
+        "rowSurfaceHover": "$alpha(@rowHoverBase, 0.88)",
+        "rowSurfaceSelected": "$alpha(@rowSelectedBase, 0.92)",
+        "rowText": "@rowTextBase",
+        "rowSecondaryText": "@rowSecondaryBase",
+        "rowDetail": "@rowDetailBase",
+        "rowAccent": "@rowAccentBase"
+    },
+    "__modes__": {
+        "light": {
+            "rowSurfaceBase": "#edf0f3",
+            "rowHoverBase": "#e0e5ea",
+            "rowSelectedBase": "#d7dde3",
+            "rowTextBase": "#242a31",
+            "rowSecondaryBase": "#58616c",
+            "rowDetailBase": "#b9c1cb",
+            "rowAccentBase": "#92751b"
+        },
+        "dark": {
+            "rowSurfaceBase": "#353a40",
+            "rowHoverBase": "#41474f",
+            "rowSelectedBase": "#494f57",
+            "rowTextBase": "#f0f1f3",
+            "rowSecondaryBase": "#bbc1ca",
+            "rowDetailBase": "#616a75",
+            "rowAccentBase": "#ead16c"
+        }
+    }
+}

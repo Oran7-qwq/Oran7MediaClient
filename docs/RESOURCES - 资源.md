@@ -14,26 +14,21 @@ updated: 2026-10-24
 |---|---|---|---|
 | `qml.qrc` | `/` | `main.qml` + `src/qml/**`（含 `src/qml/Basic/qmldir`） | `qrc:/main.qml` |
 | `res.qrc` | `/` | `image/*`、`sound/*`、`app.rc`（P2-1 删除停用的 `bgra2rgba_*.hlsl`） | `qrc:/image/...`、`qrc:/sound/...` |
-| `qt_add_resources`（CMake） | `/` | `config/themeJson/*.json` + `config/default.json` | `:/config/themeJson/...` |
+| `qt_add_resources`（CMake） | `/` | 主题清单、公共令牌、组件、迁移基准和 `config/default.json` | `:/config/themeJson/...` |
 
 - 新增 `.qml` / 图片 / 声音 → 手动加入对应 `.qrc`，否则运行时"找不到资源"（QML 加载失败时 `objectCreated` 回调会 `exit(-1)`）。
 - 相对路径不会自动解析成 qrc，必须写 `qrc:/...`。
 - P2-1 已删除不在 qrc、无入口的 `Oran7ColorPickerWindowExample.qml` 和 `WindowControlButton.qml`，并清理主窗口中未实例化的同名内联定义；标题栏实际使用的内联按钮保留。
 
-## 2. 主题 JSON 双份嵌入（易踩坑）
-
-`config/themeJson/*.json` 在 `CMakeLists.txt` 里被 **两个 `qt_add_resources` 块**重复嵌入，都用前缀 `/`：
+## 2. 主题资源归属
 
 | 资源块 | 归属 | 内容 |
 |---|---|---|
-| `qt_add_resources(Oran7UI_Impl ...)`（`:205-220`） | QML 插件 | `Index.json` + **9 个组件 JSON** + `default.json` |
-| `qt_add_resources(Oran7MediaClient ...)`（`:286-296`） | EXE | `Index.json` + `Oran7MainGUI` / `Oran7CaptionBar` / `Oran7ProgressSlider` / `Oran7MusicPlaylistView` + `default.json` |
+| `qt_add_resources(Oran7UI_Impl ...)` | QML 插件 | `Index.json`、`foundations.json`、`colors.json`、`components/` 下的九个 JSON 和 `default.json` |
+| `qt_add_resources(Oran7Core ...)` | 共享核心 | `legacy-profile-defaults.json`，供无版本和 v2 profile 迁移 |
+| `qt_add_resources(Oran7MediaClient ...)` | EXE | `default.json`，供启动阶段恢复应用配置 |
 
-两份清单**故意不同**（历史原因），同一路径注册两次，后加载者生效。规则：
-
-- 新增主题 JSON → **至少加进插件块**；只加 EXE 块会导致 `import Oran7UI.Impl` 的那份找不到文件。
-- 修改 `Index.json` 的 `__component__` 映射 → 两个块都要能解析到目标文件。
-- `Oran7Theme::reloadTheme()` 先读 `:/config/themeJson/Index.json`，失败才回退文件系统 `<exe>/../Config/themeJson/Index.json`。
+新增主题 JSON 时登记到插件资源块。新增分组还须更新 Index、字段规范、C++ Map 和 `GROUP`。清单内的相对路径以清单所在目录为基准。默认清单从 `:/config/themeJson/Index.json` 读取，缺少资源时尝试 `<exe>/../Config/themeJson/Index.json`。
 
 ## 3. 着色器
 
@@ -66,7 +61,7 @@ POST_BUILD（仅 WIN32）自动复制：
 ```
 
 - 从构建目录运行时 = `build/Config/config.json`。
-- P2-5：`profile-*.json` 为 profileVersion=2 差量，源 JSON 提供默认值；旧全量 profile 先备份再原子迁移。
+- T3：`profile-*.json` 为 `__profileVersion__=3` 差量，源 JSON 提供默认值。无版本全量和 v2 文件先备份，再原子迁移。
 - 默认配置 `config/default.json` 同时以资源 `:/config/default.json` 嵌入。
 
 ## 6. 第三方资源
@@ -83,8 +78,8 @@ POST_BUILD（仅 WIN32）自动复制：
 
 ## 待办
 
-- [ ] 合并双份主题资源注册（只保留插件块，EXE 侧通过链接插件或用 `:/` 同路径即可）。
+- [x] 将生产主题资源统一到 QML 插件。
 - [ ] `qml.qrc` 改为 CMake 生成（`file(GLOB ...)` + `qt_add_qml_module`），彻底避免手动登记漏项。
 - [ ] 清理未进 qrc / 未使用的 QML 文件。
 - [ ] 把 `bgra2rgba_*.hlsl` 与对应死代码一起删除。
-- [ ] 给 `themeProfile` 加"源文件为默认 + profile 为差量"的加载策略，让改 JSON 能生效。
+- [x] 主题源提供默认值，profile 仅保存差量。

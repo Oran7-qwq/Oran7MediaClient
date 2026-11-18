@@ -9,6 +9,7 @@
 #include "Oran7Definitions.h"
 #include "Oran7GlobalHelper.h"
 
+QT_FORWARD_DECLARE_CLASS(Oran7AppConfigManager)
 QT_FORWARD_DECLARE_CLASS(Oran7ThemeProfileManager)
 
 QT_FORWARD_DECLARE_CLASS(Oran7ThemePrivate)
@@ -57,6 +58,8 @@ class ORAN7_THEME_EXPORT Oran7Theme : public QObject
 
 public:
     ~Oran7Theme();
+    // 独立实例借用调用方提供的存储，用于临时目录验证。
+    Oran7Theme(Oran7ThemeProfileManager& profiles, Oran7AppConfigManager& appConfig, QObject* parent = nullptr);
 
     static Oran7Theme& instance();
     static Oran7Theme *create(QQmlEngine *, QJSEngine *);
@@ -109,6 +112,9 @@ public:
     Q_INVOKABLE bool exportThemeProfile(const QString& profileName, const QString& filePath);
     Q_INVOKABLE QString importThemeProfile(const QString& filePath, const QString& newName = "");
     Q_INVOKABLE void resetToDefaultTheme();
+    Q_INVOKABLE bool resetComponentToken(const QString& component, const QString& token, bool currentModeOnly = false);
+    Q_INVOKABLE bool resetComponentTheme(const QString& component, bool currentModeOnly = false);
+    Q_INVOKABLE bool resetIndexToken(const QString& token, bool currentModeOnly = false);
 
 public:
     /**

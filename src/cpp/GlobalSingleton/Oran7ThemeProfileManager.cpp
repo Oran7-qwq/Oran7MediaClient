@@ -1,15 +1,93 @@
 #include "Oran7ThemeProfileManager.h"
 #include "Oran7GlobalHelper.h"
-#include "Oran7Theme.h"
+#include "Oran7ThemeProfile.h"
 
-#include <QStandardPaths>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
-#include <QSaveFile>
-#include <QUuid>
+#include <QLockFile>
 #include <QRegularExpression>
+#include <QSaveFile>
+
+namespace
+{
+struct Oran7ProfileFile
+{
+    QByteArray bytes;
+    QJsonObject document;
+    QJsonObject normalized;
+};
+
+bool entryExists(const QString& path)
+{
+    const QFileInfo info(path);
+    return info.exists() || info.isSymLink();
+}
+
+std::optional<Oran7ProfileFile> readProfile(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return std::nullopt;
+    auto bytes = file.readAll();
+    const auto json = QJsonDocument::fromJson(bytes);
+    if (file.error() != QFileDevice::NoError || !json.isObject())
+        return std::nullopt;
+    auto normalized = Oran7ThemeProfile::normalize(json.object());
+    if (!normalized)
+        return std::nullopt;
+    return Oran7ProfileFile{std::move(bytes), json.object(), std::move(*normalized)};
+}
+
+bool writeAtomically(const QString& path, const QByteArray& bytes)
+{
+    QSaveFile file(path);
+    file.setDirectWriteFallback(false);
+    return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
+}
+
+enum class Oran7ProfileWrite { Failed, Unchanged, Committed };
+
+Oran7ProfileWrite commitProfile(const QString& path, const QJsonObject& normalized, bool createOnly = false,
+                               const QByteArray* expectedOldBytes = nullptr)
+{
+    QLockFile lock(path + ".lock");
+    if (!lock.tryLock(0))
+        return Oran7ProfileWrite::Failed;
+    if (entryExists(path))
+    {
+        // 符号链接和损坏、未来版本原件均禁止覆盖。
+        if (createOnly || QFileInfo(path).isSymLink())
+            return Oran7ProfileWrite::Failed;
+        const auto old = readProfile(path);
+        if (!old || (expectedOldBytes && old->bytes != *expectedOldBytes))
+            return Oran7ProfileWrite::Failed;
+        if (old->document == normalized)
+            return Oran7ProfileWrite::Unchanged;
+        if (!Oran7ThemeProfile::isV3(old->document))
+        {
+            const auto digest = QCryptographicHash::hash(old->bytes, QCryptographicHash::Sha256).toHex();
+            const auto backup = path + ".bak-" + QString::fromLatin1(digest);
+            if (entryExists(backup))
+            {
+                QFile file(backup);
+                if (!QFileInfo(backup).isFile() || QFileInfo(backup).isSymLink() ||
+                    !file.open(QIODevice::ReadOnly) || file.readAll() != old->bytes ||
+                    file.error() != QFileDevice::NoError)
+                    return Oran7ProfileWrite::Failed;
+            }
+            else if (!writeAtomically(backup, old->bytes))
+                return Oran7ProfileWrite::Failed;
+        }
+    }
+    else if (expectedOldBytes)
+        return Oran7ProfileWrite::Failed;
+    return writeAtomically(path, QJsonDocument(normalized).toJson())
+        ? Oran7ProfileWrite::Committed : Oran7ProfileWrite::Failed;
+}
+} // namespace
 
 Oran7ThemeProfileManager& Oran7ThemeProfileManager::instance()
 {
@@ -26,114 +104,22 @@ Oran7ThemeProfileManager::Oran7ThemeProfileManager(const QString& directory, QOb
 
 QString Oran7ThemeProfileManager::themeProfilesDir() const
 {
-    QString configDir = m_directory.isEmpty() ? Oran7GlobalHelper::getConfigDir() : m_directory;
-    QDir dir(configDir);
-    if (!dir.exists())
-    {
-        dir.mkpath(".");
-    }
-    return configDir;
+    const auto path = m_directory.isEmpty() ? Oran7GlobalHelper::getConfigDir() : m_directory;
+    if (!QDir(path).exists())
+        QDir().mkpath(path);
+    return path;
 }
 
-void Oran7ThemeProfileManager::ensureThemeProfilesDir()
+void Oran7ThemeProfileManager::initializeDefaultTheme()
 {
-    QDir dir(themeProfilesDir());
-    if (!dir.exists())
-    {
-        dir.mkpath(".");
-    }
+    const auto path = profileFilePath("profile-default");
+    if (!entryExists(path))
+        commitProfile(path, QJsonObject{{"__profileVersion__", 3}}, true);
 }
 
-namespace
+QString Oran7ThemeProfileManager::profileFilePath(const QString& name) const
 {
-QJsonObject sourceObject(const QString& path)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return {};
-    return QJsonDocument::fromJson(file.readAll()).object();
-}
-QJsonObject difference(const QJsonObject& value, const QJsonObject& defaults)
-{
-    QJsonObject result;
-    for (auto it = value.begin(); it != value.end(); ++it)
-    {
-        if (it->isObject() && defaults[it.key()].isObject())
-        {
-            const auto child = difference(it->toObject(), defaults[it.key()].toObject());
-            if (!child.isEmpty())
-                result[it.key()] = child;
-        }
-        else if (it.value() != defaults[it.key()])
-            result[it.key()] = it.value();
-    }
-    return result;
-}
-QJsonObject sourceDefaults()
-{
-    auto defaults = sourceObject(":/config/themeJson/Index.json");
-    const auto refs = defaults.value("__component__").toObject();
-    QJsonObject components;
-    for (auto it = refs.begin(); it != refs.end(); ++it)
-        components[it.key()] = sourceObject(it->toString());
-    defaults["__component__"] = components;
-    return defaults;
-}
-QJsonObject normalizeProfile(QJsonObject value)
-{
-    // 旧全量 profile 只移除与当前默认值完全相等的项，未知扩展保留。
-    const auto legacyDark =
-        value.value("__component__").toObject()["Oran7MainGUI"].toObject()["__style__"].toObject().value("isDarkMode");
-    if (!value.contains("profileVersion"))
-        value = difference(value, sourceDefaults());
-    if (!value.contains("darkMode") && legacyDark.isBool())
-        value["darkMode"] = legacyDark.toBool() ? 1 : 0;
-    auto components = value.value("__component__").toObject();
-    auto gui = components.value("Oran7MainGUI").toObject();
-    auto style = gui.value("__style__").toObject();
-    if (!value.contains("darkMode") && style.contains("isDarkMode"))
-        value["darkMode"] = style.value("isDarkMode").toBool() ? 1 : 0;
-    style.remove("isDarkMode");
-    style.remove("OpenSettingWin");
-    style.remove("settingContent_visiable");
-    gui["__style__"] = style;
-    components["Oran7MainGUI"] = gui;
-    value["__component__"] = components;
-    // 新格式同样裁掉与默认相同的覆盖，空对象不落盘。
-    auto result = difference(value, sourceDefaults());
-    result["profileVersion"] = 2;
-    return result;
-}
-bool supportedProfile(const QJsonObject& value)
-{
-    if (!value.contains("profileVersion"))
-        return true;
-    return value.value("profileVersion").isDouble() && value.value("profileVersion").toDouble() == 2;
-}
-bool readProfile(const QString& path, QJsonObject* value)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return false;
-    QJsonParseError error;
-    const auto doc = QJsonDocument::fromJson(file.readAll(), &error);
-    if (error.error != QJsonParseError::NoError || !doc.isObject() || !supportedProfile(doc.object()))
-        return false;
-    *value = doc.object();
-    return true;
-}
-} // namespace
-
-void Oran7ThemeProfileManager::initializeDefaultTheme(Oran7Theme*)
-{
-    if (!QFile::exists(profileFilePath("profile-default")))
-        saveThemeProfile("profile-default", {});
-}
-
-QString Oran7ThemeProfileManager::profileFilePath(const QString& profileName) const
-{
-    QString dir = themeProfilesDir();
-    return QDir(dir).filePath(profileName.endsWith(".json") ? profileName : profileName + ".json");
+    return QDir(themeProfilesDir()).filePath(name + ".json");
 }
 
 QJsonObject Oran7ThemeProfileManager::loadThemeProfile(const QString& name)
@@ -141,231 +127,122 @@ QJsonObject Oran7ThemeProfileManager::loadThemeProfile(const QString& name)
     if (!isValidProfileName(name))
         return {};
     const auto path = profileFilePath(name);
-    if (!QFile::exists(path))
+    if (!entryExists(path))
         return {};
-    QJsonObject value;
-    if (!readProfile(path, &value))
+    const auto source = readProfile(path);
+    if (!source)
     {
         qWarning() << "主题 profile 无效或版本不支持，保留原件:" << name;
         return {};
     }
-    const auto result = normalizeProfile(value);
-    if (value != result && !saveThemeProfile(name, result))
-        qWarning() << "主题 profile 迁移未落盘，保留原件:" << name;
-    return result;
+    if (!Oran7ThemeProfile::isV3(source->document))
+    {
+        const auto result = commitProfile(path, source->normalized, false, &source->bytes);
+        if (result == Oran7ProfileWrite::Failed)
+            qWarning() << "主题 profile 迁移未落盘，保留原件:" << name;
+        else if (result == Oran7ProfileWrite::Committed)
+            emit themeProfileChanged(name);
+    }
+    return source->normalized;
 }
 
 bool Oran7ThemeProfileManager::isThemeProfileReadable(const QString& name) const
 {
-    QJsonObject value;
-    return isValidProfileName(name) && readProfile(profileFilePath(name), &value);
+    return isValidProfileName(name) && bool(readProfile(profileFilePath(name)));
 }
 
-bool Oran7ThemeProfileManager::saveThemeProfile(const QString& name, const QJsonObject& theme)
+bool Oran7ThemeProfileManager::saveThemeProfile(const QString& name, const QJsonObject& theme,
+                                               const QJsonObject* defaults, QJsonObject* saved)
 {
-    if (!isValidProfileName(name) || !supportedProfile(theme))
+    if (!isValidProfileName(name))
         return false;
-    const auto path = profileFilePath(name);
-    const auto normalized = normalizeProfile(theme);
-    if (QFile::exists(path))
-    {
-        QJsonObject original;
-        if (!readProfile(path, &original))
-            return false;
-        if (original == normalized)
-            return true;
-        if (!original.contains("profileVersion"))
-        {
-            const auto backup = path + ".bak-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
-            if (!QFile::copy(path, backup))
-                return false;
-        }
-    }
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly))
+    const auto* baseline = defaults ? defaults : &Oran7ThemeProfile::legacyProfileDefaults();
+    const auto normalized = Oran7ThemeProfile::normalize(theme, baseline);
+    if (!normalized)
         return false;
-    const auto bytes = QJsonDocument(normalized).toJson(QJsonDocument::Indented);
-    if (file.write(bytes) != bytes.size() || !file.commit())
+    const auto result = commitProfile(profileFilePath(name), *normalized);
+    if (result == Oran7ProfileWrite::Failed)
         return false;
-    emit themeProfileChanged(name);
+    if (saved)
+        *saved = *normalized;
+    if (result == Oran7ProfileWrite::Committed)
+        emit themeProfileChanged(name);
     return true;
 }
 
 QStringList Oran7ThemeProfileManager::getAvailableThemeProfiles() const
 {
     QStringList profiles;
-    QDir dir(themeProfilesDir());
-
-    QStringList filters;
-    filters << "profile-*.json";
-    dir.setNameFilters(filters);
-
-    QFileInfoList fileList = dir.entryInfoList(QDir::Files);
-    for (const QFileInfo& fileInfo : std::as_const(fileList))
-    {
-        QString fileName = fileInfo.baseName(); // 去掉 .json 后缀
-        if (fileName.startsWith("profile-"))
-        {
-            profiles.append(fileName);
-        }
-    }
-
-    // 排序，profile-default 始终在前面
-    profiles.sort();
-    if (profiles.contains("profile-default"))
-    {
-        profiles.removeAll("profile-default");
+    const auto files = QDir(themeProfilesDir()).entryInfoList({"profile-*.json"}, QDir::Files, QDir::Name);
+    for (const auto& file : files)
+        if (isValidProfileName(file.completeBaseName()))
+            profiles.append(file.completeBaseName());
+    if (profiles.removeAll("profile-default"))
         profiles.prepend("profile-default");
-    }
-
     return profiles;
 }
 
-bool Oran7ThemeProfileManager::deleteThemeProfile(const QString& profileName)
+bool Oran7ThemeProfileManager::deleteThemeProfile(const QString& name)
 {
-    // 不允许删除默认主题
-    if (profileName == "profile-default")
-    {
-        WARNING_LOG << "Oran7ThemeProfileManager: Cannot delete default profile";
+    if (!isValidProfileName(name) || name == "profile-default")
         return false;
-    }
-
-    if (!isValidProfileName(profileName))
-    {
+    const auto path = profileFilePath(name);
+    QLockFile lock(path + ".lock");
+    if (!lock.tryLock(0) || !QFile::remove(path))
         return false;
-    }
-
-    QString filePath = profileFilePath(profileName);
-
-    if (!QFile::exists(filePath))
-    {
-        return false;
-    }
-
-    if (QFile::remove(filePath))
-    {
-        emit availableThemeProfilesChanged();
-        CONFIG_LOG << "Oran7ThemeProfileManager: Deleted theme profile" << profileName;
-        return true;
-    }
-
-    ERROR_LOG << "Oran7ThemeProfileManager: Failed to delete theme profile" << profileName;
-    return false;
+    lock.unlock();
+    emit availableThemeProfilesChanged();
+    return true;
 }
 
 bool Oran7ThemeProfileManager::duplicateThemeProfile(const QString& sourceName, const QString& newName)
 {
-    if (!isValidProfileName(newName))
-    {
-        ERROR_LOG << "Oran7ThemeProfileManager: Invalid new profile name" << newName;
+    if (!isValidProfileName(sourceName) || !isValidProfileName(newName))
         return false;
-    }
-
-    if (!isValidProfileName(sourceName))
+    const auto source = readProfile(profileFilePath(sourceName));
+    if (!source || commitProfile(profileFilePath(newName), source->normalized, true) != Oran7ProfileWrite::Committed)
         return false;
-    QString sourcePath = profileFilePath(sourceName);
-    QString newPath = profileFilePath(newName);
-
-    if (!QFile::exists(sourcePath))
-    {
-        ERROR_LOG << "Oran7ThemeProfileManager: Source profile not found" << sourceName;
-        return false;
-    }
-
-    if (QFile::exists(newPath))
-    {
-        ERROR_LOG << "Oran7ThemeProfileManager: Target profile already exists" << newName;
-        return false;
-    }
-
-    QJsonObject source;
-    if (!readProfile(sourcePath, &source))
-        return false;
-    if (saveThemeProfile(newName, source))
-    {
-        emit availableThemeProfilesChanged();
-        CONFIG_LOG << "Oran7ThemeProfileManager: Duplicated theme profile" << sourceName << "to" << newName;
-        return true;
-    }
-
-    ERROR_LOG << "Oran7ThemeProfileManager: Failed to duplicate theme profile" << sourceName;
-    return false;
+    emit themeProfileChanged(newName);
+    emit availableThemeProfilesChanged();
+    return true;
 }
 
-bool Oran7ThemeProfileManager::exportThemeProfile(const QString& profileName, const QString& filePath)
+bool Oran7ThemeProfileManager::exportThemeProfile(const QString& name, const QString& filePath)
 {
-    QJsonObject theme = loadThemeProfile(profileName);
-    if (!isValidProfileName(profileName) || !QFile::exists(profileFilePath(profileName)) || theme.isEmpty())
-    {
-        ERROR_LOG << "Oran7ThemeProfileManager: Theme profile not found" << profileName;
+    if (!isValidProfileName(name) || filePath.isEmpty())
         return false;
-    }
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly))
-    {
-        ERROR_LOG << "Oran7ThemeProfileManager: Cannot export to" << filePath;
+    const auto source = readProfile(profileFilePath(name));
+    const QFileInfo target(filePath);
+    const QFileInfo storage(themeProfilesDir());
+    // 导出路径不得绕过管理目录内的覆盖、备份和命名规则。
+    const auto targetDir = target.dir().canonicalPath();
+    if (!source || target.isSymLink() ||
+        (target.fileName().startsWith("profile-", Qt::CaseInsensitive) && !targetDir.isEmpty() &&
+         targetDir.compare(storage.canonicalFilePath(), Qt::CaseInsensitive) == 0))
         return false;
-    }
-
-    QJsonDocument doc(theme);
-    file.write(doc.toJson(QJsonDocument::Indented));
-    file.close();
-
-    CONFIG_LOG << "Oran7ThemeProfileManager: Exported theme profile" << profileName << "to" << filePath;
-    return true;
+    return writeAtomically(filePath, QJsonDocument(source->normalized).toJson());
 }
 
 QString Oran7ThemeProfileManager::importThemeProfile(const QString& filePath, const QString& newName)
 {
-    QFile file(filePath);
-    if (!file.exists() || !file.open(QIODevice::ReadOnly))
-    {
-        ERROR_LOG << "Oran7ThemeProfileManager: Cannot open import file" << filePath;
-        return QString();
-    }
-
-    QByteArray data = file.readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-
-    if (doc.isNull() || !doc.isObject() || !supportedProfile(doc.object()))
-    {
-        ERROR_LOG << "Oran7ThemeProfileManager: Invalid theme profile file" << filePath;
-        return QString();
-    }
-
-    // 确定目标名称
-    QString targetName = newName.isEmpty() ? QFileInfo(filePath).baseName() : newName;
-
-    // 确保名称以 profile- 开头
-    if (!targetName.startsWith("profile-"))
-    {
-        targetName = "profile-" + targetName;
-    }
-
-    // 如果文件已存在，添加数字后缀
-    if (!isValidProfileName(targetName))
+    const auto source = readProfile(filePath);
+    auto name = newName.isEmpty() ? QFileInfo(filePath).completeBaseName() : newName;
+    if (!name.startsWith("profile-"))
+        name.prepend("profile-");
+    if (!source || !isValidProfileName(name))
         return {};
-    QString finalName = targetName;
-    int counter = 1;
-    while (QFile::exists(profileFilePath(finalName)))
-    {
-        finalName = targetName + "-" + QString::number(counter++);
-    }
-
-    if (saveThemeProfile(finalName, doc.object()))
-    {
-        emit availableThemeProfilesChanged();
-        CONFIG_LOG << "Oran7ThemeProfileManager: Imported theme profile" << finalName;
-        return finalName;
-    }
-
-    return QString();
+    auto candidate = name;
+    for (int suffix = 1; entryExists(profileFilePath(candidate)); ++suffix)
+        candidate = name + '-' + QString::number(suffix);
+    if (commitProfile(profileFilePath(candidate), source->normalized, true) != Oran7ProfileWrite::Committed)
+        return {};
+    emit themeProfileChanged(candidate);
+    emit availableThemeProfilesChanged();
+    return candidate;
 }
 
-bool Oran7ThemeProfileManager::isValidProfileName(const QString& profileName) const
+bool Oran7ThemeProfileManager::isValidProfileName(const QString& name) const
 {
-    // 不允许包含特殊字符
-    QRegularExpression regex("^profile-[a-zA-Z0-9_-]+$");
-    return regex.match(profileName).hasMatch();
+    static const QRegularExpression pattern(QStringLiteral("\\Aprofile-[a-zA-Z0-9_-]+\\z"));
+    return pattern.match(name).hasMatch();
 }

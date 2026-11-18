@@ -608,7 +608,6 @@ Item {
                     root.listModel.setAnimationPending(index, true);
                     var item = playlistFlickable.itemAtIndex(index);
                     if (item) {
-                        item.needsAnimateIn = true;
                         item.animateIn();
                     }
                 }
@@ -618,7 +617,6 @@ Item {
                         root.listModel.setAnimationPending(i, true);
                         var item = playlistFlickable.itemAtIndex(i);
                         if (item) {
-                            item.needsAnimateIn = true;
                             item.animateIn();
                         }
                     }

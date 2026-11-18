@@ -25,10 +25,6 @@
 #define SDL_AUDIO_MAX_CALLBACKS_PER_SEC 30
 /* polls for possible required screen refresh at least this often, should be less than 1/fps */
 #define REFRESH_RATE 0.01  // 空闲时最大轮询间隔；有帧时按下一帧 PTS 唤醒。
-namespace {
-std::mutex sdlLifecycleMutex;
-constexpr Uint32 sdlSubsystems = SDL_INIT_AUDIO | SDL_INIT_TIMER;
-}
 /* no AV sync correction is done if below the minimum AV sync threshold */
 #define AV_SYNC_THRESHOLD_MIN 0.04  // 40ms
 /* AV sync correction is done if above the maximum AV sync threshold */
@@ -400,7 +396,7 @@ int Oran7FFplayerCore::read_thread()
                 {
                     int64_t seek_target = seek_pos;
                     int64_t seek_min = seek_target;  // 确保最小位置不小于目标位置
-                    int64_t seek_max = INT64_MAX; // 不设置上限
+                    int64_t seek_max = INT64_MAX;    // 不设置上限
                     // 移除向后 seek 标志，强制向前 seek
                     seek_flags = seek_flags & ~AVSEEK_FLAG_BACKWARD;
 
@@ -829,17 +825,7 @@ int Oran7FFplayerCore::stream_open(const char *file_name)
 
     try
     {
-        {
-            std::lock_guard<std::mutex> lock(sdlLifecycleMutex);
-            // 画面由 QRhi 负责，无须创建 SDL 视频子系统。每实例持有并归还自己的引用。
-            if (!m_sdlInitialized) {
-                if (SDL_InitSubSystem(sdlSubsystems)) {
-                    av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
-                    return -1;
-                }
-                m_sdlInitialized = true;
-            }
-        }
+        // SDL 子系统及设备由 Oran7SdlAudioDevice 的后台控制线程按需建立。
         // 初始化Frame帧队列
         if (frame_queue_init(&pictq, &videoq, VIDEO_PICTURE_QUEUE_SIZE_DEFAULT,1) < 0)
             throw std::runtime_error("Cannot initialize picture queue for video.");
@@ -932,11 +918,7 @@ void Oran7FFplayerCore::stream_close()
     }
     destory_clock(&audclk);
     destory_clock(&vidclk);
-    if (m_sdlInitialized) {
-        std::lock_guard<std::mutex> lock(sdlLifecycleMutex);
-        SDL_QuitSubSystem(sdlSubsystems);
-        m_sdlInitialized = false;
-    }
+
 }
 
 /**

@@ -1,0 +1,17 @@
+{
+    "__schemaVersion__": 1,
+    "__name__": "Oran7MainGUI",
+    "__tokens__": {
+        "colorPrimaryBase": "$genColor(#Preset_Volcano)",
+        "themeColor": "#beb7ff",
+        "backgroundImage": "qrc:/image/test_background1.jpg",
+        "backgroundMode": "Image",
+        "backgroundParallaxEnabled": true,
+        "backgroundParallaxAmplitude": 30,
+        "backgroundVideo": "qrc:/image/background.mp4",
+        "topBarDefaultHeight": 50,
+        "settingWinItemDefalutWidth": 252,
+        "soundEffectVolume": 1.0,
+        "DWMBlurEffectEnabled": false
+    }
+}

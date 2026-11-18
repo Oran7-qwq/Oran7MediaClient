@@ -1,0 +1,15 @@
+{
+    "__schemaVersion__": 1,
+    "__name__": "Oran7MusicPlayControls",
+    "__tokens__": {
+        "colorPrimaryBase": "$genColor(#Preset_Volcano)",
+        "iconColorBase": "$genColor(#ffffff)",
+        "textColorBase": "$genColor(#ffffff)",
+        "progressVisibleBar_dynamicGradientEnabled": false,
+        "progressVisibleBar_ColorIndex": 0,
+        "blurEffectEnabled": true,
+        "saturation": 0.3,
+        "brightness": 0.1,
+        "contrast": 0.3
+    }
+}

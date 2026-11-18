@@ -1,21 +1,17 @@
 {
-"__init__":{
-        "__vars__":{
-            "textColorBase":"$genColor(#ffffff)",
-            "textSizeBase": "$genFontSize(22)",
-            "floatingBackdropColor": "$genColor(#000000)"
-        }
-    },
-    "__style__":{
+    "__schemaVersion__": 1,
+    "__name__": "Oran7MusicLyricsIsland",
+    "__tokens__": {
+        "textColorBase": "$genColor(#ffffff)",
+        "textSizeBase": "$genFontSize(22)",
+        "floatingBackdropColor": "$genColor(#000000)",
         "blurEffectEnabled": true,
-        "saturation":0.3,
-        "brightness":0.1,
+        "saturation": 0.3,
+        "brightness": 0.1,
         "contrast": 0.3,
-
-        "lyricsFontSize":20,
+        "lyricsFontSize": 20,
         "backgroundImageEnabled": false,
-        "backgroundImage_url":"",
-
+        "backgroundImage_url": "",
         "floatingEnabled": false,
         "floatingLocked": false,
         "floatingClickThrough": false,

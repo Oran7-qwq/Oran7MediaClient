@@ -1,13 +1,24 @@
 #pragma once
 
-#include <SDL2/SDL_audio.h>
+#include <SDL2/SDL.h>
 #include <mutex>
+#include <memory>
 
-// 单个播放器独占设备；句柄只在本类锁内使用，SDL 回调不得调用本类的控制方法。
+// 单播放器独占后台 MTA 控制线程；所有 SDL 生命周期操作在该线程执行。
+// public 命令仍同步返回，只由 Native 的解码／消息／退役线程调用，SDL 回调不得调用。
 class Oran7SdlAudioDevice
 {
 public:
-    Oran7SdlAudioDevice() = default;
+    // 默认使用真实 SDL；隔离检查可注入慢设备，不接触用户音频硬件。
+    struct Oran7Backend {
+        decltype(&SDL_InitSubSystem) initialize = SDL_InitSubSystem;
+        decltype(&SDL_QuitSubSystem) quit = SDL_QuitSubSystem;
+        decltype(&SDL_OpenAudioDevice) open = SDL_OpenAudioDevice;
+        decltype(&SDL_PauseAudioDevice) pause = SDL_PauseAudioDevice;
+        decltype(&SDL_CloseAudioDevice) close = SDL_CloseAudioDevice;
+    };
+    Oran7SdlAudioDevice();
+    explicit Oran7SdlAudioDevice(Oran7Backend backend);
     ~Oran7SdlAudioDevice();
     Oran7SdlAudioDevice(const Oran7SdlAudioDevice&) = delete;
     Oran7SdlAudioDevice& operator=(const Oran7SdlAudioDevice&) = delete;
@@ -17,7 +28,8 @@ public:
     void close();
 
 private:
-    void closeLocked();
+    struct Oran7ControlThread;
     std::mutex m_mutex;
-    SDL_AudioDeviceID m_device = 0;
+    Oran7Backend m_backend;
+    std::unique_ptr<Oran7ControlThread> m_control;
 };

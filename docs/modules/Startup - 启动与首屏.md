@@ -1,9 +1,15 @@
 ---
 status: ✅ P3-1 首版代码/离线通过，真实启动待验收
-updated: 2026-10-27
+updated: 2026-11-18
 ---
 
 # Startup：启动窗口与首屏交接
+
+## 启动窗白色外观（2026-11-18）
+
+启动窗保持 460×300，采用暖白底色、深灰蓝品牌文字、低饱和靛蓝强调色和浅色状态卡。品牌保留“华文琥珀”，右侧保留留白，不加载额外图片、主题插件或网络资源。关闭按钮使用线条图标及浅红悬停反馈；错误状态使用浅红状态卡并保留错误详情。原生活动条与 QML 后备条共用配色和位置，仍为连续向右的活动指示，不表示百分比。加载门控、取消退出及双窗交叉渐变沿用原逻辑。
+
+Release 构建及启动生命周期、取消退出、原生活动条、QML 资源 4 项离线检查通过。生产启动组件的软件离屏截图位于 `build/P2-4-checks-Release/tests/artifacts/startup_checks/startup.png` 和 `startup-error.png`；真实主程序由用户启动验收。
 
 Oran7StartupCoordinator 位于 src/cpp/Oran7Startup，仅 EXE 编译。由 main 独占并以 Oran7Startup 上下文属性借给 QML，不新增单例。持有者声明在引擎之前，保证 QML 引擎析构期间服务仍存活。启动窗仍由 ApplicationEngine.load 持有，主窗用异步孵化创建，Ready 后设引擎为 QObject parent 并标记 CppOwnership；预编译组件也由引擎持有，协调器以 QPointer 观察窗口。
 

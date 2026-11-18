@@ -1,0 +1,12 @@
+{
+    "__schemaVersion__": 1,
+    "__name__": "Oran7MusicLyricsWindow",
+    "__tokens__": {
+        "textColorBase": "$genColor(#ffffff)",
+        "textSizeBase": "$genFontSize(22)",
+        "blurEffectEnabled": true,
+        "saturation": 0.3,
+        "brightness": 0.1,
+        "contrast": 0.3
+    }
+}
