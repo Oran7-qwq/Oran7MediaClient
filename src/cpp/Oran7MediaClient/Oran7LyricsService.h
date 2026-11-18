@@ -3,6 +3,7 @@
 #include "Oran7PlaybackState.h"
 #include <QMap>
 #include <QVariant>
+#include <QNetworkAccessManager>
 #include <functional>
 #include <memory>
 
@@ -17,7 +18,8 @@ public:
     using MetadataReader = std::function<QMap<QString, QVariant>(const QString&)>;
     using FetcherFactory = std::function<std::unique_ptr<Oran7OnlineLyricsFetcher>()>;
     explicit Oran7LyricsService(MetadataReader metadataReader, QObject* parent = nullptr,
-                               FetcherFactory fetcherFactory = {});
+                               FetcherFactory fetcherFactory = {},
+                               std::unique_ptr<QNetworkAccessManager> networkManager = {});
     ~Oran7LyricsService() override;
 
     void load(const QString& mediaPath, const QString& lrcDirectory, const Oran7Track& track);
@@ -33,6 +35,7 @@ private:
     void resetRequest();
     MetadataReader m_metadataReader;
     FetcherFactory m_fetcherFactory;
+    std::unique_ptr<QNetworkAccessManager> m_networkManager;
     std::unique_ptr<QTemporaryDir> m_networkDirectory;
     std::unique_ptr<Oran7OnlineLyricsFetcher> m_fetcher;
     quint64 m_generation = 0;

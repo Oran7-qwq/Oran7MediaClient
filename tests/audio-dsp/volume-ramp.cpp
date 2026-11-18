@@ -1,4 +1,7 @@
 #include "Oran7AudioVolumeRamp.h"
+#include "Oran7AudioTransition.h"
+#include <vector>
+#include <limits>
 
 #include <cmath>
 #include <cstdio>
@@ -119,6 +122,49 @@ int main()
     testRampDownTiming();
     testS16Saturation();
     testResetAndInvalid();
+    {
+        Oran7AudioTransition transition;transition.prepare(48000);
+        std::vector<float> samples(9000,1.0f);
+        transition.apply(samples.data(),2000,1);
+        transition.setMuted(true,160);
+        std::fill(samples.begin(),samples.end(),1.0f);transition.apply(samples.data(),3840,1);
+        check(samples[3839]>.49f && samples[3839]<.51f && !transition.silent(),"160ms pause fade is halfway after 80ms");
+        transition.apply(samples.data(),3843,1);
+        check(transition.silent() && samples[3842]==0,"longer pause fade completes before physical pause");
+        transition.setMuted(false,180);
+        std::fill(samples.begin(),samples.end(),1.0f);transition.apply(samples.data(),4320,1);
+        check(samples[4319]>.49f && samples[4319]<.51f,"180ms resume fade is halfway after 90ms");
+        transition.apply(samples.data()+4320,4323,1);
+        check(samples[8642]==1.0f,"resume reaches full preset gain after 180ms");
+    }
+
+    for (int rate : {44100,48000,96000}) for(int channels : {1,2,6}) {
+        Oran7AudioTransition transition;
+        transition.prepare(rate);
+        const int frames=rate*35/1000+3;
+        std::vector<float> pcm(frames*channels,0.5f);
+        transition.apply(pcm.data(),frames,channels);
+        check(pcm[0]<.001f && pcm.back()==.5f,"startup fades from zero to unchanged user gain in 35ms");
+        for(int i=0;i<frames;++i)for(int c=0;c<channels;++c)
+            check(pcm[i*channels+c]==pcm[i*channels],"all channels share the exact same transition gain");
+        transition.setMuted(true);
+        std::fill(pcm.begin(),pcm.end(),.5f);
+        transition.apply(pcm.data(),frames,channels);
+        check(pcm.front()>.499f && pcm.back()==0 && transition.silent(),"pause and retirement reach exact digital silence");
+        std::vector<short> integers(frames*channels,12000);
+        transition.setMuted(false);transition.apply(integers.data(),frames,channels);
+        check(integers.front()<3 && integers.back()==12000,"S16 resumes to the preset gain without overshoot");
+        transition.setMuted(true);
+        std::fill(pcm.begin(),pcm.end(),.5f);
+        transition.apply(pcm.data(),rate/100,channels);
+        const float before=pcm[(rate/100-1)*channels];
+        transition.setMuted(false);
+        std::fill(pcm.begin(),pcm.end(),.5f);transition.apply(pcm.data(),1,channels);
+        check(std::abs(pcm[0]-before)<.002f,"rapid pause/resume reverses smoothly without a gain reset");
+        transition.prepare(rate);
+        pcm[0]=std::numeric_limits<float>::quiet_NaN();transition.apply(pcm.data(),1,1);
+        check(pcm[0]==0,"non-finite output cannot escape the final audio envelope");
+    }
 
     std::printf("audio volume ramp checks passed: %d\n", checks);
     return 0;

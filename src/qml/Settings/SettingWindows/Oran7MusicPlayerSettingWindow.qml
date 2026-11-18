@@ -38,22 +38,25 @@ Oran7SettingsPanel {
 
     animationDuration: Oran7MainUiSetting.toggleOpenAniDuration
 
+    // 独立阴影，避免 layer.effect 在退出销毁时触发 Qt5Compat 的 data 警告。
+    DropShadow {
+        anchors.fill: ui_root
+        source: ui_root
+        horizontalOffset: 0
+        verticalOffset: 5
+        radius: 12
+        samples: 16
+        spread: 0.7
+        color: Oran7MainUiSetting.winShadowColor
+        transparentBorder: true
+        z: -1
+    }
+
     Rectangle {
         id: ui_root
         anchors.fill: parent
         color: "transparent"
         radius: 10
-
-        layer.enabled: true
-        layer.effect: DropShadow {
-            horizontalOffset: 0
-            verticalOffset: 5
-            radius: 12
-            samples: 16
-            spread: 0.7
-            color: Oran7MainUiSetting.winShadowColor
-            transparentBorder: true
-        }
 
         Rectangle {
             id: ui_content

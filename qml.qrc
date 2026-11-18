@@ -38,7 +38,12 @@
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingSettingsPopup.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingPageState.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7StudioMotif.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7StudioMaterial.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7StudioControlSurface.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7StudioSkinArt.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingOutputCard.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingIcon.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7StartupSurface.qml</file>
@@ -46,6 +51,7 @@
         <file>src/qml/Components/Oran7GlobalComponents/Oran7StartupWindow.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7MainWindowBackground.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7StudioButton.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7StudioSwitch.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7VideoRendererItem.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7DanmakuLayer.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7WaveBarChart.qml</file>
@@ -61,6 +67,7 @@
         <file>src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7VideoPlayerSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7SettingsContainerWindow.qml</file>
+        <file>src/qml/Settings/SettingWindows/Oran7RecordingSettingWindow.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7SettingsPanel.qml</file>
         <file>src/qml/Components/Oran7SettingUiWindowItems/Oran7SetingTitleItem.qml</file>
         <file>src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml</file>

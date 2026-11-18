@@ -8,6 +8,8 @@
         "themeColor":"#beb7ff",
         "backgroundImage":"qrc:/image/test_background1.jpg",
         "backgroundMode":"Image",
+        "backgroundParallaxEnabled":true,
+        "backgroundParallaxAmplitude":30,
         "backgroundVideo":"qrc:/image/background.mp4",
         "topBarDefaultHeight":50,
         "settingWinItemDefalutWidth":252,

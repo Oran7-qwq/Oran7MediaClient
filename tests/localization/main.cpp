@@ -321,6 +321,87 @@ Item {
         auto musicBytes = musicFile.readAll();
         musicBytes.replace("layer.enabled: true", "layer.enabled: false");
         musicBytes.replace("gradientMaskEnabled: true", "gradientMaskEnabled: false");
+        auto* backgroundHeading = item(quick, "mainWindowBackgroundSettings");
+        check(backgroundHeading && backgroundHeading->setProperty("expand", true), "expand background settings before lazy loading controls");
+        QElapsedTimer backgroundLoad; backgroundLoad.start();
+        while (!item(quick, "backgroundParallaxSwitch") && backgroundLoad.elapsed() < 3000)
+            QTest::qWait(20);
+        auto* parallaxSwitch = item(quick, "backgroundParallaxSwitch");
+        auto* parallaxAmplitude = item(quick, "backgroundParallaxAmplitude");
+        check(parallaxSwitch && parallaxAmplitude, "background parallax controls instantiated in actual settings");
+        auto& backgroundTheme = Oran7Theme::instance();
+        backgroundTheme.installComponentToken("Oran7MainGUI", "backgroundParallaxEnabled", true);
+        check(parallaxSwitch->property("checked").toBool(), "shared parallax switch follows theme");
+        check(QMetaObject::invokeMethod(parallaxSwitch, "switchToggleChanged", Q_ARG(bool, false)), "disable parallax through actual setting handler");
+        check(!backgroundTheme.Oran7MainGUI().value("backgroundParallaxEnabled").toBool()
+            && !parallaxAmplitude->isEnabled(), "switch persists and disables amplitude control");
+        backgroundTheme.installComponentToken("Oran7MainGUI", "backgroundParallaxEnabled", true);
+        check(parallaxSwitch->property("checked").toBool() && parallaxAmplitude->isEnabled(), "switch binding survives setting handler and external theme changes");
+        QMetaObject::invokeMethod(parallaxAmplitude, "moved", Q_ARG(double, 13), Q_ARG(int, 0), Q_ARG(double, 0.43));
+        check(backgroundTheme.Oran7MainGUI().value("backgroundParallaxAmplitude").toInt() == 13, "amplitude previews live through theme");
+        QMetaObject::invokeMethod(parallaxAmplitude, "committed", Q_ARG(double, 13), Q_ARG(int, 0), Q_ARG(double, 0.43));
+        backgroundTheme.reloadTheme();
+        check(backgroundTheme.Oran7MainGUI().value("backgroundParallaxAmplitude").toInt() == 13, "released amplitude persists across theme reload");
+        const auto recordingSettingsPath = QStringLiteral(APP_ROOT)
+            + "/src/qml/Settings/SettingWindows/Oran7RecordingSettingWindow.qml";
+        QFile recordingSettingsFile(recordingSettingsPath);
+        check(recordingSettingsFile.open(QIODevice::ReadOnly), "read recording settings panel");
+        auto recordingSettingsBytes = recordingSettingsFile.readAll();
+        recordingSettingsBytes.replace("layer.enabled: true", "layer.enabled: false");
+        recordingSettingsBytes.replace("gradientMaskEnabled: true", "gradientMaskEnabled: false");
+        QQmlComponent recordingSettings(&engine);
+        recordingSettings.setData(recordingSettingsBytes, QUrl::fromLocalFile(recordingSettingsPath));
+        std::unique_ptr<QObject> recordingPanel(recordingSettings.create());
+        if (!recordingPanel)
+            for (const auto& e : recordingSettings.errors()) std::fprintf(stderr, "%s\n", qPrintable(e.toString()));
+        check(bool(recordingPanel), "actual recording settings panel loads");
+        auto* recordingTitle = recordingPanel->findChild<QObject*>("recordingSettingsTitle");
+        check(recordingTitle && recordingTitle->property("title").toString()
+            == QCoreApplication::translate("Oran7Ui", "直播工作台"), "recording panel has translated top-level title");
+        check(recordingPanel->property("height").toReal() == 0 && !recordingPanel->property("visible").toBool(),
+            "new settings panel starts closed with zero height");
+        auto* recordingQuick = qobject_cast<QQuickItem*>(recordingPanel.get());
+        recordingQuick->setParentItem(window.contentItem());
+        recordingPanel->setProperty("savedNormalX", 14);
+        recordingPanel->setProperty("transitionState", "Open");
+        recordingPanel->setProperty("revealProgress", 1.0);
+        auto* recordingThemeHeading = item(recordingQuick, "recordingThemeHeading");
+        check(recordingThemeHeading && !recordingThemeHeading->property("expand").toBool(),
+            "recording theme group starts collapsed");
+        recordingThemeHeading->setProperty("expand", true);
+        QElapsedTimer skinLoad; skinLoad.start();
+        while (!item(recordingQuick, "recordingSkinChoice") && skinLoad.elapsed() < 3000) QTest::qWait(20);
+        auto* skinChoice = item(recordingQuick, "recordingSkinChoice");
+        check(skinChoice && skinChoice->property("count").toInt() == 2
+            && skinChoice->property("currentIndex").toInt() == 0, "skin selector exposes default and violet skins");
+        check(skinChoice->property("displayText").toString() == QCoreApplication::translate("Oran7Ui", "默认"),
+            "skin name uses current language");
+        auto& skinTheme = Oran7Theme::instance();
+        const auto captureSettingsBefore = skinTheme.Oran7ScreenCapture();
+        check(QMetaObject::invokeMethod(skinChoice, "activated", Q_ARG(int, 0)), "select default skin");
+        skinTheme.reloadTheme();
+        check(skinTheme.Oran7ScreenCapture().value("workspaceSkin").toString() == "default", "default skin selection persists");
+        auto captureSettingsAfter = skinTheme.Oran7ScreenCapture();
+        auto captureSettingsExpected = captureSettingsBefore;
+        captureSettingsAfter.remove("workspaceSkin"); captureSettingsExpected.remove("workspaceSkin");
+        check(captureSettingsAfter == captureSettingsExpected, "skin selection leaves capture settings unchanged");
+        check(QMetaObject::invokeMethod(skinChoice, "activated", Q_ARG(int, 1)), "select violet skin");
+        skinTheme.reloadTheme();
+        check(skinTheme.Oran7ScreenCapture().value("workspaceSkin").toString() == "violet"
+            && skinChoice->property("currentIndex").toInt() == 1, "violet skin persists and selection restores");
+        QMetaObject::invokeMethod(skinChoice, "activated", Q_ARG(int, 0));
+        auto* skinPopup = skinChoice->property("popup").value<QObject*>();
+        const int previousPopupCount = settingState->property("activeOtherItemCount").toInt();
+        QMetaObject::invokeMethod(skinPopup, "open"); QTest::qWait(180);
+        check(skinPopup->property("visible").toBool()
+            && settingState->property("activeOtherItemCount").toInt() == previousPopupCount + 1,
+            "skin popup participates in shared focus management");
+        recordingThemeHeading->setProperty("expand", false); QTest::qWait(200);
+        check(!skinPopup->property("visible").toBool()
+            && settingState->property("activeOtherItemCount").toInt() == previousPopupCount,
+            "collapsing theme group closes skin popup and releases focus");
+        recordingQuick->setParentItem(nullptr);
+
         QQmlComponent musicComponent(&engine);
         musicComponent.setData(musicBytes, QUrl::fromLocalFile(musicPath));
         std::unique_ptr<QObject> musicPanel(musicComponent.create());

@@ -40,7 +40,8 @@ public:
     QUrl intercept(const QUrl& url, DataType type) override {
         if (type == QmlFile && (url.path().endsWith("/Oran7MainUiSettingWindow.qml")
             || url.path().endsWith("/Oran7MusicPlayerSettingWindow.qml")
-            || url.path().endsWith("/Oran7VideoPlayerSettingWindow.qml")))
+            || url.path().endsWith("/Oran7VideoPlayerSettingWindow.qml")
+            || url.path().endsWith("/Oran7RecordingSettingWindow.qml")))
             return QUrl::fromLocalFile(QStringLiteral(APP_ROOT)+"/tests/settings-animation/StubPanel.qml");
         return url;
     }
@@ -83,7 +84,7 @@ int main(int argc,char**argv) {
     until([&]{return phase(window)=="Preparing"&&window->isVisible();});
     check(window->opacity()==0 && !settings->property("settingContentVisible").toBool(),"preparation never exposes stale native frame");
     auto panels=window->property("panels").value<QJSValue>().toVariant().toList();
-    check(panels.size()==3,"three loaded panels");
+    check(panels.size()==4,"four loaded panels including recording settings");
     QList<QQuickItem*> items;
     for(const auto& entry:panels) {
         auto* item=qobject_cast<QQuickItem*>(entry.value<QObject*>());check(item,"panel uses production transition base");items.append(item);
@@ -95,6 +96,12 @@ int main(int argc,char**argv) {
     until([&]{return phase(window)=="Open";});
     check(window->opacity()==1&&window->property("blankFrameReady").toBool(),"opening starts after actual blank frame");
     check(!settings->property("settingWindow_isOpening_Or_isClosing").toBool(),"all-open completion unlocks input");
+    QList<QPointF> positions;
+    for (auto* panel : items) positions.append(panel->position());
+    check(QMetaObject::invokeMethod(window, "movePanels", Q_ARG(QVariant, 4), Q_ARG(QVariant, -4)), "move complete settings panel group");
+    for (int i = 0; i < items.size(); ++i)
+        check(items[i]->position() == positions[i] + QPointF(4, -4), "all four panels follow the same movement");
+
     QQmlComponent popupFixture(&engine);
     popupFixture.setData("import QtQml\nQtObject { property bool dismissed: false; function close() { dismissed = true } }",QUrl());
     auto* activePopup=popupFixture.create();

@@ -25,6 +25,21 @@ Oran7LogSink* handlerSink = nullptr;
 QtMessageHandler previousHandler = nullptr;
 thread_local bool inSink = false;
 
+// Qt 6.7.3 的 Qt5Compat DropShadow 内部使用 GaussianBlur；QML 引擎销毁时读取
+// ShaderEffect 的 data 列表属性，而 VMEMetaObject 的存储已经释放，只会产生这条
+// 无害的 teardown 警告。Qt 安装内的 QML 不能改，这里只过滤这一条已知噪音。
+bool isKnownQt5CompatTeardownWarning(QtMsgType type, const QMessageLogContext& context,
+                                     const QString& message)
+{
+    if (type != QtWarningMsg
+        || !message.contains(QStringLiteral("QML ShaderEffect: Cannot find member data")))
+        return false;
+    // QML 警告的 URL 可能在 message 里，也可能在 context.file；两处都检查。
+    const QString file = QString::fromUtf8(context.file ? context.file : "");
+    return file.contains(QStringLiteral("GaussianBlur.qml"))
+           || message.contains(QStringLiteral("Qt5Compat/GraphicalEffects/GaussianBlur.qml"));
+}
+
 const char* levelName(QtMsgType type)
 {
     switch (type)
@@ -73,6 +88,8 @@ void consoleOutput(QtMsgType type, const QByteArray& bytes)
 
 void qtMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
 {
+    if (isKnownQt5CompatTeardownWarning(type, context, message))
+        return;
     // 写入失败不再发 Qt 消息；Qt 内部若在写线程报告错误也直接终止递归。
     if (inSink)
         return;

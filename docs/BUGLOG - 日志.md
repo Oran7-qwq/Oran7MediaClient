@@ -19,6 +19,19 @@ updated: 2026-10-24
 
 <!-- 新记录加在下面这条模板之前 -->
 
+### BUG-2026-002：退出时 Qt5Compat `GaussianBlur` 报 `Cannot find member data`
+
+- **日期**：2026-11-17
+- **状态**：`已修复，待用户退出验收`
+- **严重度**：低
+- **现象**：退出程序时日志出现 4 条 `qrc:/qt-project.org/imports/Qt5Compat/GraphicalEffects/GaussianBlur.qml:288:5: QML ShaderEffect: Cannot find member data`。
+- **根因**：四个设置窗口（主界面/音乐播放器/直播工作台/视频播放器）都用 `layer.effect: DropShadow`，DropShadow 内部会实例化 Qt5Compat 的 GaussianBlur；`layer.effect` 在退出销毁时把 effect 重新挂到 layer item，Qt 6.7.3 的 QML VMEMetaObject 在拆 `ShaderEffect` 的 `data` 列表属性时存储已失效，触发该警告。四个预加载窗口正好对应四条日志。后续验证表明，改成独立 DropShadow 后仍会从其他存活的 DropShadow 实例触发，说明根因在 Qt5Compat GaussianBlur 的 teardown 顺序，而不是某一种挂载方式。
+- **修复**：四个窗口改为独立的 `DropShadow` 兄弟节点（`source` 指向原窗口根 Rectangle，`z: -1`，保留 offset/radius/samples/spread/color/transparentBorder 参数），移除 `layer.enabled` / `layer.effect`。同时在 `Oran7LogSink` 的 Qt 消息处理器中增加窄过滤：仅当 `QtWarningMsg` 同时匹配 `Qt5Compat/GraphicalEffects/GaussianBlur.qml` 与 `QML ShaderEffect: Cannot find member data` 时丢弃，其他 QML 警告不变。
+- **验证**：`logging_checks` 新增断言覆盖“已知 Qt5Compat 警告被过滤、普通 ShaderEffect 警告仍保留”；`qmllint` 无新增 error；Release 构建后由用户退出程序确认。
+- **关联**：[[LOGGING - 日志与脱敏]]、[[UI - QML界面]]、[[BUGLOG - 日志]]
+
+---
+
 ### BUG-2026-001：抓屏"应用参数"无响应，`screenCaptureApplyFinished` 永不发射
 
 - **日期**：2026-10-22

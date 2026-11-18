@@ -107,7 +107,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
 // ---------------------------------------------------------------------------
 //  包装层：Shadertoy 坐标 → 文字遮罩（与其它 shader 完全一致，照抄即可）
 // ---------------------------------------------------------------------------
-// ⚠ 正文已经定义完了，这里撤掉 iResolution 别名。
+// 正文已经定义完了，这里撤掉 iResolution 别名。
 // 宏是在「使用处」展开的，所以上面的 mainImage 不受影响；而包装层若直接写
 // ubuf.iResolution，会被展开成 ubuf.sceneResolution() → 编译错误。
 // （fractal.frag 里有同样的一行；新加 shader 时最容易漏的就是这个。）
@@ -136,7 +136,7 @@ void main()
 
     // 本类 shader 是纯程序化的，不读输入纹理，所以必须自己用文字笔画的 alpha
     // 把特效裁到字上，否则整块矩形都会是特效。
-    // ⚠ 这里必须用原始的 qt_TexCoord0，不能用上面的 centered：
+    // 这里必须用原始的 qt_TexCoord0，不能用上面的 centered：
     //   centered 只是给特效取景用的，拿它去取遮罩会和文字错位。
     float mask = texture(source, qt_TexCoord0).a;
 
@@ -148,6 +148,8 @@ void main()
     //     丢弃、只取 rgb —— 结构信息已经在 rgb 里了。若想让字的浓淡跟着深度走，
     //     把这里改成用 effectColor.a 即可（需要单独评估，会影响所有 shader 的观感）。
     vec3 col = clamp(effectColor.rgb, 0.0, 1.0);
+    // 轻抬中间色，保留暗部底色和饱和蓝色。
+    col = pow(col, vec3(0.82));
 
     fragColor = vec4(col, 1.0) * mask * ubuf.qt_Opacity;
 }

@@ -1,4 +1,5 @@
 #include "Oran7PlaybackController.h"
+#include "../Oran7Utils/Oran7GuiOperationTimer.h"
 #include "Oran7PlaybackState.h"
 #include "Oran7MediaPlayer.h"
 #include "Audio/Oran7AudioParameterQueue.h"
@@ -125,6 +126,7 @@ void Oran7PlaybackController::prepare(QString source, bool musicPlayback)
 
 void Oran7PlaybackController::toggle()
 {
+    Oran7GuiOperationTimer timer("playback_toggle");
     if (m_shutdown || m_source.isEmpty()) return;
     ++m_commandRevision;
     if (!m_player && m_retiringPlayers != 0) {

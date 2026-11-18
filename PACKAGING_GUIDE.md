@@ -5,6 +5,8 @@
 本文档详细说明了如何将 Oran7MediaClient 项目打包为可发布的 Windows 版本。
 
 > P2-4 更新：构建与离线检查入口见 [构建与验证](<docs/BUILD - 构建与验证.md>)。当前工作区脚本实际名为 `Oran7MediaClient-ReleasePackage.bat`，默认输入仍为 `build/Desktop_Qt_6_7_3_MinGW_64_bit-Release`，支持 `-idir/-odir`。下面旧手工示例含历史工作区路径，需替换为本机项目位置。保留 `Oran7Core.dll`、`Oran7UI_Impl.dll` 及 `Oran7UI/Impl/Oran7UI_Implplugin.dll`；正式检查不会自动打包或启动主程序。
+>
+> 运行库：FFmpeg 的 `libx265.dll` 是 MSVC 构建，依赖 `vcruntime140.dll` / `vcruntime140_1.dll`。Release 的 POST_BUILD 会从系统目录复制到 exe 旁边，打包脚本再随包复制。目标机若仍报“找不到 VCRUNTIME140_1.dll”，安装 Microsoft Visual C++ 2015-2022 Redistributable (x64)，或手动把这两个 DLL 放到 exe 同目录。
 
 ## 前置条件
 

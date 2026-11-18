@@ -65,6 +65,7 @@ int Oran7MediaPlayer::oran7mp_destroy()
         std::lock_guard<std::mutex> lk(mutex_);
         if (ffplayer_)
         {
+            ffplayer_->ffp_fade_out_l(); // 退役后台先淡出，之后的 abort 才不会截断包络。
             ffplayer_->ffp_stop_l();              // 设置 abort_request
             msg_queue_abort(ffplayer_->ffp_msg_queue()); // 让 get_msg(block=1) 立刻返回
         }

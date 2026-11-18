@@ -1,5 +1,10 @@
 <RCC>
     <qresource prefix="/">
+        <file>image/skins/violet/reference-snowfield.png</file>
+        <file>image/skins/violet/diffuse-haze.svg</file>
+        <file>image/oran7_studio_grain.png</file>
+        <file>image/oran7_studio_avatar_outline.png</file>
+        <file>image/oran7_studio_avatar_outline_v2.png</file>
         <file>image/oran7_qq_music.svg</file>
         <file>image/account.png</file>
         <file>image/backmaxsize.png</file>
@@ -62,9 +67,9 @@
         <file>image/ph_repeat-once-bold.png</file>
         <file>shaders/gradientText.frag</file>
         <file>image/streamline-flex_heart-rate.png</file>
-        <file>image/default_background.jpeg</file>
         <file>shaders/fractal.frag</file>
         <file>shaders/octgrams.frag</file>
         <file>shaders/clouds.frag</file>
+        <file>image/default_background.jpg</file>
     </qresource>
 </RCC>

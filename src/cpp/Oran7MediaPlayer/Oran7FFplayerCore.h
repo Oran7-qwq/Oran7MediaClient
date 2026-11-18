@@ -6,6 +6,7 @@
 #include "Oran7FFmpegDecoderCore.h"        // Oran7FFmpegDecoderCore 已独立成文件
 #include "Oran7SdlAudioDevice.h"
 #include "Audio/Oran7AudioVolumeRamp.h"
+#include "Audio/Oran7AudioTransition.h"
 
 #include <thread>
 #include <functional>
@@ -39,6 +40,7 @@ public:
     int       ffp_start_l();                                          // 开始播放
     int       ffp_pause_l();                                        // 暂停播放
     int       ffp_stop_l();                                           // 终止all stream
+    void ffp_fade_out_l(int durationMs = 35); // 仅消息/退役线程调用；停止解码前让实际输出淡出。
 
     long   ffp_get_duration_l();                              //媒体文件总时长
     long   ffp_get_current_position_l();                 //当前播放位置（整数秒，向下取整）
@@ -226,6 +228,8 @@ private:
 
     // A0-3：浮点/整数音量斜坡；目标来自 audio_volume（0…SDL_MIX_MAXVOLUME）。
     Oran7AudioVolumeRamp audio_volume_ramp_;
+    Oran7AudioTransition audio_transition_;
+    std::atomic_bool audio_output_ready_{false};
 
     // A0：每播放器独立的参数通道与处理器；seek 用代际号清理旧 PCM/滤波历史。
     std::shared_ptr<Oran7AudioParameterQueue> audio_parameter_queue_;

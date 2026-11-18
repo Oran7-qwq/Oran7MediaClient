@@ -89,6 +89,15 @@ int main(int argc, char** argv)
         }
         check(prepared.load(), "prepare actual FFmpeg audio decoder");
         QThread::msleep(100); // 仅隔离检查中的 dummy SDL 回调，不打开真实音频设备。
+        if (cycle < 4) {
+            check(player->oran7mp_pause()==0,"pause submits without waiting for output fade on calling thread");
+            QElapsedTimer pauseWait;pauseWait.start();
+            while(player->oran7mp_get_state()!=MP_STATE_PAUSED && pauseWait.elapsed()<700) QThread::msleep(2);
+            check(player->oran7mp_get_state()==MP_STATE_PAUSED,"pause completes after the audio tail");
+            check(player->oran7mp_start()==0,"resume submits after fade to silence");
+            QThread::msleep(100);
+            check(player->oran7mp_get_state()==MP_STATE_STARTED,"resume restarts audio after fade request");
+        }
         player.reset();
         QCoreApplication::processEvents();
         check(SDL_WasInit(SDL_INIT_AUDIO | SDL_INIT_TIMER) == 0, "each player returns its SDL subsystem references");

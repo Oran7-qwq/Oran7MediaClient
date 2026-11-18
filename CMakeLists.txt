@@ -215,6 +215,8 @@ set(ORAN7_QML_SOURCES
         src/cpp/QtQuicCppExtend/Oran7Api.cpp
         src/cpp/QtQuicCppExtend/Oran7Theme.h
         src/cpp/QtQuicCppExtend/Oran7Theme.cpp
+        src/cpp/QtQuicCppExtend/Oran7PointerParallax.h
+        src/cpp/QtQuicCppExtend/Oran7PointerParallax.cpp
         src/cpp/QtQuicCppExtend/Oran7FileHelper.h
         src/cpp/QtQuicCppExtend/Oran7FileHelper.cpp
         src/cpp/QtQuicCppExtend/Oran7ThemeEvaluator_p.h
@@ -372,6 +374,11 @@ if(WIN32)
         #拷贝 MSYS2 zlib1.dll（B站弹幕 zlib 解压用，同 OpenSSL DLL 的处理方式）
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${ORAN7_ZLIB_RUNTIME}" "${APP_OUT_DIR}/zlib1.dll"
+
+        # libx265.dll 是 MSVC 构建，需要 VC++ 运行库；随 exe 一起复制。
+        COMMAND ${CMAKE_COMMAND}
+                "-DAPP_OUT_DIR=${APP_OUT_DIR}"
+                -P "${CMAKE_SOURCE_DIR}/cmake/CopyVcRuntime.cmake"
     )
 endif()
 # ========================================================
@@ -437,7 +444,7 @@ target_link_libraries(Oran7MediaClient
     # SDL2 库
     SDL2 SDL2main
     # Windows 系统库
-    dxgi dwmapi ole32 uuid dbghelp d3d11 dcomp bcrypt
+    dxgi dwmapi ole32 uuid dbghelp d3d11 dcomp bcrypt pdh
     # MSYS2 libwinpthread：解决 MSYS2 OpenSSL 引入的 nanosleep64 等符号。
     # Qt MinGW 11.2 的 libwinpthread 没有这些 64 位时间函数，MSYS2 版本提供。
     # MSYS2 libwinpthread 编译时带了 -fstack-protector，需要 Qt MinGW 的 libssp 配合。

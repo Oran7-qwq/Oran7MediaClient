@@ -13,7 +13,7 @@
 #include "FFPlay_Def.h"
 #include "ffmsg.h"
 #include "Oran7GlobalHelper.h"
-#include "Sonic.h"       // 变速实现，第三方库
+#include "Sonic.h"
 #include "Audio/Oran7AudioParameterQueue.h"
 #include "Audio/Oran7AudioProcessor.h"
 #include "Oran7BilibiliAuthManager.h"
@@ -261,12 +261,12 @@ int Oran7FFplayerCore::read_thread()
         INFO_LOG<<"Notify ffplayer message of ( FFP_MSG_OPEN_INPUT )";
 
         /*
-     *  探测媒体类型，可得到当前文件的封装格式，音视频编码参数等信息
-     * 调用该函数后得多的参数信息会比只调用avformat_open_input更为详细，
-     * 其本质上是去做了decdoe packet获取信息的工作
-     * codecpar, filled by libavformat on stream creation or
-     * in avformat_find_stream_info()
-     */
+        *  探测媒体类型，可得到当前文件的封装格式，音视频编码参数等信息
+        * 调用该函数后得多的参数信息会比只调用avformat_open_input更为详细，
+        * 其本质上是去做了decdoe packet获取信息的工作
+        * codecpar, filled by libavformat on stream creation or
+        * in avformat_find_stream_info()
+        */
         err = avformat_find_stream_info(ic, NULL);
         if (err < 0)
         {
@@ -799,6 +799,22 @@ int Oran7FFplayerCore::ffp_stop_l()
     abort_request = 1;  // 请求退出
     msg_queue_abort(&msg_queue_);  // 禁止再插入消息
     return 0;
+}
+
+void Oran7FFplayerCore::ffp_fade_out_l(int durationMs)
+{
+    audio_transition_.setMuted(true,durationMs);
+    if (!audio_output_ready_.load(std::memory_order_acquire) || audio_transition_.silent()) return;
+    // 等待受设备回调周期影响，必须有界；不依赖 GUI 事件或持 SDL 设备锁。
+    const auto deadline=av_gettime_relative()+(std::clamp(durationMs,1,500)+115)*1000LL;
+    while (audio_output_ready_.load(std::memory_order_acquire) && !audio_transition_.silent()
+           && av_gettime_relative()<deadline) SDL_Delay(1);
+    if (audio_transition_.silent() && audio_output_ready_.load(std::memory_order_acquire)) {
+        // 让刚交付的静音尾块有机会出设备队列，再暂停/关闭。
+        const int milliseconds=audio_tgt.bytes_per_sec>0 ?
+            int(1000LL*audio_hw_buf_size/audio_tgt.bytes_per_sec) : 0;
+        SDL_Delay(std::min(50,std::max(0,milliseconds)));
+    }
 }
 
 
@@ -1534,6 +1550,11 @@ int Oran7FFplayerCore::audio_resample_frame(Oran7FFplayerCore *is)
 void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
 {
     Oran7FFplayerCore *is = (Oran7FFplayerCore *)opaque;
+    if (!stream || len <= 0) return;
+    Uint8* const output=stream;
+    const int outputBytes=len;
+    // 停止、EOF、缺帧时也必须覆盖整块设备缓冲，不能留下未写入的尾部字节。
+    memset(stream,0,len);
     int audio_size, len1;
     is->audio_callback_time = av_gettime_relative();
 
@@ -1579,7 +1600,7 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
         {
             /*检测是否播放结束*/
             is->check_play_finished();
-            continue;
+            break;
         }
         if (is->audio_buf_index >= static_cast<int>(is->audio_buf_size))
         {
@@ -1722,6 +1743,13 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
         stream += len1;     // stream 拷贝的位置也发生偏移
         /* 更新is->audio_buf_index，指向audio_buf中未被拷贝到stream的数据（剩余数据）的起始位置 */
         is->audio_buf_index += len1;
+    }
+    if (is->audio_tgt.frame_size>0) {
+        const int frames=outputBytes/is->audio_tgt.frame_size;
+        if (is->audio_tgt.fmt==AV_SAMPLE_FMT_FLT)
+            is->audio_transition_.apply(reinterpret_cast<float*>(output),frames,is->audio_tgt.channels);
+        else if (is->audio_tgt.fmt==AV_SAMPLE_FMT_S16)
+            is->audio_transition_.apply(reinterpret_cast<short*>(output),frames,is->audio_tgt.channels);
     }
     is->audio_write_buf_size = is->audio_buf_size - is->audio_buf_index;
     /* Let's assume the audio driver that is used by SDL has two periods. */
@@ -1873,10 +1901,12 @@ int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wan
         }
     }
 
-    // 打开时直接从当前音量开始，避免一次可听见的淡入。
+    // 用户音量保留预设值，生命周期包络独立从零淡入，不修改配置音量。
     audio_volume_ramp_.prepare(spec.freq);
     audio_volume_ramp_.reset(static_cast<float>(audio_volume.load(std::memory_order_relaxed))
                              / static_cast<float>(SDL_MIX_MAXVOLUME));
+    audio_transition_.prepare(spec.freq);
+    audio_output_ready_.store(true,std::memory_order_release);
 
     return spec.size;	/* SDL内部缓存的数据字节, samples * channels *byte_per_sample */
 }
@@ -1886,6 +1916,7 @@ int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wan
  */
 void Oran7FFplayerCore::audio_close()
 {
+    audio_output_ready_.store(false,std::memory_order_release);
     m_audioDevice.close();
     // 设备关闭会停止回调；此后才能安全释放处理器状态。
     // 参数队列保留，重新打开格式时再创建处理器。
@@ -1936,6 +1967,8 @@ void Oran7FFplayerCore::stream_update_pause_l()
  */
 void Oran7FFplayerCore::stream_toggle_pause_l(int pause_on)
 {
+    if (pause_on && !paused) ffp_fade_out_l(160);
+    if (!pause_on) audio_transition_.setMuted(false,180);
     if (paused && !pause_on)//如果当前是暂停状态，并且将要启动，这次要正确更新时钟pts
     {
         last_frame_timer += av_gettime_relative() / 1000000.0 - vidclk.last_updated;

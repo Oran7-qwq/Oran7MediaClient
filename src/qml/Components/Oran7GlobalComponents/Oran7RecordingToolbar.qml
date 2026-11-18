@@ -11,14 +11,19 @@ Rectangle {
     property var audioCommit: function() { return true }
     readonly property var liveSession: controller && controller.liveSession ? controller.liveSession : null
     required property var controller
-    property color panelColor: "#242020"
-    property color textColor: "#dadada"
-    property color errorColor: "#e36a75"
-    property color accentColor: "#beb7ff"
+    property bool violetSkin: false
+    property real materialStrength: 0.025
+    property color panelColor: "#1e252f"
+    property color paperColor: "#d5dfec"
+    property color paperInkColor: "#263447"
+    property color textColor: "#e7edf5"
+    property color errorColor: "#ed8795"
+    property color recordingColor: "#e7a399"
+    property color accentColor: "#80a9db"
     property color mutedTextColor: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.58)
-    property color surfaceColor: "#292d36"
-    property color hoverColor: "#363b47"
-    property color borderColor: "#424650"
+    property color surfaceColor: "#242d39"
+    property color hoverColor: "#2b394c"
+    property color borderColor: "#334154"
     property color toggleOffColor: root.panelColor
     property color toggleBorderColor: root.accentColor
     property color toggleThumbColor: "white"
@@ -35,13 +40,15 @@ Rectangle {
     readonly property real microphoneVolume: audioOptions.microphoneVolume === undefined ? 100 : audioOptions.microphoneVolume
     readonly property bool systemEnabled: liveSupported ? !!audioOptions.audioEnabled : !!pageState.outputDraft.audioEnabled
     readonly property var audioLevels: controller && controller.audioLevels ? controller.audioLevels : ({})
-    property color meterNormalColor: "#59cf9c"
-    property color meterWarningColor: "#edc265"
-    property color meterPeakColor: "#ee7484"
+    property color meterNormalColor: "#63c6a6"
+    property color meterWarningColor: "#dcb76c"
+    property color meterPeakColor: "#ed8795"
     readonly property string stateCaption: root.controller
         ? ({Idle: qsTranslate("Oran7Ui", "就绪"), Preparing: qsTranslate("Oran7Ui", "正在准备编码器与输出…"), Recording: qsTranslate("Oran7Ui", "正在录制"), Stopping: qsTranslate("Oran7Ui", "正在保存文件，请稍候…"), Error: qsTranslate("Oran7Ui", "录制失败")})[root.controller.recordingState] || qsTranslate("Oran7Ui", "就绪")
         : qsTranslate("Oran7Ui", "录制控制器尚未就绪")
-    implicitHeight: 86
+    // 皮肤仅决定外观，两种皮肤共用默认混音器布局与尺寸。
+    readonly property real preferredToolbarHeight: 110
+    implicitHeight: preferredToolbarHeight
     color: root.panelColor
     radius: 12
     border.color: root.borderColor
@@ -54,10 +61,31 @@ Rectangle {
             GradientStop { position: 1; color: root.panelColor }
         }
     }
-    Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 12; height: 1; color: "#0affffff" }
+    Rectangle {
+        anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+        anchors.leftMargin: 12; anchors.rightMargin: 12
+        height: 2; radius: 1
+        color: root.audioLevels.active ? Qt.rgba(root.meterNormalColor.r,root.meterNormalColor.g,root.meterNormalColor.b,.45) : root.borderColor
+        Behavior on color { ColorAnimation { duration: 220 } }
+    }
+
+
+    Item {
+        anchors.fill: parent; anchors.margins: 2
+        clip: true
+        Oran7StudioMaterial { anchors.fill: parent; grainOpacity: root.materialStrength }
+        Oran7StudioSkinArt { anchors.fill: parent; active: root.violetSkin; strength: 0.65 }
+        Oran7StudioMotif {
+            visible: !root.violetSkin
+            width: 110; height: 110; x: parent.width - 120; y: -43
+            ink: root.textColor; opacity: 0.055
+            energized: !!root.audioLevels.active; signalColor: root.meterNormalColor
+        }
+    }
 
     component Oran7RecordingAction: Oran7StudioButton {
         id: action
+        polished: root.violetSkin
         scale: down ? 0.98 : 1
         Behavior on scale { NumberAnimation { duration: 90 } }
         accentColor: root.accentColor
@@ -72,24 +100,26 @@ Rectangle {
             Oran7RecordingIcon {
                 Layout.preferredWidth: 14; Layout.preferredHeight: 14
                 glyph: action.primary ? "record" : "stop"
-                ink: action.primary ? "#171a20" : root.errorColor
+                ink: action.primary ? action.primaryTextColor : root.errorColor
             }
             Label {
                 Layout.fillWidth: true
                 text: action.text; font: action.font
-                color: action.primary ? "#171a20" : root.errorColor
+                color: action.primary ? action.primaryTextColor : root.errorColor
                 elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter
             }
         }
-        background: Rectangle {
+        background: Oran7StudioControlSurface {
+            polished: root.violetSkin; tintColor: root.accentColor; highlighted: action.hovered; depressed: action.down
             radius: 8
-            color: action.primary ? (action.hovered ? Qt.lighter(root.accentColor, 1.08) : root.accentColor)
+            color: action.primary ? (action.hovered ? Qt.lighter(root.accentColor, root.violetSkin ? 1.025 : 1.08) : root.accentColor)
                 : action.hovered ? Qt.rgba(root.errorColor.r, root.errorColor.g, root.errorColor.b, 0.15) : root.surfaceColor
             border.color: action.activeFocus ? root.accentColor : action.primary ? "#30ffffff" : Qt.rgba(root.errorColor.r, root.errorColor.g, root.errorColor.b, 0.28)
             Behavior on color { ColorAnimation { duration: 120 } }
         }
     }
-    component Oran7AudioSwitch: Oran7SwitchToggleItem {
+    component Oran7AudioSwitch: Oran7StudioSwitch {
+        polished: root.violetSkin
         enabled: root.audioEditable
         onColor: root.accentColor
         offColor: root.toggleOffColor
@@ -105,9 +135,9 @@ Rectangle {
         opacity: enabled ? 1 : 0.4
         background: Rectangle {
             x: slider.leftPadding; y: (slider.height - height) / 2
-            width: slider.availableWidth; height: 3; radius: 2
+            width: slider.availableWidth; height: 3; radius: height / 2
             color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.14)
-            Rectangle { width: slider.visualPosition * parent.width; height: parent.height; radius: 2; color: root.accentColor }
+            Rectangle { width: slider.visualPosition * parent.width; height: parent.height; radius: parent.radius; color: root.accentColor }
         }
         handle: Rectangle {
             x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
@@ -180,6 +210,15 @@ Rectangle {
             color: meter.fullScale || meter.warningHeld ? root.meterPeakColor : root.textColor
             opacity: 0.9
         }
+        Repeater {
+            model: 16
+            Rectangle {
+                required property int index
+                x: (index + 1) * meter.width / 17
+                width: 1; height: meter.height
+                color: root.panelColor; opacity: 0.55
+            }
+        }
         HoverHandler { id: meterHover }
         ToolTip.visible: meterHover.hovered
         ToolTip.delay: 250
@@ -188,9 +227,20 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 8
+        anchors.margins: 10
         spacing: 5
         z: 1
+        RowLayout {
+            Layout.fillWidth: true
+            Label {
+                text: "03 / AUDIO"; font.pixelSize: 10; font.bold: true; color: root.paperInkColor
+                leftPadding: 4; rightPadding: 4
+                background: Rectangle { radius: 2; color: root.paperColor }
+            }
+            Label { text: qsTranslate("Oran7Ui", "音频混音"); font.pixelSize: 12; font.bold: true; color: root.textColor }
+            Item { Layout.fillWidth: true }
+            Label { text: qsTranslate("Oran7Ui", "实时监测"); font.pixelSize: 10; color: root.mutedTextColor }
+        }
         RowLayout {
             objectName: "recordingControlRow"
             Layout.fillWidth: true
@@ -201,7 +251,7 @@ Rectangle {
             ScrollView {
                 id: audioTools
                 objectName: "recordingAudioTools"
-                Layout.fillWidth: true; Layout.minimumWidth: 0
+                Layout.fillWidth: true; Layout.minimumWidth: 446
                 Layout.preferredHeight: 40
                 clip: true
                 contentWidth: audioRow.width
@@ -214,9 +264,10 @@ Rectangle {
                     width: implicitWidth; height: 32; spacing: 6
                     Rectangle {
                         objectName: "recordingSystemAudioTool"
-                        width: 220; height: 32; radius: 8
-                        color: systemHover.hovered ? Qt.tint(root.surfaceColor, "#08ffffff") : root.surfaceColor
-                        border.color: root.systemEnabled ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.55)
+                        width: Math.max(220, (audioTools.availableWidth - 6) / 2)
+                        height: 32; radius: 6
+                        color: root.violetSkin ? (systemHover.hovered ? root.hoverColor : "transparent") : systemHover.hovered ? Qt.tint(root.surfaceColor, "#0cffffff") : Qt.darker(root.surfaceColor, 1.16)
+                        border.color: root.violetSkin ? "transparent" : root.systemEnabled ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.55)
                         Behavior on color { ColorAnimation { duration: 120 } }
                         HoverHandler { id: systemHover }
                         RowLayout {
@@ -238,17 +289,17 @@ Rectangle {
                             ColumnLayout {
                                 Layout.fillWidth: true; Layout.minimumWidth: 0
                                 spacing: 1
-                            Oran7VolumeSlider {
-                                objectName: "recordingSystemVolume"
-                                Layout.fillWidth: true; Layout.minimumWidth: 0
-                                implicitHeight: 14
-                                enabled: root.liveSupported && root.audioEditable && root.systemEnabled
-                                value: root.systemVolume
-                                onMoved: root.audioEdit("systemVolume", Math.round(value))
-                                Accessible.name: qsTranslate("Oran7Ui", "系统声音音量")
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTranslate("Oran7Ui", "调整录制与推流的系统声音音量，不改变 Windows 音量")
-                            }
+                                Oran7VolumeSlider {
+                                    objectName: "recordingSystemVolume"
+                                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                                    implicitHeight: 14
+                                    enabled: root.liveSupported && root.audioEditable && root.systemEnabled
+                                    value: root.systemVolume
+                                    onMoved: root.audioEdit("systemVolume", Math.round(value))
+                                    Accessible.name: qsTranslate("Oran7Ui", "系统声音音量")
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTranslate("Oran7Ui", "调整录制与推流的系统声音音量，不改变 Windows 音量")
+                                }
                                 Oran7AudioLevelMeter {
                                     objectName: "recordingSystemLevelMeter"
                                     Layout.fillWidth: true; Layout.preferredHeight: 4
@@ -263,9 +314,10 @@ Rectangle {
                     }
                     Rectangle {
                         objectName: "recordingMicrophoneTool"
-                        width: 220; height: 32; radius: 8
-                        color: microphoneHover.hovered ? Qt.tint(root.surfaceColor, "#08ffffff") : root.surfaceColor
-                        border.color: Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.55)
+                        width: Math.max(220, (audioTools.availableWidth - 6) / 2)
+                        height: 32; radius: 6
+                        color: root.violetSkin ? (microphoneHover.hovered ? root.hoverColor : "transparent") : microphoneHover.hovered ? Qt.tint(root.surfaceColor, "#0cffffff") : Qt.darker(root.surfaceColor, 1.16)
+                        border.color: root.violetSkin ? "transparent" : root.microphoneEnabled ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.55)
                         Behavior on color { ColorAnimation { duration: 120 } }
                         HoverHandler { id: microphoneHover }
                         ToolTip.visible: microphoneHover.hovered
@@ -289,17 +341,17 @@ Rectangle {
                             ColumnLayout {
                                 Layout.fillWidth: true; Layout.minimumWidth: 0
                                 spacing: 1
-                            Oran7VolumeSlider {
-                                objectName: "recordingMicrophoneVolume"
-                                Layout.fillWidth: true; Layout.minimumWidth: 0
-                                implicitHeight: 14
-                                enabled: root.liveSupported && root.audioEditable && root.microphoneEnabled
-                                value: root.microphoneVolume
-                                onMoved: root.audioEdit("microphoneVolume", Math.round(value))
-                                Accessible.name: qsTranslate("Oran7Ui", "麦克风音量")
-                                ToolTip.visible: hovered
-                                ToolTip.text: qsTranslate("Oran7Ui", "采集 Windows 默认麦克风，与系统声音混音后录制或推流")
-                            }
+                                Oran7VolumeSlider {
+                                    objectName: "recordingMicrophoneVolume"
+                                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                                    implicitHeight: 14
+                                    enabled: root.liveSupported && root.audioEditable && root.microphoneEnabled
+                                    value: root.microphoneVolume
+                                    onMoved: root.audioEdit("microphoneVolume", Math.round(value))
+                                    Accessible.name: qsTranslate("Oran7Ui", "麦克风音量")
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTranslate("Oran7Ui", "采集 Windows 默认麦克风，与系统声音混音后录制或推流")
+                                }
                                 Oran7AudioLevelMeter {
                                     objectName: "recordingMicrophoneLevelMeter"
                                     Layout.fillWidth: true; Layout.preferredHeight: 4
@@ -314,43 +366,6 @@ Rectangle {
                     }
                 }
             }
-            Oran7StudioButton {
-                objectName: "startLiveStreaming"
-                visible: root.liveSession !== null
-                text: root.liveSession && root.liveSession.busy
-                    ? (root.liveSession.state === "Stopping" ? qsTranslate("Oran7Ui", "正在停止推流…")
-                        : root.liveSession.state === "Connecting" ? qsTranslate("Oran7Ui", "取消连接") : qsTranslate("Oran7Ui", "停止推流"))
-                    : qsTranslate("Oran7Ui", "开始推流")
-                enabled: root.liveSession && (root.liveSession.busy ? root.liveSession.state !== "Stopping" : root.controller.previewBusy !== true && !root.pageState.applying && !(root.controller.recordingBusy && Number(root.pageState.outputSaved.mode) !== 0))
-                implicitHeight: 32
-                accentColor: root.accentColor; textColor: root.textColor
-                surfaceColor: root.surfaceColor; hoverColor: root.hoverColor; borderColor: root.borderColor
-                onClicked: {
-                    if (root.liveSession.busy) {
-                        if (root.liveSession.state === "Streaming") root.audioCommit()
-                        root.controller.stopLive()
-                    }
-                    else { console.info("[RTMP] 用户请求开始推流"); root.forceActiveFocus(); if (root.liveCommit()) root.controller.startLive() }
-                }
-            }
-            Oran7RecordingAction {
-                objectName: "startLocalRecording"
-                text: root.controller && root.controller.recordingState === "Preparing" ? qsTranslate("Oran7Ui", "正在准备…") : qsTranslate("Oran7Ui", "开始录制")
-                primary: true; symbol: "●"
-                Layout.preferredWidth: 108; Layout.minimumWidth: 108; Layout.maximumWidth: 108
-                implicitHeight: 32
-                enabled: !root.pageState.outputBusy
-                onClicked: { root.forceActiveFocus(); if (root.audioCommit()) root.pageState.start() }
-            }
-            Oran7RecordingAction {
-                objectName: "stopLocalRecording"
-                text: root.controller && root.controller.recordingState === "Stopping" ? qsTranslate("Oran7Ui", "正在保存…") : qsTranslate("Oran7Ui", "停止")
-                destructive: true; symbol: "■"
-                Layout.preferredWidth: 92; Layout.minimumWidth: 92; Layout.maximumWidth: 92
-                implicitHeight: 32
-                enabled: root.controller && root.controller.recordingBusy && root.controller.recordingState !== "Stopping"
-                onClicked: { root.audioCommit(); root.controller.stopRecording() }
-            }
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.borderColor }
         RowLayout {
@@ -361,8 +376,9 @@ Rectangle {
             Rectangle {
                 implicitWidth: 10; implicitHeight: 10; radius: 5
                 border.width: 2; border.color: root.panelColor
-                color: root.controller && (root.controller.recordingError || root.controller.recordingState === "Recording")
-                    ? root.errorColor : root.pageState.busy ? root.accentColor : root.mutedTextColor
+                color: root.controller && root.controller.recordingError ? root.errorColor
+                    : root.controller && root.controller.recordingState === "Recording" ? root.recordingColor
+                    : root.pageState.busy ? root.accentColor : root.mutedTextColor
             }
             Label {
                 objectName: "recordingStatus"

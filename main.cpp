@@ -17,6 +17,7 @@
 #include "Oran7MediaClient.h"
 #include "Oran7AudioEffects.h"
 #include "Oran7EqualizerModel.h"
+#include "Oran7ProcessLoadMonitor.h"
 #include "Oran7ApplicationContext.h"
 #include "BilibliLiveRoomAddressCatch.h"
 #include "BilibiliDanmakuClient.h"
@@ -222,6 +223,7 @@ int main(int argc, char* argv[])
         qmlRegisterType<Oran7HdrWindowOutput>("D3D11VideoItem", 1, 0, "Oran7HdrWindowOutput");
         qmlRegisterType<Oran7LyricsModel>("LyricsModel", 1, 0, "LyricsModel");
         qmlRegisterType<Oran7SoundEffect>("Oran7Sound", 1, 0, "Oran7SoundEffect");
+        qmlRegisterType<Oran7ProcessLoadMonitor>("Client", 1, 0, "Oran7ProcessLoadMonitor");
 
         // B站认证管理器单例
         qmlRegisterSingletonType<Oran7BilibiliAuthManager>("BilibiliAuth", 1, 0, "BilibiliAuthManager",

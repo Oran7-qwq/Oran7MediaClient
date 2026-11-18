@@ -1,5 +1,6 @@
 #include "Oran7LyricsService.h"
 #include "Oran7OnlineLyricsFetcher.h"
+#include "../Oran7Utils/Oran7GuiOperationTimer.h"
 #include <QDir>
 #include <QFileInfo>
 #include <QRegularExpression>
@@ -9,12 +10,16 @@
 #include <utility>
 
 Oran7LyricsService::Oran7LyricsService(MetadataReader metadataReader, QObject* parent,
-                                     FetcherFactory fetcherFactory)
+                                     FetcherFactory fetcherFactory,
+                                     std::unique_ptr<QNetworkAccessManager> networkManager)
     : QObject(parent), m_metadataReader(std::move(metadataReader)),
-      m_fetcherFactory(std::move(fetcherFactory))
+      m_fetcherFactory(std::move(fetcherFactory)), m_networkManager(std::move(networkManager))
 {
     if (!m_fetcherFactory)
-        m_fetcherFactory = [] { return std::make_unique<Oran7OnlineLyricsFetcher>(); };
+        m_fetcherFactory = [this] {
+            if (!m_networkManager) m_networkManager=std::make_unique<QNetworkAccessManager>();
+            return std::make_unique<Oran7OnlineLyricsFetcher>(*m_networkManager);
+        };
 }
 
 Oran7LyricsService::~Oran7LyricsService()
@@ -24,6 +29,7 @@ Oran7LyricsService::~Oran7LyricsService()
 
 void Oran7LyricsService::resetRequest()
 {
+    Oran7GuiOperationTimer timer("lyrics_request_reset");
     Q_ASSERT(QThread::currentThread() == thread());
     ++m_generation; // 必须先失效：abort 可能同步触发网络完成回调。
     m_fetcher.reset();
@@ -38,6 +44,7 @@ void Oran7LyricsService::stop()
 
 void Oran7LyricsService::load(const QString& mediaPath, const QString& lrcDirectory, const Oran7Track& track)
 {
+    Oran7GuiOperationTimer timer("lyrics_load");
     resetRequest();
     const quint64 generation = m_generation;
     emit lyricsUnavailable();

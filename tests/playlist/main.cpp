@@ -6,6 +6,7 @@
 #include <QCoreApplication>
 #include <QTest>
 #include <QSemaphore>
+#include <QTimer>
 #include <cstdio>
 #include <cstdlib>
 
@@ -141,6 +142,33 @@ static void checkRecommendationModes() {
     check(plays==stoppedPlays && tracks.recommendations()->count()==0,"canceled prefetch cannot steal focus or revive a cleared queue");
     queue.shutdown(); cloud.shutdown(); gate->release(8); Oran7Async::waitForDone();
 }
+static void checkSlowRecommendationResponsiveness() {
+    for(int mode : {3,4,5,6}) {
+        Oran7TrackLibrary tracks;Oran7PlaybackState state;
+        state.selectTrack(*Oran7Track::fromVariantMap(song(100)));
+        auto gate=std::make_shared<QSemaphore>();
+        auto entered=std::make_shared<std::atomic_bool>(false);
+        Oran7CloudMusicService cloud(tracks,{
+            []{return QVariantMap{{"isLoggedIn",true},{"cookie","FICTIONAL"}};},
+            [gate,entered,mode](const QString& operation,const QVariantMap& args)->QVariant {
+                if(operation=="fetchLikedSongs")return QVariantMap{{"playlistId",99},{"songs",QVariantList{song(90)}}};
+                if(args.value("recommendationMode").toInt()!=mode)return {};
+                *entered=true;
+                if(!gate->tryAcquire(1,2000))return {};
+                return QVariantList{song(1000+mode*10),song(1001+mode*10),song(1002+mode*10)};
+            },[](qint64){},[](qint64,bool){} });
+        cloud.fetchLiked();until([&]{return cloud.likedLoaded();});
+        Oran7PlaybackViewModel queue(tracks,state,cloud);int ticks=0,plays=0;
+        QObject::connect(&queue,&Oran7PlaybackViewModel::trackRequested,[&](const auto&,bool){++plays;});
+        QTimer heartbeat;heartbeat.setInterval(2);QObject::connect(&heartbeat,&QTimer::timeout,[&]{++ticks;});heartbeat.start();
+        check(queue.selectRecommendation(mode),"all recommendation providers accept slow asynchronous fetches");
+        until([&]{return entered->load();});QTest::qWait(100);
+        check(ticks>=3 && plays==0,"GUI keeps processing while recommendation network work is deliberately held");
+        gate->release();until([&]{return plays==1;});
+        check(queue.selectRecommendation(0),"ordinary mode cancels recommendation after slow result");
+        queue.shutdown();cloud.shutdown();gate->release(8);Oran7Async::waitForDone();
+    }
+}
 int main(int argc,char**argv) {
     QCoreApplication app(argc,argv);
     Oran7TrackLibrary tracks; Oran7PlaybackState playback;
@@ -217,5 +245,6 @@ int main(int argc,char**argv) {
     checkRoamFiltering();
     checkRoamLikedReadiness();
     checkRecommendationModes();
+    checkSlowRecommendationResponsiveness();
     std::printf("PASS: %d policy checks\n",count);
 }

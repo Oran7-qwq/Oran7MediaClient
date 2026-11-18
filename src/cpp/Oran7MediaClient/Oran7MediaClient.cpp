@@ -4,6 +4,7 @@
 #include "Oran7MediaClient.h"
 #include "Oran7RenderBridge.h"
 #include "Oran7LyricsService.h"
+#include "../Oran7Utils/Oran7GuiOperationTimer.h"
 #include "Oran7LocalLibraryService.h"
 #include "Oran7MediaInfoReader.h"
 #include "Oran7NetworkSongResolver.h"
@@ -550,6 +551,7 @@ void Oran7MediaClient::saveLocalMusicOrder()
 
 void Oran7MediaClient::selectMusicTrack(const QVariantMap& fields)
 {
+    Oran7GuiOperationTimer timer("track_select_and_save");
     const auto selection = Oran7Track::fromVariantMap(fields);
     if (!selection || (selection->path.isEmpty() && selection->songId == 0)) {
         WARNING_LOG << "无效的曲目选择：需要有效 path 或 songId";

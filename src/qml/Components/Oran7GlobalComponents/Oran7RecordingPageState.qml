@@ -17,6 +17,7 @@ Item {
     property bool applying: false
     property bool captureSaveQueued: false
     property bool outputSaveQueued: false
+    property bool outputEdited: false
     property bool startAfterApply: false
     property string message: ""
     readonly property bool busy: !controller || controller.recordingBusy || controller.liveBusy === true || controller.previewBusy === true || applying
@@ -68,6 +69,7 @@ Item {
         queueSave(true, !!deferred)
     }
     function editOutput(key, value, deferred) {
+        outputEdited = true
         var next = Object.assign({}, outputDraft)
         next[key] = value
         outputDraft = next
@@ -136,6 +138,20 @@ Item {
         outputSaved = localOptions(controller.recordingSettings())
         // 本页面用于本地文件录制；容器格式与 WHIP 输出模式分开。
         outputDraft = Object.assign({}, outputSaved, {mode: 0})
+        outputEdited = false
+    }
+    function flushOutputForExit() {
+        autoSaveTimer.stop()
+        startAfterApply = false
+        captureSaveQueued = false
+        outputSaveQueued = false
+        if (!outputEdited || !outputDirty) return true
+        // 退出不重启采集、不保存未确认首帧的来源草稿；输出参数单独交后端校验。
+        var result = controller.applyRecordingSettings(
+            Object.assign({}, controller.recordingSettings(), outputDraft, {mode:0}))
+        if (result && result.ok) reloadOutput()
+        else message = result ? String(result.msg || "") : ""
+        return !!result && result.ok
     }
     function reset() {
         if (busy) return

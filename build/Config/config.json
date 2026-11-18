@@ -7,16 +7,16 @@
     },
     "audio": {
         "band_gains_db": [
-            10,
+            9.5,
             7,
-            4,
+            3.5,
             -4,
-            -8,
-            -5,
-            -2.5,
-            -2,
+            -5.5,
+            -6,
             -3,
-            -3
+            -4,
+            -6,
+            -8.5
         ],
         "bass_boost_db": 0,
         "bass_freq_hz": 120,
@@ -116,7 +116,7 @@
     },
     "credentialStorage": {
         "groups": {
-            "live": "149ffe69-2ab2-46fb-8627-b2f7309c94ec",
+            "live": "e425bf5b-45b1-4258-a991-b4273b3c4418",
             "netease": "27199e7f-b17e-4d8d-aee9-d3ef73b46ff0",
             "qqmusic": "1e9b2e9d-5364-4df8-8b88-f84d45289ad4"
         },
@@ -189,19 +189,19 @@
             }
         ]
     },
-    "last_media_album": "Baby Just Come",
-    "last_media_artist": "SMYE",
-    "last_media_cover": "https://p1.music.126.net/AtZr5DA0oe5xeiYZekEHJA==/109951172850876762.jpg",
-    "last_media_isvip": false,
+    "last_media_album": "Untitled world",
+    "last_media_artist": "ReoNa",
+    "last_media_cover": "http://p1.music.126.net/Q84Gse18X1ix-uxN0jw85g==/109951167919629933.jpg",
+    "last_media_isvip": true,
     "last_media_mediaMid": "",
-    "last_media_name": "Baby Just Come",
+    "last_media_name": "Untitled world",
     "last_media_nativeId": "0",
     "last_media_provider": "",
     "last_media_providerId": "",
-    "last_media_songid": 3356687441,
-    "last_media_timesize": "130",
-    "last_used_file": "https://music.163.com/song/media/outer/url?id=3356687441.mp3",
-    "last_used_file_isvip": false,
+    "last_media_songid": 1455699833,
+    "last_media_timesize": "247",
+    "last_used_file": "http://m801.music.126.net/20261118105633/5f250128f6163c89a3b13e864dd51061/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/32069521340/aa1d/5183/807d/395b5157eb630f1518bf07ad4cf3b0e1.mp3?vuutv=JQFLVccauSr5sGgRBE6DNSVQUpoVFJQhLiNRNCaU4nWJEmKWBOAWcMvFShvRDfldlxc++E51dIJDfilNpz1P+hNs0xDakY/nVkd4B34UHDg=",
+    "last_used_file_isvip": true,
     "live": {
         "audio_enabled": true,
         "bitrate_kbps": 6000,
@@ -230,7 +230,7 @@
     "player": {
         "roam_filter_liked": true
     },
-    "playerVolume": 30,
+    "playerVolume": 100,
     "recent_files": [
     ],
     "recent_files_max_count": 10,
@@ -239,8 +239,8 @@
         "bearer_token": "",
         "bitrate_kbps": 20000,
         "file_prefix": "Oran7",
-        "format": "flv",
-        "fps": 30,
+        "format": "mp4",
+        "fps": 60,
         "height": 0,
         "mode": 0,
         "output_directory": "",
@@ -260,7 +260,7 @@
     "screen_capture": {
         "debug_log": false,
         "draw_mouse": true,
-        "fps": 240,
+        "fps": 120,
         "output_index": 0
     },
     "user": {
@@ -272,10 +272,19 @@
         "history": [
             {
                 "completed": false,
-                "durationMs": 579883,
-                "lastOpenedAt": "2026-11-13T12:13:26.809Z",
+                "durationMs": 130261,
+                "lastOpenedAt": "2026-11-18T02:17:52.103Z",
                 "mediaKind": "local",
-                "positionMs": 33684,
+                "positionMs": 103637,
+                "target": "C:/Users/funny/Videos/Oran7-20261118-101525-lGcDrT.mp4",
+                "title": "Oran7-20261118-101525-lGcDrT.mp4"
+            },
+            {
+                "completed": false,
+                "durationMs": 579883,
+                "lastOpenedAt": "2026-11-17T04:56:04.754Z",
+                "mediaKind": "local",
+                "positionMs": 12631,
                 "target": "C:/Users/funny/QtProject.doc/MediaTestSrc/4K极致_8K__120fps_带来全球最美的_HDR.mp4",
                 "title": "4K极致_8K__120fps_带来全球最美的_HDR.mp4"
             },
@@ -287,25 +296,16 @@
                 "positionMs": 26339,
                 "target": "C:/Users/funny/QtProject.doc/MediaTestSrc/TIS_4K_fps60-80.mp4",
                 "title": "TIS_4K_fps60-80.mp4"
-            },
-            {
-                "completed": false,
-                "durationMs": 11377,
-                "lastOpenedAt": "2026-11-12T02:32:00.306Z",
-                "mediaKind": "local",
-                "positionMs": 10497,
-                "target": "C:/Users/funny/Videos/Oran7-20261112-103126-tnovjq.flv",
-                "title": "Oran7-20261112-103126-tnovjq.flv"
             }
         ]
     },
     "window": {
-        "height": 725,
+        "height": 635,
         "maximized": false,
         "position": {
-            "x": 288,
-            "y": 161
+            "x": 484,
+            "y": 308
         },
-        "width": 1539
+        "width": 1183
     }
 }

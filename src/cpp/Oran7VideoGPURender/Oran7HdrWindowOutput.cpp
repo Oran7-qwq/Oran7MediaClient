@@ -97,7 +97,7 @@ bool Oran7HdrWindowOutput::isActive(QQuickWindow* window)
 Oran7HdrWindowOutput::~Oran7HdrWindowOutput()
 {
     QCoreApplication::instance()->removeNativeEventFilter(this);
-    for (const auto& connection : m_connections)
+    for (const auto& connection : std::as_const(m_connections))
         disconnect(connection);
     // sceneGraphInvalidated 已在场景图线程释放；basic 循环析构也是同一线程。
     m_compositor.release();
@@ -106,7 +106,7 @@ void Oran7HdrWindowOutput::setWindow(QQuickWindow* window)
 {
     if (m_window == window)
         return;
-    for (const auto& connection : m_connections)
+    for (const auto& connection : std::as_const(m_connections))
         disconnect(connection);
     m_connections.clear();
     m_compositor.release();

@@ -1,6 +1,7 @@
 #include "Oran7CaptureOutputRouter.h"
 #include <QElapsedTimer>
 #include <algorithm>
+#include <array>
 
 Oran7CaptureOutputRouter::Statistics Oran7CaptureOutputRouter::submit(const AVFrame* source, int64_t nowUs)
 {
@@ -15,24 +16,56 @@ Oran7CaptureOutputRouter::Statistics Oran7CaptureOutputRouter::submit(const AVFr
     }
     if (!source)
         return stats;
+
+    struct Oran7DueOutput
+    {
+        const Oran7RecordingFeed::Oran7Output* output;
+        Route* route;
+    };
+    // Feed 最多同时保留两个订阅。
+    std::array<Oran7DueOutput, 2> due{};
+    std::size_t dueCount = 0;
     for (const auto& output : outputs)
     {
         if (!output.encoder->isRuning())
             continue;
-        auto& route = m_routes[output.id];
-        if (!route.converter)
-        {
-            route.converter = std::make_unique<Oran7CaptureFrameConverter>(m_device, output.fps, m_download);
-            route.converter->beginRecording();
+        auto [it, inserted] = m_routes.try_emplace(output.id);
+        auto& route = it->second;
+        if (inserted)
             route.nextUs = output.startUs;
+        if (nowUs + 1000 >= route.nextUs)
+            due[dueCount++] = {&output, &route};
+    }
+
+    const bool sharePixels = dueCount == 2 && due[0].output->width == due[1].output->width
+                             && due[0].output->height == due[1].output->height;
+    Oran7CaptureFrameConverter::Frame secondFrame;
+    for (std::size_t index = 0; index < dueCount; ++index)
+    {
+        const auto& output = *due[index].output;
+        auto& route = *due[index].route;
+        Oran7CaptureFrameConverter::Frame frame;
+        if (sharePixels && index == 1)
+        {
+            frame = std::move(secondFrame);
         }
-        if (nowUs + 1000 < route.nextUs)
-            continue;
-        QElapsedTimer conversion;
-        conversion.start();
-        auto frame = route.converter->recording(source, output.width, output.height);
-        stats.conversionNs += conversion.nsecsElapsed();
-        ++stats.conversions;
+        else
+        {
+            if (!route.converter)
+            {
+                route.converter = std::make_unique<Oran7CaptureFrameConverter>(m_device, output.fps, m_download);
+                route.converter->beginRecording();
+            }
+            QElapsedTimer conversion;
+            conversion.start();
+            frame = route.converter->recording(source, output.width, output.height);
+            stats.conversionNs += conversion.nsecsElapsed();
+            ++stats.conversions;
+
+            // 先复制帧头再交付，编码线程各自修改时间戳和关键帧标记，NV12 像素通过 AVBufferRef 共享。
+            if (sharePixels && frame)
+                secondFrame.reset(av_frame_clone(frame.get()));
+        }
         if (!frame)
             continue;
         auto pts = std::max<int64_t>(0, (nowUs - output.startUs) * 90000 / 1000000);

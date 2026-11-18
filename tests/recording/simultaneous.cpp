@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <future>
+#include <utility>
 
 static void check(bool ok, const char* message)
 {
@@ -29,8 +30,10 @@ template <class F> static void until(F ready)
         QThread::msleep(2);
     check(ready(), "codec ready");
 }
+static int downloadCalls = 0;
 static int download(AVFrame* dst, const AVFrame* source, int)
 {
+    ++downloadCalls;
     return av_frame_ref(dst, static_cast<AVFrame*>(source->opaque));
 }
 struct Output
@@ -40,7 +43,7 @@ struct Output
     uint64_t videoId = 0, audioId = 0;
     int width, height, fps;
     std::atomic_int errors{0};
-    Output(int w, int h, int f) : width(w), height(h), fps(f)
+    Output(int w, int h, int f, int bitrateKbps) : width(w), height(h), fps(f)
     {
         Oran7VideoEncoder::EncoderConfig v;
         v.codecName = "libx264";
@@ -48,7 +51,7 @@ struct Output
         v.height = h;
         v.fps = f;
         v.gopSize = f;
-        v.bitrateKbps = 300;
+        v.bitrateKbps = bitrateKbps;
         v.preset = "ultrafast";
         v.softwareInputFormat = AV_PIX_FMT_NV12;
         check(video->configure(v, [this](const auto&) { ++errors; }) && video->start(),
@@ -109,7 +112,8 @@ int main(int argc, char** argv)
     QCoreApplication app(argc, argv);
     QTemporaryDir dir;
     check(dir.isValid(), "isolated output directory");
-    for (bool stopRecordingFirst : {true, false})
+    for (const auto& [sameSize, stopRecordingFirst] :
+         {std::pair{false, true}, std::pair{false, false}, std::pair{true, true}, std::pair{true, false}})
     {
         auto videoFeed = std::make_shared<Oran7RecordingFeed>();
         auto audioFeed = std::make_shared<Oran7AudioCaptureFeed>();
@@ -144,7 +148,10 @@ int main(int argc, char** argv)
                 }
             });
         until([&] { return audioFeed->snapshot().ready; });
-        Output local(96, 64, 60), live(64, 48, 30);
+        Output local(96, 64, 60, 600), live(sameSize ? 96 : 64, sameSize ? 64 : 48,
+                                          sameSize && stopRecordingFirst ? 60 : 30, 300);
+        check(local.video->codecContext()->bit_rate == 600000 && live.video->codecContext()->bit_rate == 300000,
+              "encoders keep separate video bitrates");
         QTcpServer reserve;
         check(reserve.listen(QHostAddress::LocalHost), "reserve local RTMP endpoint");
         const auto address = QString("rtmp://127.0.0.1:%1/live").arg(reserve.serverPort());
@@ -231,6 +238,7 @@ int main(int argc, char** argv)
         QElapsedTimer elapsed;
         elapsed.start();
         bool attached = false, stopped = false;
+        int dualFrames = 0, singleFramesWithBothActive = 0;
         std::future<void> closing;
         while (elapsed.elapsed() < 2400)
         {
@@ -267,9 +275,22 @@ int main(int argc, char** argv)
                                      });
                 stopped = true;
             }
-            router.submit(&source, Oran7RecordingFeed::clockUs());
+            const auto priorDownloads = downloadCalls;
+            const auto routed = router.submit(&source, Oran7RecordingFeed::clockUs());
+            check(routed.conversions == downloadCalls - priorDownloads, "conversion statistics count actual downloads");
+            if (routed.submitted == 2)
+            {
+                ++dualFrames;
+                check(routed.conversions == (sameSize ? 1 : 2),
+                      "two due outputs share one download only at matching dimensions");
+            }
+            else if (attached && !stopped && routed.submitted == 1)
+                ++singleFramesWithBothActive;
             QThread::msleep(4);
         }
+        check(dualFrames > 10, "test exercised both encoders on the same source frames");
+        if (live.fps != local.fps)
+            check(singleFramesWithBothActive > 10, "different output rates retain independent scheduling");
         closing.get();
         check(videoFeed->outputs().size() == 1 && videoFeed->snapshot().epoch == sourceEpoch,
               "stopping one output keeps other subscription and source epoch");
@@ -300,7 +321,7 @@ int main(int argc, char** argv)
         check(local.errors == 0 && live.errors == 0 && sendErrors == 0, "dual encoding and RTMP sender have no errors");
         check(receiver.waitForFinished(7000), "receiver finalizes after independent RTMP stop");
         readback(localPath, 96, 64, 60, stopRecordingFirst ? 1.2 : 2.1);
-        readback(remotePath, 64, 48, 30, stopRecordingFirst ? 1.7 : .8);
+        readback(remotePath, live.width, live.height, live.fps, stopRecordingFirst ? 1.7 : .8);
     }
-    std::puts("PASS: one source, dual scale/FPS, MP4 plus real RTMP, staggered start, both independent stop orders");
+    std::puts("PASS: matching/different sizes, independent FPS and bitrate, MP4 plus RTMP, both stop orders");
 }

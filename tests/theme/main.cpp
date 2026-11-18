@@ -107,6 +107,11 @@ int main(int argc, char** argv)
     check(playlistColors.value("rowSurfaceDark").value<QColor>().isValid() &&
               playlistColors.value("rowAccentLight").value<QColor>().isValid(),
           "playlist semantic colors evaluate from own component defaults");
+    check(theme.Oran7MainGUI().value("backgroundParallaxEnabled").toBool()
+        && theme.Oran7MainGUI().value("backgroundParallaxAmplitude").toInt() == 30,
+        "legacy profiles inherit shared parallax defaults");
+    check(theme.Oran7ScreenCapture().value("workspaceSkin").toString() == "default",
+        "existing theme profiles inherit default studio skin");
     const auto originalMainColor = theme.Oran7MainGUI().value("themeColor");
     theme.installComponentToken("Oran7MainGUI", "themeColor", "#12ab34");
     check(theme.Oran7MusicPlaylistView() == playlistColors,
@@ -145,6 +150,13 @@ int main(int argc, char** argv)
     theme.saveComponentToken("Oran7ProgressSlider", "moveThreshold", 11);
     check(profiles.loadThemeProfile(name)["__component__"].toObject().size() == 1,
           "save contains only edited component");
+    theme.saveComponentToken("Oran7MainGUI", "backgroundParallaxEnabled", false);
+    theme.saveComponentToken("Oran7MainGUI", "backgroundParallaxAmplitude", 17);
+    theme.reloadTheme();
+    check(!theme.Oran7MainGUI().value("backgroundParallaxEnabled").toBool()
+        && theme.Oran7MainGUI().value("backgroundParallaxAmplitude").toInt() == 17,
+        "parallax switch and amplitude restore from isolated saved profile");
+
     const QColor savedColor(20, 40, 60, 128);
     theme.saveComponentToken("Oran7ProgressSlider", "colorToken", savedColor);
     theme.saveComponentToken("Oran7ProgressSlider", "persistedFalse", false);

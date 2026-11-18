@@ -12,21 +12,30 @@ Rectangle {
     property string sourceDetails: ""
     property bool showInfo: false
     property bool fillPreview: false
-    property color panelColor: "#22252d"
-    property color canvasColor: "#101216"
-    property color textColor: "#e1e5ed"
-    property color mutedTextColor: "#8d939f"
-    property color accentColor: "#beb7ff"
-    property color borderColor: "#424650"
-    property color errorColor: "#e36a75"
+    property bool violetSkin: false
+    property real materialStrength: 0.025
+    property color paperColor: "#d5dfec"
+    property color paperInkColor: "#263447"
+    property color titleSurfaceColor: "#161e29"
+    property color panelColor: "#1e252f"
+    property color canvasColor: "#0f141c"
+    property color textColor: "#e7edf5"
+    property color mutedTextColor: "#a3afbf"
+    readonly property color standbyColor: violetSkin ? "#a6dce6f8" : canvasColor
+    property color accentColor: "#80a9db"
+    property color recordingColor: "#e7a399"
+    property color streamingColor: "#6dcbb7"
+    property color borderColor: "#334154"
+    property color errorColor: "#ed8795"
     property string fontFamily: ""
     signal infoToggled(bool checked)
     signal scaleToggled(bool checked)
     readonly property bool recording: controller && controller.recordingState === "Recording"
+    readonly property bool streaming: !!controller && !!controller.liveSession && controller.liveSession.state === "Streaming"
     readonly property bool unavailable: controller && controller.previewState !== undefined && controller.previewState !== "Running"
-    color: root.canvasColor
-    radius: 12
-    border.color: root.recording ? Qt.rgba(errorColor.r, errorColor.g, errorColor.b, 0.65) : root.borderColor
+    color: root.violetSkin ? "transparent" : root.canvasColor
+    radius: 9
+    border.color: root.recording ? Qt.rgba(recordingColor.r, recordingColor.g, recordingColor.b, 0.65) : root.borderColor
     clip: true
     Behavior on border.color { ColorAnimation { duration: 160 } }
 
@@ -40,32 +49,42 @@ Rectangle {
             Layout.minimumWidth: 0
             color: root.panelColor
             radius: 11
-            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 12; color: root.panelColor }
+            bottomLeftRadius: root.violetSkin ? 0 : radius
+            bottomRightRadius: bottomLeftRadius
+            Rectangle { visible: !root.violetSkin; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 12; color: root.panelColor }
+            Oran7StudioMaterial { anchors.fill: parent; anchors.margins: 2; grainOpacity: root.materialStrength }
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 12; anchors.rightMargin: 12
                 spacing: 10
                 Rectangle {
-                    Layout.preferredWidth: 32; Layout.minimumWidth: 32; Layout.maximumWidth: 32
-                    Layout.preferredHeight: 32
-                    radius: 9
-                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
-                    Oran7RecordingIcon { anchors.centerIn: parent; glyph: "monitor"; ink: root.accentColor }
-                }
-                ColumnLayout {
                     Layout.fillWidth: true; Layout.minimumWidth: 0
-                    spacing: 3
-                    Label {
-                        Layout.fillWidth: true
-                        text: root.sourceName || qsTranslate("Oran7Ui", "画面预览")
-                        color: root.textColor; font.family: root.fontFamily; font.pixelSize: 12; font.weight: Font.DemiBold
-                        elide: Text.ElideRight
-                    }
-                    Label {
-                        Layout.fillWidth: true
-                        text: root.sourceDetails || qsTranslate("Oran7Ui", "画面预览")
-                        color: root.mutedTextColor; font.family: root.fontFamily; font.pixelSize: 10
-                        elide: Text.ElideRight
+                    Layout.preferredHeight: 40
+                    radius: 5; color: root.titleSurfaceColor
+                    border.color: Qt.rgba(root.borderColor.r,root.borderColor.g,root.borderColor.b,.55)
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 10
+                        spacing: 9
+                        Oran7RecordingIcon {
+                            Layout.preferredWidth: 22; Layout.preferredHeight: 22
+                            glyph: "monitor"; ink: root.accentColor
+                        }
+                        Rectangle { width: 1; Layout.preferredHeight: 24; color: Qt.rgba(root.borderColor.r,root.borderColor.g,root.borderColor.b,.8) }
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 2
+                            Label {
+                                Layout.fillWidth: true
+                                text: "02 / " + (root.sourceName || qsTranslate("Oran7Ui", "画面预览"))
+                                color: root.textColor; font.family: root.fontFamily; font.pixelSize: 12; font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: root.sourceDetails || qsTranslate("Oran7Ui", "画面预览")
+                                color: root.mutedTextColor
+                                font.family: root.fontFamily; font.pixelSize: 10; elide: Text.ElideRight
+                            }
+                        }
                     }
                 }
                 Rectangle {
@@ -75,12 +94,12 @@ Rectangle {
                     Layout.maximumWidth: badgeRow.implicitWidth + 16
                     Layout.preferredHeight: 25
                     radius: 12
-                    color: root.recording ? Qt.rgba(root.errorColor.r, root.errorColor.g, root.errorColor.b, 0.13) : "#0cffffff"
+                    color: root.recording ? Qt.rgba(root.recordingColor.r, root.recordingColor.g, root.recordingColor.b, 0.13) : "#0cffffff"
                     Row {
                         id: badgeRow
                         anchors.centerIn: parent; spacing: 6
-                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 6; height: 6; radius: 3; color: root.recording ? root.errorColor : root.unavailable ? root.mutedTextColor : root.accentColor }
-                        Label { visible: root.width >= 420 || root.recording; text: root.recording ? qsTranslate("Oran7Ui", "正在录制") : qsTranslate("Oran7Ui", "画面预览"); color: root.recording ? root.errorColor : root.mutedTextColor; font.family: root.fontFamily; font.pixelSize: 10 }
+                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 6; height: 6; radius: 3; color: root.recording ? root.recordingColor : root.streaming ? root.streamingColor : root.unavailable ? root.mutedTextColor : root.accentColor }
+                        Label { visible: root.width >= 420 || root.recording || root.streaming; text: root.recording && root.streaming ? "REC + LIVE" : root.recording ? qsTranslate("Oran7Ui", "正在录制") : root.streaming ? qsTranslate("Oran7Ui", "推流中") : qsTranslate("Oran7Ui", "画面预览"); color: root.recording ? root.recordingColor : root.streaming ? root.streamingColor : root.mutedTextColor; font.family: root.fontFamily; font.pixelSize: 10 }
                     }
                 }
             }
@@ -90,16 +109,44 @@ Rectangle {
             id: canvas
             objectName: "recordingPreviewCanvas"
             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0
+            Rectangle {
+                anchors.fill: parent
+                visible: root.violetSkin && !root.unavailable
+                color: root.canvasColor
+                bottomLeftRadius: 8
+                bottomRightRadius: 8
+            }
             Loader {
                 id: preview
                 anchors.fill: parent; anchors.margins: 10
                 sourceComponent: root.previewComponent
+                opacity: root.violetSkin && root.unavailable ? 0 : 1
+            }
+            Rectangle {
+                anchors.fill: parent; anchors.margins: 6
+                color: "transparent"; border.color: "#14ffffff"; radius: 3
             }
             // 状态遮罩不销毁 Loader，确保首次挂载与自动恢复可以继续推进。
             Rectangle {
+                objectName: "recordingPreviewStandby"
                 anchors.fill: parent
-                color: root.canvasColor
+                color: root.standbyColor
                 visible: root.unavailable
+                bottomLeftRadius: root.violetSkin ? 8 : 0
+                bottomRightRadius: bottomLeftRadius
+                // 紫色皮肤的待机遮罩保留磨砂背景，开启采集后由预览画布遮住。
+                Item {
+                    anchors.fill: parent
+                    clip: true
+                    visible: !root.violetSkin
+                    Oran7StudioMaterial { anchors.fill: parent; grainOpacity: root.materialStrength }
+                    Oran7StudioMotif {
+                        width: Math.min(280, parent.width * 0.55, parent.height * 0.75)
+                        height: width; anchors.centerIn: parent
+                        visible: !root.violetSkin
+                        ink: root.mutedTextColor; opacity: 0.055
+                    }
+                }
                 Column {
                     anchors.centerIn: parent
                     width: Math.max(0, parent.width - 32)
@@ -146,6 +193,23 @@ Rectangle {
             }
         }
     }
+    // 两路状态独立，切换时不改变舞台或工具区的尺寸。
+    Row {
+        anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+        anchors.leftMargin: 12; anchors.rightMargin: 12; anchors.bottomMargin: 3
+        spacing: 4; height: 3
+        Rectangle {
+            width: (parent.width - 4) / 2; height: 3; radius: 1
+            color: root.recording ? root.recordingColor : "#233b454d"
+            Behavior on color { ColorAnimation { duration: 240 } }
+        }
+        Rectangle {
+            width: (parent.width - 4) / 2; height: 3; radius: 1
+            color: root.streaming ? root.streamingColor : "#233b454d"
+            Behavior on color { ColorAnimation { duration: 240 } }
+        }
+    }
+
     component Oran7PreviewAction: Button {
         id: action
         property string glyph
@@ -158,9 +222,10 @@ Rectangle {
             Oran7RecordingIcon { anchors.verticalCenter: parent.verticalCenter; width: 15; height: 15; glyph: action.glyph; ink: action.checked ? root.accentColor : root.textColor }
             Label { text: action.text; anchors.verticalCenter: parent.verticalCenter; color: action.checked ? root.accentColor : root.textColor; font.family: root.fontFamily; font.pixelSize: 11 }
         }
-        background: Rectangle {
+        background: Oran7StudioControlSurface {
+            polished: root.violetSkin; tintColor: root.accentColor; highlighted: action.checked || action.hovered
             radius: 6
-            color: action.checked ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.13) : action.hovered ? "#12ffffff" : "transparent"
+            color: action.checked || (root.violetSkin && action.hovered) ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.13) : action.hovered ? "#12ffffff" : "transparent"
             border.color: action.activeFocus ? root.accentColor : "transparent"
             Behavior on color { ColorAnimation { duration: 100 } }
         }

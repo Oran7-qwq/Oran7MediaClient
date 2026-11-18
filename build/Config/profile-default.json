@@ -5,9 +5,6 @@
                 "__vars__": {
                     "colorPrimaryBase": "$genColor(#fb7185)"
                 }
-            },
-            "__style__": {
-                "isSimpleMode": false
             }
         },
         "Oran7MainGUI": {
@@ -18,6 +15,7 @@
             },
             "__style__": {
                 "backgroundImage": "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/wallpaperResource/427d72b51f698a44236122b52ffa666f.jpg",
+                "backgroundMode": "Video",
                 "soundEffectVolume": 0.2,
                 "themeColor": "#ff5858"
             }
@@ -30,19 +28,19 @@
             },
             "__style__": {
                 "backgroundImage_url": "C:/Users/funny/Pictures/OranMediaClientWallPaper/fe8e786c53df14a8bcbcaf14ee8f648d.jpg",
-                "floatingCenterX": 1722,
+                "floatingCenterX": 1727,
                 "floatingEnabled": true,
-                "floatingLyricsHeight": 60,
+                "floatingLyricsHeight": 61,
                 "floatingPositionVersion": 2,
-                "floatingX": 1551.0703125,
-                "floatingY": 868,
-                "lyricsFontSize": 26
+                "floatingX": 1516.578125,
+                "floatingY": 841,
+                "lyricsFontSize": 28
             }
         },
         "Oran7MusicLyricsWindow": {
             "__init__": {
                 "__vars__": {
-                    "textSizeBase": "$genFontSize(20)"
+                    "textSizeBase": "$genFontSize(27)"
                 }
             }
         },
@@ -53,7 +51,6 @@
                 }
             },
             "__style__": {
-                "blurEffectEnabled": false,
                 "progressVisibleBar_ColorIndex": 12
             }
         },

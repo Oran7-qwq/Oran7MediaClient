@@ -171,6 +171,7 @@ class Oran7ScreenCaptureController : public QObject
     QString recordingOutputPath() const { return m_recordingOutputPath; }
 
   signals:
+    void settingsFlushRequested(); // 退出冻结前同步补交 QML 防抖草稿，不等待定时器。
     void previewStateChanged();
     void captureRequestFinished(const QVariantMap& result);
     void liveChanged();
@@ -232,6 +233,7 @@ class Oran7ScreenCaptureController : public QObject
     Oran7PreviewState m_previewState = Oran7PreviewState::Idle;
     QString m_previewError;
     bool m_previewRequested = false, m_shuttingDown = false, m_driveScheduled = false;
+    bool m_flushingShutdownSettings = false;
     bool m_retryDelay = false;
     QTimer m_recoveryTimer, m_startTimer, m_reapTimer;
     int m_recoveryAttempts = 0;

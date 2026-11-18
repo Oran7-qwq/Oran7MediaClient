@@ -159,19 +159,25 @@
         <translation>No recommendations match your filters. Adjust filters and retry</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+632"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+794"/>
         <source> FPS，不低于录制帧率。
 修改后自动保存并更新预览。</source>
         <translation> FPS, at least the recording frame rate.
 Changes are saved and applied automatically.</translation>
     </message>
     <message>
-        <location line="+230"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingOutputCard.qml" line="+63"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+259"/>
         <source>直播推流</source>
         <translation>Live streaming</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-223"/>
+        <source>输出控制</source>
+        <translation>Output control</translation>
+    </message>
+    <message>
+        <location line="+225"/>
         <source>B站直播</source>
         <translation>Bilibili Live</translation>
     </message>
@@ -221,12 +227,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Stream system audio</translation>
     </message>
     <message>
-        <location line="+3"/>
-        <source>与本地录制互斥；直播帧率不能超过采集帧率。</source>
-        <translation>Streaming and local recording are exclusive. Stream FPS must not exceed capture FPS.</translation>
-    </message>
-    <message>
-        <location line="-237"/>
+        <location line="-234"/>
         <source>录制格式</source>
         <translation>Recording format</translation>
     </message>
@@ -236,7 +237,7 @@ Changes are saved and applied automatically.</translation>
         <translation> FPS, up to the capture frame rate.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPageState.qml" line="+27"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPageState.qml" line="+28"/>
         <location filename="Oran7UiMessages.h" line="+52"/>
         <source>正在启动预览…</source>
         <translation>Starting preview…</translation>
@@ -254,7 +255,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Recovering preview…</translation>
     </message>
     <message>
-        <location line="+85"/>
+        <location line="+86"/>
         <location line="+3"/>
         <source> · 主屏</source>
         <translation> · Primary</translation>
@@ -266,7 +267,7 @@ Changes are saved and applied automatically.</translation>
         <translation> · Disconnected</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-623"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-776"/>
         <source>/小时 · 仅视频估算</source>
         <translation>/hour · Video estimate</translation>
     </message>
@@ -316,7 +317,7 @@ Changes are saved and applied automatically.</translation>
         <translation>DXGI format:  </translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7SettingsContainerWindow.qml" line="+191"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7SettingsContainerWindow.qml" line="+202"/>
         <source>ESC：打开或关闭设置窗口。</source>
         <translation>ESC: Open or close the setting windows.</translation>
     </message>
@@ -411,7 +412,7 @@ Changes are saved and applied automatically.</translation>
         <translation>⫸ Focused on C++, Qt Quick interfaces and FFmpeg media processing~</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+640"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+793"/>
         <source>上限 </source>
         <translation>Up to </translation>
     </message>
@@ -436,7 +437,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Chinese</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-636"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-789"/>
         <source>为复杂细节保留更多余量，文件很大，画质提升可能有限</source>
         <translation>More room for complex details; very large files with potentially limited quality gains.</translation>
     </message>
@@ -446,12 +447,12 @@ Changes are saved and applied automatically.</translation>
         <translation>More detail for text and motion, with moderate file sizes.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+149"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+150"/>
         <source>主界面背景</source>
         <translation>Main background</translation>
     </message>
     <message>
-        <location line="-87"/>
+        <location line="-88"/>
         <source>主界面设置</source>
         <translation>Main UI settings</translation>
     </message>
@@ -493,7 +494,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Save failed</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+705"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+858"/>
         <source>保存目录</source>
         <translation>Save folder</translation>
     </message>
@@ -508,7 +509,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Signaling username</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+347"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingOutputCard.qml" line="+39"/>
         <source>停止</source>
         <translation>Stop</translation>
     </message>
@@ -549,7 +550,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Refresh FPS: </translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-224"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-253"/>
         <location line="+1"/>
         <source>刷新显示器</source>
         <translation>Refresh displays</translation>
@@ -580,7 +581,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Animated gradient</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+103"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+132"/>
         <source>原始尺寸</source>
         <translation>Original size</translation>
     </message>
@@ -607,7 +608,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Enabled</translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+272"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+304"/>
         <location filename="../src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml" line="-258"/>
         <location line="+104"/>
         <source>启用模糊</source>
@@ -639,7 +640,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Developer mode</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="+110"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="+143"/>
         <source>预览尚未启动</source>
         <translation>Preview has not started</translation>
     </message>
@@ -685,7 +686,7 @@ Changes are saved and applied automatically.</translation>
         <translation>A browser will open. Complete sign-in there.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="-305"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+47"/>
         <source>就绪</source>
         <translation>Ready</translation>
     </message>
@@ -695,8 +696,8 @@ Changes are saved and applied automatically.</translation>
         <translation>Left Shift + Delete: clear the focused field.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-204"/>
-        <location line="+144"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-233"/>
+        <location line="+145"/>
         <source>已保存</source>
         <translation>Saved</translation>
     </message>
@@ -706,7 +707,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Saved settings restored</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-144"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-145"/>
         <source>应用中</source>
         <translation>Applying</translation>
     </message>
@@ -716,7 +717,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Apply failed</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+296"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingOutputCard.qml" line="-15"/>
         <source>开始录制</source>
         <translation>Record</translation>
     </message>
@@ -830,17 +831,17 @@ Changes are saved and applied automatically.</translation>
         <translation>Recording and streaming</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+55"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+359"/>
         <source>录制后显示文件保存位置</source>
         <translation>The saved file path appears after recording</translation>
     </message>
     <message>
-        <location line="-351"/>
+        <location line="-359"/>
         <source>录制失败</source>
         <translation>Recording failed</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+205"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+234"/>
         <source>录制帧率上限 · FPS</source>
         <translation>Recording limit · FPS</translation>
     </message>
@@ -875,18 +876,13 @@ Changes are saved and applied automatically.</translation>
         <translation>Recording request rejected. Check the current state.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-62"/>
-        <source>录制输出</source>
-        <translation>Recording output</translation>
-    </message>
-    <message>
-        <location line="-186"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-288"/>
         <source>采集上限 %1 FPS</source>
         <translation>Capture limit %1 FPS</translation>
     </message>
     <message>
-        <location line="+43"/>
-        <location line="+144"/>
+        <location line="+54"/>
+        <location line="+145"/>
         <source>待保存</source>
         <translation>Unsaved</translation>
     </message>
@@ -917,7 +913,7 @@ Changes are saved and applied automatically.</translation>
         <translation>All files (*)</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-554"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-679"/>
         <source>手动输入 0.1～200 Mbps，保留精确设置</source>
         <translation>Enter an exact bitrate from 0.1 to 200 Mbps.</translation>
     </message>
@@ -937,12 +933,12 @@ Changes are saved and applied automatically.</translation>
         <translation>Capture FPS: </translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+546"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+670"/>
         <source>排查采集问题时开启。</source>
         <translation>Enable to diagnose capture problems.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-202"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-234"/>
         <source>提示音音量</source>
         <translation>Sound volume</translation>
     </message>
@@ -1051,7 +1047,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Playback controls</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+154"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+183"/>
         <source>文件保存</source>
         <translation>File output</translation>
     </message>
@@ -1071,7 +1067,7 @@ Changes are saved and applied automatically.</translation>
         <translation>File recording creates a separate MP4. Streaming requires a valid WHIP service.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-739"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-892"/>
         <source>文件较小，适合静态演示；快速运动细节可能较少</source>
         <translation>Small files for static presentations; fast motion may lose detail.</translation>
     </message>
@@ -1091,7 +1087,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Could not load the English translation resource</translation>
     </message>
     <message>
-        <location filename="../main.qml" line="+147"/>
+        <location filename="../main.qml" line="+151"/>
         <source>无网络</source>
         <translation>Offline</translation>
     </message>
@@ -1111,7 +1107,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Hardware decoding: </translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+443"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+567"/>
         <source>显示器</source>
         <translation>Display</translation>
     </message>
@@ -1141,7 +1137,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Sign in ∧</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-187"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-198"/>
         <source>本地 MP4</source>
         <translation>Local MP4</translation>
     </message>
@@ -1157,7 +1153,7 @@ Changes are saved and applied automatically.</translation>
         <translation>Standard</translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+174"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+206"/>
         <source>标题栏图标颜色</source>
         <translation>Title bar icon color</translation>
     </message>
@@ -1177,7 +1173,17 @@ Changes are saved and applied automatically.</translation>
         <translation>Title bar</translation>
     </message>
     <message>
-        <location line="+27"/>
+        <location line="-93"/>
+        <source>背景反向视差</source>
+        <translation>Background parallax</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>移动幅度（px）</source>
+        <translation>Movement amplitude (px)</translation>
+    </message>
+    <message>
+        <location line="+105"/>
         <source>标题栏选中颜色</source>
         <translation>Title bar selected color</translation>
     </message>
@@ -1365,28 +1371,24 @@ Changes are saved and applied automatically.</translation>
         <translation>Reset to flat</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+304"/>
-        <source>正在保存…</source>
-        <translation>Saving…</translation>
-    </message>
-    <message>
-        <location line="-305"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingOutputCard.qml" line="-13"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="-1"/>
         <source>正在保存文件，请稍候…</source>
         <translation>Saving file, please wait…</translation>
     </message>
     <message>
-        <location line="+236"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+280"/>
         <location line="+31"/>
         <source>麦克风</source>
         <translation>Microphone</translation>
     </message>
     <message>
-        <location line="-61"/>
+        <location line="-62"/>
         <source>系统声音音量</source>
         <translation>System audio volume</translation>
     </message>
     <message>
-        <location line="-111"/>
+        <location line="-132"/>
         <source>已静音</source>
         <translation>Muted</translation>
     </message>
@@ -1411,12 +1413,22 @@ Changes are saved and applied automatically.</translation>
         <translation> live level</translation>
     </message>
     <message>
-        <location line="+105"/>
+        <location line="+65"/>
+        <source>音频混音</source>
+        <translation>Audio mixer</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>实时监测</source>
+        <translation>Live monitoring</translation>
+    </message>
+    <message>
+        <location line="+59"/>
         <source>调整录制与推流的系统声音音量，不改变 Windows 音量</source>
         <translation>Adjust system audio volume for recording and streaming without changing Windows volume</translation>
     </message>
     <message>
-        <location line="+24"/>
+        <location line="+25"/>
         <location line="+27"/>
         <source>采集 Windows 默认麦克风，与系统声音混音后录制或推流</source>
         <translation>Capture the default Windows microphone and mix it with system audio for recording or streaming</translation>
@@ -1427,13 +1439,19 @@ Changes are saved and applied automatically.</translation>
         <translation>Microphone volume</translation>
     </message>
     <message>
-        <location line="+22"/>
-        <location line="+56"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingOutputCard.qml" line="-11"/>
+        <source>本地录制</source>
+        <translation>Local recording</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <location line="+15"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+42"/>
         <source>正在停止推流…</source>
         <translation>Stopping stream…</translation>
     </message>
     <message>
-        <location line="-55"/>
+        <location line="+0"/>
         <source>取消连接</source>
         <translation>Cancel connection</translation>
     </message>
@@ -1443,32 +1461,35 @@ Changes are saved and applied automatically.</translation>
         <translation>Stop streaming</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+0"/>
         <source>开始推流</source>
         <translation>Start streaming</translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+1"/>
         <source>正在准备…</source>
         <translation>Preparing…</translation>
     </message>
     <message>
-        <location line="+38"/>
+        <location line="-18"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="-1"/>
         <source>正在连接推流服务器…</source>
         <translation>Connecting to stream server…</translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="-75"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+2"/>
         <source>推流中</source>
         <translation>Streaming</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+4"/>
         <source>音频检测：%1</source>
         <translation>Audio monitoring: %1</translation>
     </message>
     <message>
-        <location line="-340"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingOutputCard.qml" line="+3"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="-348"/>
         <source>正在准备编码器与输出…</source>
         <translation>Preparing encoder and output…</translation>
     </message>
@@ -1478,7 +1499,8 @@ Changes are saved and applied automatically.</translation>
         <translation>Applying capture source…</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="-58"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingOutputCard.qml" line="+1"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="+0"/>
         <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+0"/>
         <source>正在录制</source>
         <translation>Recording</translation>
@@ -1511,7 +1533,7 @@ Changes are saved and applied automatically.</translation>
 are synced with your NetEase Music account.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-243"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-275"/>
         <source>深色模式</source>
         <translation>Is Dark Mode</translation>
     </message>
@@ -1582,25 +1604,25 @@ are synced with your NetEase Music account.</translation>
         <translation>Generating...</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+246"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+286"/>
         <source>画质设置</source>
         <translation>Video quality</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="+50"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="+67"/>
         <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="+333"/>
         <source>画面信息</source>
         <translation>Frame info</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-159"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-188"/>
         <source>画面来源</source>
         <translation>Capture source</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="-73"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="-92"/>
         <location line="+6"/>
-        <location line="+17"/>
+        <location line="+19"/>
         <source>画面预览</source>
         <translation>Preview</translation>
     </message>
@@ -1621,23 +1643,23 @@ are synced with your NetEase Music account.</translation>
         <translation>Always on top</translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+165"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+197"/>
         <source>简洁标题栏</source>
         <translation>Compact title bar</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+183"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml" line="+226"/>
         <location line="+33"/>
         <source>系统声音</source>
         <translation>System audio</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+297"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+326"/>
         <source>系统视频目录</source>
         <translation>System Videos folder</translation>
     </message>
     <message>
-        <location line="-694"/>
+        <location line="-847"/>
         <source>约 </source>
         <translation>About </translation>
     </message>
@@ -1701,12 +1723,12 @@ are synced with your NetEase Music account.</translation>
         <translation>background Image Path</translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-10"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-41"/>
         <source>背景模式：</source>
         <translation>Bkgrd Mode</translation>
     </message>
     <message>
-        <location line="+40"/>
+        <location line="+71"/>
         <source>背景视频</source>
         <translation>Background Video</translation>
     </message>
@@ -1716,14 +1738,14 @@ are synced with your NetEase Music account.</translation>
         <translation>Backdrop Color</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+728"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+881"/>
         <source>自动追加后缀，避免覆盖。</source>
         <translation>A suffix is added to prevent overwriting.</translation>
     </message>
     <message>
         <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7EqualizerWindow.qml" line="-171"/>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-251"/>
-        <location line="+129"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-280"/>
+        <location line="+158"/>
         <location filename="../src/qml/Components/Oran7SettingUiWindowItems/Oran7ColorSelectItem.qml" line="+15"/>
         <location filename="../src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml" line="+210"/>
         <source>自定义</source>
@@ -1735,22 +1757,23 @@ are synced with your NetEase Music account.</translation>
         <translation>Custom size</translation>
     </message>
     <message>
-        <location line="-581"/>
+        <location line="-734"/>
         <source>自定义码率</source>
         <translation>Custom bitrate</translation>
     </message>
     <message>
-        <location line="+318"/>
+        <location line="+430"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7RecordingSettingWindow.qml" line="+45"/>
         <source>直播工作台</source>
         <translation>Live studio</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+5"/>
         <source>本地 FLV</source>
         <translation>Local FLV</translation>
     </message>
     <message>
-        <location line="+195"/>
+        <location line="+206"/>
         <source>至少 </source>
         <translation>At least </translation>
     </message>
@@ -1770,7 +1793,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Video settings</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+119"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+148"/>
         <source>视频码率</source>
         <translation>Video bitrate</translation>
     </message>
@@ -1785,7 +1808,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Decoder device: </translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-132"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-164"/>
         <source>设置窗口</source>
         <translation>Settings windows</translation>
     </message>
@@ -1795,7 +1818,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Settings accent color</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-101"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-130"/>
         <source>诊断</source>
         <translation>Diagnostics</translation>
     </message>
@@ -1815,13 +1838,13 @@ are synced with your NetEase Music account.</translation>
         <translation>Check your network and try again.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+78"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="+110"/>
         <location filename="../src/qml/Settings/SettingWindows/Oran7MusicPlayerSettingWindow.qml" line="-180"/>
         <source>请输入图片路径</source>
         <translation>please input image path.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-525"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-649"/>
         <source>请输入有效码率以估算文件体积</source>
         <translation>Enter a valid bitrate to estimate file size</translation>
     </message>
@@ -1831,7 +1854,7 @@ are synced with your NetEase Music account.</translation>
         <translation>please input video path.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+472"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+596"/>
         <source>请选择已连接的显示器</source>
         <translation>Select a connected display</translation>
     </message>
@@ -1861,7 +1884,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Output width (both dimensions 0 use original size)</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+40"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+69"/>
         <source>输出尺寸</source>
         <translation>Output size</translation>
     </message>
@@ -1882,7 +1905,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Back</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-253"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-293"/>
         <source>还原设置</source>
         <translation>Restore settings</translation>
     </message>
@@ -1898,7 +1921,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Sign out</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-328"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-441"/>
         <source>适合游戏与复杂画面，细节余量更多，文件较大</source>
         <translation>More detail for games and complex scenes, with larger files.</translation>
     </message>
@@ -1908,18 +1931,23 @@ are synced with your NetEase Music account.</translation>
         <translation>For high resolution and complex motion; uses more disk space.</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="+58"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml" line="+75"/>
         <source>适应</source>
         <translation>Fit</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+727"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+880"/>
         <location line="+1"/>
         <source>选择保存文件夹</source>
         <translation>Choose save folder</translation>
     </message>
     <message>
-        <location line="+90"/>
+        <location line="+80"/>
+        <source>可与本地录制同时运行；直播帧率不能超过采集帧率。</source>
+        <translation>Can run alongside local recording. Streaming FPS cannot exceed capture FPS.</translation>
+    </message>
+    <message>
+        <location line="+10"/>
         <source>选择录像保存目录</source>
         <translation>Choose recording folder</translation>
     </message>
@@ -1929,7 +1957,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Choose file</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-330"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-359"/>
         <source>采集帧率 · FPS</source>
         <translation>Capture rate · FPS</translation>
     </message>
@@ -1984,12 +2012,12 @@ are synced with your NetEase Music account.</translation>
         <translation>Color Picker</translation>
     </message>
     <message>
-        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+185"/>
+        <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="+214"/>
         <source>高</source>
         <translation>Height</translation>
     </message>
     <message>
-        <location line="-81"/>
+        <location line="-110"/>
         <source>高级设置</source>
         <translation>Advanced</translation>
     </message>
@@ -2010,7 +2038,7 @@ are synced with your NetEase Music account.</translation>
         <translation>Liked songs</translation>
     </message>
     <message>
-        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-58"/>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7MainUiSettingWindow.qml" line="-89"/>
         <source>窗口毛玻璃</source>
         <translation>Window blur</translation>
     </message>
@@ -2989,6 +3017,41 @@ are synced with your NetEase Music account.</translation>
         <location line="+18"/>
         <source>打开网页扫码登录</source>
         <translation>Open website to scan and sign in</translation>
+    </message>
+    <message>
+        <location filename="../src/qml/Settings/SettingWindows/Oran7RecordingSettingWindow.qml" line="+12"/>
+        <source>直播工作台主题</source>
+        <translation>Live studio theme</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <location line="+10"/>
+        <source>皮肤</source>
+        <translation>Skin</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>默认</source>
+        <translation>Default</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>雪松幽境</source>
+        <translation>Snowy Cedar Reverie</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>雪林背景 · 冰蓝磨砂玻璃</source>
+        <translation>Snowy forest backdrop · Ice-blue frosted glass</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>保留当前工作台外观</source>
+        <translation>Keep the current studio appearance</translation>
+    </message>
+    <message>
+        <source>Oran7MediaClient 进程占用率</source>
+        <translation>Oran7MediaClient process usage</translation>
     </message>
 </context>
 </TS>

@@ -20,6 +20,7 @@
 
 #include "Oran7GlobalHelper.h"
 #include "NcmSession.h"
+#include "../Oran7Utils/Oran7GuiOperationTimer.h"
 
 /**
  * @brief 在线歌词获取器
@@ -38,14 +39,18 @@ public:
 
     explicit Oran7OnlineLyricsFetcher(std::unique_ptr<QNetworkAccessManager> networkManager,
                                      QObject* parent = nullptr)
-        : QObject(parent), m_networkManager(std::move(networkManager))
+        : QObject(parent), m_ownedNetworkManager(std::move(networkManager)), m_networkManager(m_ownedNetworkManager.get())
     {
         Q_ASSERT(m_networkManager && !m_networkManager->parent());
     }
 
+    // 服务持有长生命周期网络管理器；每轮获取器只持自己的 reply，不关闭共享后端。
+    explicit Oran7OnlineLyricsFetcher(QNetworkAccessManager& manager, QObject* parent = nullptr)
+        : QObject(parent), m_networkManager(&manager) {}
+
     ~Oran7OnlineLyricsFetcher() override {
         cancel();
-        m_networkManager.reset(); // 所有回调守卫仍存活时，先销毁 reply 所有者。
+        m_ownedNetworkManager.reset(); // 独占注入模式仍在守卫存活时释放其 reply 所有者。
     }
 
     /**
@@ -115,6 +120,12 @@ signals:
     void lyricsNotFound();
 
 private:
+    QNetworkReply* startRequest(QNetworkRequest request)
+    {
+        Oran7GuiOperationTimer timer("lyrics_request_start");
+        request.setTransferTimeout(15000);
+        return m_networkManager->get(request);
+    }
     // ──────────── LRCLIB 精确匹配 ────────────
 
     void searchLrclibExact(const QString &artist, const QString &title)
@@ -128,7 +139,7 @@ private:
         QNetworkRequest request(url);
         request.setHeader(QNetworkRequest::UserAgentHeader, "Oran7MediaClient/1.0");
 
-        m_activeReply = m_networkManager->get(request);
+        m_activeReply = startRequest(request);
         connect(m_activeReply, &QNetworkReply::finished, this,
                 [this, reply = m_activeReply]() { onLrclibExactReply(reply); });
     }
@@ -174,7 +185,7 @@ private:
         QNetworkRequest request(url);
         request.setHeader(QNetworkRequest::UserAgentHeader, "Oran7MediaClient/1.0");
 
-        m_activeReply = m_networkManager->get(request);
+        m_activeReply = startRequest(request);
         connect(m_activeReply, &QNetworkReply::finished, this,
                 [this, reply = m_activeReply]() { onLrclibSearchReply(reply); });
     }
@@ -224,7 +235,7 @@ private:
         request.setHeader(QNetworkRequest::UserAgentHeader, "Oran7MediaClient/1.0");
         request.setRawHeader("Referer", "https://music.163.com");
 
-        m_activeReply = m_networkManager->get(request);
+        m_activeReply = startRequest(request);
         connect(m_activeReply, &QNetworkReply::finished, this,
                 [this, reply = m_activeReply]() { onNetEaseSearchReply(reply); });
     }
@@ -278,7 +289,7 @@ private:
         if (!cookie.isEmpty())
             request.setRawHeader("Cookie", cookie.toUtf8());
 
-        m_activeReply = m_networkManager->get(request);
+        m_activeReply = startRequest(request);
         connect(m_activeReply, &QNetworkReply::finished, this,
                 [this, reply = m_activeReply]() { onNetEaseLyricsReply(reply); });
     }
@@ -344,7 +355,8 @@ private:
         return QFileInfo(mediaFilePath).completeBaseName();
     }
 
-    std::unique_ptr<QNetworkAccessManager> m_networkManager;
+    std::unique_ptr<QNetworkAccessManager> m_ownedNetworkManager;
+    QNetworkAccessManager* m_networkManager; // 由 owned 实例或外层歌词服务覆盖本获取器生命周期。
     qint64 m_currentSongId = 0;
 
     QString m_currentFilePath;

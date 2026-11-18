@@ -470,7 +470,14 @@ int main(int argc, char** argv)
         if(phase==0) until([&]{return capture.isRecording() && capture.liveSession()->property("state")=="Streaming";});
         shutdownAudit=true;
         if(phase==2){capture.stopRecording();capture.stopLive();}
+        int flushes=0;
+        QObject::connect(&capture,&Oran7ScreenCaptureController::settingsFlushRequested,&capture,[&]{
+            ++flushes;
+            check(capture.applyAudioSettings({{"systemVolume",33}}).value("ok").toBool(),"shutdown flush signal precedes freezing audio settings API");
+            capture.shutdown(); // 补交期间重入不能重复发信号或提前关闭源。
+        });
         QElapsedTimer elapsed;elapsed.start();capture.shutdown();
+        check(flushes==1 && config.snapshot().live.systemVolume==33,"shutdown flush is synchronous and reentrant-safe");
         check(elapsed.elapsed()<1500 && shutdownOrderOk.load(),"shutdown cancels both before waiting and retains sources through file tail");
         check(shutdownRecordDone.load() && shutdownLiveDone.load() && audioCaptureActive.load()==0 && liveWorkers.load()==0,
               "shutdown joins both outputs and releases audio/video workers without GUI event pumping");

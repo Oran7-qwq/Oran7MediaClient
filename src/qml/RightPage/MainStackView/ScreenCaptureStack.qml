@@ -9,6 +9,11 @@ Item {
     property string pageName: ""
     readonly property bool isActive: StackView.status === StackView.Active
 
+    Oran7ProcessLoadMonitor {
+        id: processLoad
+        active: workspace.audioMonitoringActive
+    }
+
     Oran7RecordingWorkspace {
         id: workspace
         anchors.fill: parent
@@ -16,6 +21,8 @@ Item {
             (Window.window.visible && Window.window.visibility !== Window.Minimized && Window.window.opacity > 0))
         service: Client
         controller: Client.screenCapture()
+        processCpuPercent: processLoad.cpuPercent
+        processGpuPercent: processLoad.gpuPercent
         previewComponent: Component {
             Oran7ScreenCaptureComponent {
                 renderObject: Client.ScreenCaptureRender

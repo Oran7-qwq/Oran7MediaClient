@@ -3,7 +3,7 @@
 #include "Oran7CaptureFrameConverter.h"
 #include <map>
 
-// 采集线程独占。每个输出独立保存转换器、缩放资源、调度与时间轴。
+// 采集线程独占。各路调度和时间轴独立，同一源帧的同尺寸输出共享转换后的像素。
 class Oran7CaptureOutputRouter
 {
   public:

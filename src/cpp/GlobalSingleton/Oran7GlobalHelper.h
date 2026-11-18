@@ -44,25 +44,23 @@ public:
            const char* file,
            int line,
            bool showDetail = false,
-           bool showData = true,
            bool showThreadId = false)
         : m_level(level)
         , m_debug(&m_buf)   // 先格式化进 QString，析构时交给统一 Qt 日志入口
     {
         m_debug.noquote().nospace();
 
+        // 时间与 Qt 级别由 Oran7LogSink 统一输出；这里只保留 Qt 级别无法表达的
+        // 语义级别（NETW/CFIG/CLET）和模块名，避免同一条日志出现两套前缀。
         QString header;
-        if(showData)
-        {
-            header += QDateTime::currentDateTime()
-            .toString("hh:mm:ss.zzz");
-        }
         if (showDetail)
         {
             header += QString("[%1:%2]").arg(file).arg(line);
         }
-        header += ("[" + levelToString(level) + "]")
-                             .leftJustified(2, ' ');
+        if (const char* tag = semanticLevelTag(level))
+        {
+            header += QString("[%1]").arg(QLatin1String(tag));
+        }
         header += QString("[%1]").arg(QFileInfo(QString::fromUtf8(file)).completeBaseName());
 
         if(showThreadId)
@@ -115,18 +113,19 @@ private:
         }
     }
 
-    static QString levelToString(Level level)
+    static const char* semanticLevelTag(Level level)
     {
         switch (level)
         {
         case Level::Client:  return "CLET";
-        case Level::Info:    return "INFO";
-        case Level::Warning: return "WARN";
-        case Level:: Error: return "EROR";
         case Level::Network: return "NETW";
         case Level::Config:  return "CFIG";
+        case Level::Info:
+        case Level::Warning:
+        case Level::Error:
+            return nullptr;
         }
-        return "UNKNOWN";
+        return nullptr;
     }
 
 private:

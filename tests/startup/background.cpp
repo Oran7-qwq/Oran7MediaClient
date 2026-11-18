@@ -1,4 +1,5 @@
 #include "Oran7BackgroundFrameMonitor.h"
+#include "Oran7PointerParallax.h"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -83,6 +84,7 @@ int main(int argc, char** argv)
         check(!monitor.frameReady() && !monitor.sink(), "destroyed sink clears readiness safely");
     }
     qmlRegisterType<Oran7BackgroundFrameMonitor>("Oran7Startup", 1, 0, "Oran7BackgroundFrameMonitor");
+    qmlRegisterType<Oran7PointerParallax>("Oran7UI.Impl", 1, 0, "Oran7PointerParallax");
     QTemporaryDir temp;
     QImage image(16, 16, QImage::Format_RGB32); image.fill(QColor("#22bb44"));
     check(image.save(temp.filePath("still.png")), "temporary synthetic fallback image");
@@ -93,7 +95,12 @@ int main(int argc, char** argv)
     auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
     auto* background = window->findChild<QObject*>("background");
     auto* still = background->findChild<QObject*>("mainBackgroundImage");
+    auto* pointer = background->findChild<Oran7PointerParallax*>("mainBackgroundParallax");
+    check(pointer && !pointer->tracking(), "video preparation does not poll global pointer");
     auto* output = background->findChild<QObject*>("mainBackgroundVideoOutput");
+    auto* mediaStage = background->findChild<QQuickItem*>("mainBackgroundMediaStage");
+    check(mediaStage && still->parent() == mediaStage && output->parent() == mediaStage,
+        "image and video share the same parallax stage");
     auto* sink = output->property("videoSink").value<QVideoSink*>();
     check(sink, "actual VideoOutput exposes its sink");
     until([&] { return still->property("status").toInt() == 1; });
@@ -104,6 +111,15 @@ int main(int argc, char** argv)
     check(window->grabWindow().pixelColor(3, 3) == QColor("#171a22"), "pre-frame background is solid rather than white or transparent");
     sink->setVideoFrame(frame(qRgb(204, 34, 51)));
     until([&] { return background->property("ready").toBool(); });
+    check(pointer->tracking(), "valid video frame enables shared parallax tracker");
+    background->setProperty("parallaxEnabled", false);
+    check(!pointer->tracking() && mediaStage->width() == window->width(), "shared switch disables video tracking and overscan");
+    background->setProperty("parallaxEnabled", true);
+    background->setProperty("parallaxPadding", 12);
+    check(pointer->tracking() && output->property("width").toReal() == window->width() + 24,
+        "video amplitude changes crop immediately without resetting frame readiness");
+    check(background->property("ready").toBool(), "video parallax setting preserves startup readiness");
+    background->setProperty("parallaxPadding", 30);
     // QtMultimedia 的 VideoOutput 不支持此软件场景图；在这里检查真实 sink 门控，
     // 视频纹理的 D3D11 呈现留运行验收，软件像素仅验证底色/图片/透明路由。
     check(output->property("visible").toBool(), "selected video output stays visible while its first valid frame is prepared");
@@ -124,9 +140,42 @@ int main(int argc, char** argv)
     check(!background->property("ready").toBool(), "native style application is part of readiness");
     background->setProperty("nativeReady", true);
     check(background->property("ready").toBool(), "static image becomes ready without video decoding");
+    background->setProperty("parallaxMotionAllowed", false);
+    QTest::qWait(250);
+    check(!pointer->tracking(), "startup or inactive motion gate stops cursor sampling");
+    auto* imageItem = qobject_cast<QQuickItem*>(still);
+    auto* backgroundItem = qobject_cast<QQuickItem*>(background);
+    check(imageItem->width() == backgroundItem->width() + 60
+        && imageItem->height() == backgroundItem->height() + 60, "image reserves 30 logical pixels on all sides");
+    for (const QPointF shift : {QPointF(-30,-30), QPointF(30,-30), QPointF(-30,30), QPointF(30,30)}) {
+        mediaStage->setProperty("parallaxX", shift.x());
+        mediaStage->setProperty("parallaxY", shift.y());
+        QTest::qWait(250);
+        check(mediaStage->x() <= 0 && mediaStage->y() <= 0
+            && mediaStage->x() + mediaStage->width() >= backgroundItem->width()
+            && mediaStage->y() + mediaStage->height() >= backgroundItem->height(), "extreme parallax positions cover all viewport edges");
+        const auto pixels = window->grabWindow();
+        check(pixels.pixelColor(0, 0) == QColor("#22bb44")
+            && pixels.pixelColor(pixels.width()-1, pixels.height()-1) == QColor("#22bb44"),
+            "extreme parallax renders image rather than empty borders");
+    }
+    window->resize(470, 280);
+    QTest::qWait(50);
+    check(imageItem->width() == backgroundItem->width() + 60
+        && imageItem->height() == backgroundItem->height() + 60, "resized window retains the full overscan margin");
+    background->setProperty("parallaxPadding", 9);
+    check(imageItem->width() == backgroundItem->width() + 18 && mediaStage->x() >= -18 && mediaStage->x() <= 0,
+        "shrinking amplitude clamps existing animated offsets without empty borders");
+    background->setProperty("parallaxEnabled", false);
+    check(imageItem->width() == backgroundItem->width() && mediaStage->x() == 0 && mediaStage->y() == 0,
+        "shared switch restores image to unshifted original crop");
+    background->setProperty("parallaxEnabled", true);
+    background->setProperty("parallaxPadding", 0);
+    check(!pointer->tracking() && mediaStage->width() == backgroundItem->width(), "zero amplitude stops polling and removes overscan");
     background->setProperty("dwmEnabled", true);
     check(background->property("ready").toBool() && background->property("selectedLayer").toString() == "Dwm",
           "explicit DWM route does not pass through image/video");
+    check(!pointer->tracking(), "DWM background never polls pointer");
     check(window->grabWindow().pixelColor(3, 3) == QColor("#663399"), "DWM route preserves intentional transparency");
     {
         // 使用 main.qml 的实际原生样式控制代码，只替换主题和原生 API 边界。

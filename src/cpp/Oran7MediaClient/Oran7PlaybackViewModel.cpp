@@ -2,6 +2,7 @@
 #include "Oran7TrackLibrary.h"
 #include "Oran7PlaybackState.h"
 #include "Oran7CloudMusicService.h"
+#include "../Oran7Utils/Oran7GuiOperationTimer.h"
 #include <QRandomGenerator>
 #include <algorithm>
 #include <QSet>
@@ -42,6 +43,7 @@ Oran7PlaybackViewModel::Oran7PlaybackViewModel(Oran7TrackLibrary& tracks,
     });
     connect(&cloud, &Oran7CloudMusicService::roamReady, this,
         [this](quint64 request, const QVariantList& songs) {
+            Oran7GuiOperationTimer timer("recommendation_commit");
             if (!m_enabled || !recommendationActive() || request != m_roamRequest) return;
             m_roamRequest = 0;
             m_recommendationError.clear();

@@ -29,23 +29,25 @@ Oran7SettingsPanel {
 
     animationDuration: Oran7MainUiSetting.toggleOpenAniDuration
 
+    // 独立阴影，避免 layer.effect 在退出销毁时触发 Qt5Compat 的 data 警告。
+    DropShadow {
+        anchors.fill: ui_root
+        source: ui_root
+        horizontalOffset: 0
+        verticalOffset: 5
+        radius: 12
+        samples: 16
+        spread: 0.7
+        color: Oran7MainUiSetting.winShadowColor
+        transparentBorder: true
+        z: -1
+    }
+
     Rectangle {
         id: ui_root
         anchors.fill: parent
         color: "transparent"
         radius: 10
-
-        // 阴影效果 - 延迟到动画完成后再启用，避免首次渲染卡顿
-        layer.enabled: true
-        layer.effect: DropShadow {
-            horizontalOffset: 0
-            verticalOffset: 5
-            radius: 12
-            samples: 16
-            spread: 0.7
-            color: Oran7MainUiSetting.winShadowColor
-            transparentBorder: true
-        }
 
         Rectangle {
             id: ui_content
@@ -146,6 +148,7 @@ Oran7SettingsPanel {
                 // ~~~~~ MainWindowBackGround ~~~~~
                 Oran7SettingItem{
                     id:mainWindowBackGroundSettings
+                    objectName: "mainWindowBackgroundSettings"
                     text:qsTranslate("Oran7Ui", "主界面背景")
                     index: 1
                     fontBold: true
@@ -181,6 +184,37 @@ Oran7SettingsPanel {
                                 onSwitchToggleChanged: function (checked) {
                                     Oran7Theme.saveComponentToken("Oran7MainGUI","backgroundMode", checked ? "Video" : "Image")
                                 }
+                            }
+                        }
+                        // 图片和视频共用主题设置；拖动只预览，松手后原子保存。
+                        Oran7SettingItem {
+                            objectName: "backgroundParallaxSetting"
+                            text: qsTranslate("Oran7Ui", "背景反向视差")
+                            Oran7SwitchToggleItem {
+                                id: backgroundParallaxSwitch
+                                objectName: "backgroundParallaxSwitch"
+                                checked: Oran7Theme.Oran7MainGUI.backgroundParallaxEnabled === true
+                                onSwitchToggleChanged: function(checked) {
+                                    Oran7Theme.saveComponentToken("Oran7MainGUI", "backgroundParallaxEnabled", checked)
+                                    backgroundParallaxSwitch.checked = Qt.binding(function() {
+                                        return Oran7Theme.Oran7MainGUI.backgroundParallaxEnabled === true
+                                    })
+                                }
+                            }
+                        }
+                        Oran7NumSettingGroup {
+                            objectName: "backgroundParallaxAmplitude"
+                            title: qsTranslate("Oran7Ui", "移动幅度（px）")
+                            value: Oran7Theme.Oran7MainGUI.backgroundParallaxAmplitude
+                            sliderValueFrom: 0; sliderValueTo: 30
+                            stepSize: 1; valueDecimals: 0
+                            enabled: Oran7Theme.Oran7MainGUI.backgroundParallaxEnabled === true
+                            opacity: enabled ? 1 : 0.45
+                            onMoved: (value, thresholdPosition, ratio) => {
+                                Oran7Theme.installComponentToken("Oran7MainGUI", "backgroundParallaxAmplitude", Math.round(value))
+                            }
+                            onCommitted: (value, thresholdPosition, ratio) => {
+                                Oran7Theme.saveComponentToken("Oran7MainGUI", "backgroundParallaxAmplitude", Math.round(value))
                             }
                         }
                         // --- item: backgroundImagePath ---

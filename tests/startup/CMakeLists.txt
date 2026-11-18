@@ -5,6 +5,10 @@ target_compile_definitions(startup_checks PRIVATE APP_ROOT="${ORAN7_SOURCE_ROOT}
 target_link_libraries(startup_checks PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Test)
 
 add_executable(background_checks background.cpp "${STARTUP}/Oran7BackgroundFrameMonitor.cpp" "${STARTUP}/Oran7BackgroundFrameMonitor.h")
+target_sources(background_checks PRIVATE
+    "${ORAN7_SOURCE_ROOT}/src/cpp/QtQuicCppExtend/Oran7PointerParallax.cpp"
+    "${ORAN7_SOURCE_ROOT}/src/cpp/QtQuicCppExtend/Oran7PointerParallax.h")
+target_include_directories(background_checks PRIVATE "${ORAN7_SOURCE_ROOT}/src/cpp/QtQuicCppExtend")
 target_include_directories(background_checks PRIVATE "${STARTUP}")
 target_compile_definitions(background_checks PRIVATE APP_ROOT="${ORAN7_SOURCE_ROOT}")
 target_link_libraries(background_checks PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Multimedia Qt6::Test)

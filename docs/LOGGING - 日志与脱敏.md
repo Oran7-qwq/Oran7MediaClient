@@ -4,11 +4,12 @@
 
 ## 输出与文件
 
-- 保留 CLIENT/INFO/WARNING/ERROR/NETWORK/CONFIG 宏与既有级别；宏增加源文件模块前缀。Qt 分类名、FFmpeg/WebRTC 前缀继续保留。
+- 保留 CLIENT/INFO/WARNING/ERROR/NETWORK/CONFIG 宏与既有级别；时间与 Qt 级别由 Oran7LogSink 统一输出，宏只追加模块名和 Qt 级别无法表达的语义标记（CLET/NETW/CFIG），不重复时间/级别。Qt 分类名、FFmpeg/WebRTC 前缀继续保留。
 - 控制台附加、UTF-8 和颜色保留；Oran7ConsoleLogger 不再安装另一套消息处理器。实际控制台和文件 I/O 均由日志专用 std::thread 执行。
 - 默认目录为 `QStandardPaths::AppLocalDataLocation/Logs`，与播放器配置、录制输出分开。文件名 `oran7-YYYY-MM-DD-NNNNNN.log`，UTF-8。
 - 按日期或 8 MiB 分段，最多保留 10 个本服务文件。仅处理严格匹配上述命名格式的文件，不清理其他用户文件；重启向未满末段追加。
 - 日志目录用 QLockFile 非阻塞互斥。其他进程正在写入时，本进程降级为控制台，避免互相覆盖/轮换；不等待锁。
+- Qt 6.7.3 的 Qt5Compat DropShadow/GaussianBlur 在 QML 引擎销毁时会产生 `QML ShaderEffect: Cannot find member data`；这是 Qt 内部 teardown 顺序问题。Qt 消息处理器仅过滤同时匹配 `Qt5Compat/GraphicalEffects/GaussianBlur.qml` 与上述文案的 `QtWarningMsg`，其他 QML 警告保持原样。
 
 ## 队列、失败与退出
 
@@ -38,7 +39,7 @@
 
 ## 检查与验收
 
-`ctest --preset checks -R logging` 使用临时目录和虚构凭据，检查真实宏/Qt/QML/FFmpeg 入口、控制台与文件一致脱敏、递归抑制、8 线程 8000 条提交、队列满、flush 超时、并发关闭、日期/大小滚动、重启追加、保留上限、目录竞争、不可写路径及控制台异常。
+`ctest --preset checks -R logging` 使用临时目录和虚构凭据，检查真实宏/Qt/QML/FFmpeg 入口、宏前缀去重、控制台与文件一致脱敏、递归抑制、8 线程 8000 条提交、队列满、flush 超时、并发关闭、日期/大小滚动、重启追加、保留上限、目录竞争、不可写路径及控制台异常。
 
 完整离线检查现为 25 项。主程序、真实控制台、实际播放/录屏与退出体验由用户运行验收；本批不代跑主程序、不连接真实账号或推流服务。
 

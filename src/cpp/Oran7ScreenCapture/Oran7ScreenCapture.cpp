@@ -199,8 +199,10 @@ void Oran7ScreenCaptureController::stop()
 }
 void Oran7ScreenCaptureController::shutdown()
 {
-    if (m_shuttingDown)
+    if (m_shuttingDown || m_flushingShutdownSettings)
         return;
+    m_flushingShutdownSettings = true;
+    emit settingsFlushRequested(); // 配置接口此时仍可用；先落盘，再冻结/停止输出。
     m_shuttingDown = true;
     updateAudioMeterPolling();
     m_reapTimer.stop();

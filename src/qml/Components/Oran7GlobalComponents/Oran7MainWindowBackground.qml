@@ -1,6 +1,7 @@
 import QtQuick
 import QtMultimedia
 import Oran7Startup 1.0
+import Oran7UI.Impl 1.0
 
 // 背景在启动遮罩内预热，首帧/图片终态才就绪；回退一旦选定便不再被晚到视频抢回。
 Item {
@@ -15,6 +16,12 @@ Item {
     property color baseColor: "#171a22"
     property int imageWidth: 1920
     property int imageHeight: 1080
+    property bool parallaxEnabled: true
+    property bool parallaxMotionAllowed: true
+    property real parallaxPadding: 30
+    readonly property real mediaPadding: parallaxEnabled && isFinite(parallaxPadding)
+        ? Math.max(0, Math.min(30, parallaxPadding)) : 0
+    clip: true
     property int videoTimeoutMs: 5000
     property bool videoFailed: false
     property bool initialized: false
@@ -61,23 +68,46 @@ Item {
     }
     Component.onCompleted: { initialized = true; reloadVideo() }
     Rectangle { anchors.fill: parent; color: root.baseColor; visible: !root.dwmEnabled }
-    Image {
-        id: still
-        objectName: "mainBackgroundImage"
+    Oran7PointerParallax {
+        id: imagePointer
+        objectName: "mainBackgroundParallax"
         anchors.fill: parent
-        source: root.dwmEnabled ? "" : root.imageUrl
-        sourceSize.width: root.imageWidth; sourceSize.height: root.imageHeight
-        asynchronous: true
-        cache: false; mipmap: false; smooth: false
-        fillMode: Image.PreserveAspectCrop
-        visible: root.selectedLayer === "Image" && status === Image.Ready
+        maximumOffset: root.mediaPadding
+        active: root.parallaxEnabled && root.parallaxMotionAllowed && root.prepareActive
+            && root.nativeReady && root.playbackAllowed && (still.visible
+                || (root.selectedLayer === "Video" && frameMonitor.frameReady))
+            && (!root.Window.window || root.Window.window.opacity > 0)
     }
-    VideoOutput {
-        id: output
-        objectName: "mainBackgroundVideoOutput"
-        anchors.fill: parent
-        fillMode: VideoOutput.PreserveAspectCrop
-        visible: root.selectedLayer === "Video"
+    // 图片/视频共享同一取景窗口，切换模式不重置视差或触碰播放器生命周期。
+    Item {
+        id: mediaStage
+        objectName: "mainBackgroundMediaStage"
+        property real parallaxX: imagePointer.offset.x
+        property real parallaxY: imagePointer.offset.y
+        Behavior on parallaxX { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on parallaxY { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        x: -root.mediaPadding + Math.max(-root.mediaPadding, Math.min(root.mediaPadding, parallaxX))
+        y: -root.mediaPadding + Math.max(-root.mediaPadding, Math.min(root.mediaPadding, parallaxY))
+        width: root.width + root.mediaPadding * 2
+        height: root.height + root.mediaPadding * 2
+        Image {
+            id: still
+            objectName: "mainBackgroundImage"
+            anchors.fill: parent
+            source: root.dwmEnabled ? "" : root.imageUrl
+            sourceSize.width: root.imageWidth; sourceSize.height: root.imageHeight
+            asynchronous: true
+            cache: false; mipmap: false; smooth: true
+            fillMode: Image.PreserveAspectCrop
+            visible: root.selectedLayer === "Image" && status === Image.Ready
+        }
+        VideoOutput {
+            id: output
+            objectName: "mainBackgroundVideoOutput"
+            anchors.fill: parent
+            fillMode: VideoOutput.PreserveAspectCrop
+            visible: root.selectedLayer === "Video"
+        }
     }
     Oran7BackgroundFrameMonitor {
         id: frameMonitor

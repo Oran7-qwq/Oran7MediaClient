@@ -33,7 +33,7 @@ ApplicationWindow {
     property bool openDelayReady: false
     property var openingPanels: []
     property var closingPanels: []
-    readonly property var panels: [mainUiSettingLoader.item, mediaPlayerSettingLoader.item, musicPlayListSettingLoader.item]
+    readonly property var panels: [mainUiSettingLoader.item, mediaPlayerSettingLoader.item, musicPlayListSettingLoader.item, recordingSettingLoader.item]
     property bool displayAllowed: true
     // 主窗口显式借入账号浮层；设置容器不依赖音乐页或其业务会话。
     property var activeMainPopup: null
@@ -179,6 +179,17 @@ ApplicationWindow {
             }
         }
 
+        Loader {
+            id: recordingSettingLoader
+            active: false
+            sourceComponent: recordingSettingComponent
+            x: 0; y: 0
+        }
+        Component {
+            id: recordingSettingComponent
+            Oran7RecordingSettingWindow { winIndex: 3 }
+        }
+
         Column {
             anchors.bottom: content.bottom
             anchors.left: content.left
@@ -273,6 +284,7 @@ ApplicationWindow {
         mainUiSettingLoader.active = true
         mediaPlayerSettingLoader.active = true
         musicPlayListSettingLoader.active = true
+        recordingSettingLoader.active = true
         openPanelsTimer.tries = 0
         openPanelsTimer.start()
     }
@@ -383,6 +395,12 @@ ApplicationWindow {
         function onClosed() { root.panelClosed(musicPlayListSettingLoader.item) }
     }
 
+    Connections {
+        target: recordingSettingLoader.item
+        function onOpened() { root.panelOpened(recordingSettingLoader.item) }
+        function onClosed() { root.panelClosed(recordingSettingLoader.item) }
+    }
+
     // 连接到全局键盘Keys事件过滤器
     Connections {
         target: globalEventFilter
@@ -461,92 +479,33 @@ ApplicationWindow {
         }
     }
 
-    // Up key timer - moves GUI upward
-    Timer{
-        id:handle_upKeyTimer
-        interval: 16
-        repeat: true
-        running: false
-        onTriggered: {
-            if (mainUiSettingLoader.item) {
-                mainUiSettingLoader.item.y -= 4
-                mainUiSettingLoader.item.savedNormalY = mainUiSettingLoader.item.y
-            }
-            if (mediaPlayerSettingLoader.item) {
-                mediaPlayerSettingLoader.item.y -= 4
-                mediaPlayerSettingLoader.item.savedNormalY = mediaPlayerSettingLoader.item.y
-            }
-            if (musicPlayListSettingLoader.item) {
-                musicPlayListSettingLoader.item.y -= 4
-                musicPlayListSettingLoader.item.savedNormalY = musicPlayListSettingLoader.item.y
-            }
+    function movePanels(dx, dy) {
+        for (var i = 0; i < root.panels.length; ++i) {
+            var panel = root.panels[i]
+            if (!panel) continue
+            if (dx !== 0) { panel.x += dx; panel.savedNormalX = panel.x }
+            if (dy !== 0) { panel.y += dy; panel.savedNormalY = panel.y }
         }
     }
-
-    // Down key timer - moves GUI downward
-    Timer{
-        id:handle_downKeyTimer
-        interval: 16
-        repeat: true
-        running: false
-        onTriggered: {
-            if (mainUiSettingLoader.item) {
-                mainUiSettingLoader.item.y += 4
-                mainUiSettingLoader.item.savedNormalY = mainUiSettingLoader.item.y
-            }
-            if (mediaPlayerSettingLoader.item) {
-                mediaPlayerSettingLoader.item.y += 4
-                mediaPlayerSettingLoader.item.savedNormalY = mediaPlayerSettingLoader.item.y
-            }
-            if (musicPlayListSettingLoader.item) {
-                musicPlayListSettingLoader.item.y += 4
-                musicPlayListSettingLoader.item.savedNormalY = musicPlayListSettingLoader.item.y
-            }
-        }
+    Timer {
+        id: handle_upKeyTimer
+        interval: 16; repeat: true; running: false
+        onTriggered: root.movePanels(0, -4)
     }
-
-    // Left key timer - moves GUI leftward
-    Timer{
-        id:handle_leftKeyTimer
-        interval: 16
-        repeat: true
-        running: false
-        onTriggered: {
-            if (mainUiSettingLoader.item) {
-                mainUiSettingLoader.item.x -= 4
-                mainUiSettingLoader.item.savedNormalX = mainUiSettingLoader.item.x
-            }
-            if (mediaPlayerSettingLoader.item) {
-                mediaPlayerSettingLoader.item.x -= 4
-                mediaPlayerSettingLoader.item.savedNormalX = mediaPlayerSettingLoader.item.x
-            }
-            if (musicPlayListSettingLoader.item) {
-                musicPlayListSettingLoader.item.x -= 4
-                musicPlayListSettingLoader.item.savedNormalX = musicPlayListSettingLoader.item.x
-            }
-        }
+    Timer {
+        id: handle_downKeyTimer
+        interval: 16; repeat: true; running: false
+        onTriggered: root.movePanels(0, 4)
     }
-
-    // Right key timer - moves GUI rightward
-    Timer{
-        id:handle_rightKeyTimer
-        interval: 16
-        repeat: true
-        running: false
-        onTriggered: {
-            if (mainUiSettingLoader.item) {
-                mainUiSettingLoader.item.x += 4
-                mainUiSettingLoader.item.savedNormalX = mainUiSettingLoader.item.x
-            }
-            if (mediaPlayerSettingLoader.item) {
-                mediaPlayerSettingLoader.item.x += 4
-                mediaPlayerSettingLoader.item.savedNormalX = mediaPlayerSettingLoader.item.x
-            }
-            if (musicPlayListSettingLoader.item) {
-                musicPlayListSettingLoader.item.x += 4
-                musicPlayListSettingLoader.item.savedNormalX = musicPlayListSettingLoader.item.x
-            }
-        }
+    Timer {
+        id: handle_leftKeyTimer
+        interval: 16; repeat: true; running: false
+        onTriggered: root.movePanels(-4, 0)
+    }
+    Timer {
+        id: handle_rightKeyTimer
+        interval: 16; repeat: true; running: false
+        onTriggered: root.movePanels(4, 0)
     }
 
     // --- open and close sound effect ---

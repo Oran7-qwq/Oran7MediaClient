@@ -1,3 +1,5 @@
+#include "Oran7PointerParallax.h"
+#include "Oran7ProcessLoadMonitor.h"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlPropertyMap>
@@ -8,6 +10,7 @@
 #include <QJSValue>
 #include <QFontDatabase>
 #include <QTest>
+#include <QSignalSpy>
 #include <cstdio>
 #include <cstdlib>
 
@@ -25,6 +28,12 @@ int main(int argc, char** argv) {
     check(QFontDatabase::addApplicationFont(qEnvironmentVariable("WINDIR", "C:/Windows") + "/Fonts/msyh.ttc") >= 0, "offscreen Chinese font loaded");
     QFont::insertSubstitution(QString::fromUtf8("微软雅黑"), "Microsoft YaHei");
     app.setFont(QFont("Microsoft YaHei"));
+    check(Oran7PointerParallax::offsetForPosition({500, 300}, {1000, 600}, 30) == QPointF(), "parallax centered at viewport center");
+    check(Oran7PointerParallax::offsetForPosition({1000, 600}, {1000, 600}, 30) == QPointF(-30, -30), "parallax reverses pointer direction");
+    check(Oran7PointerParallax::offsetForPosition({-4000, 9000}, {1000, 600}, 30) == QPointF(30, -30), "global pointer outside window stays bounded");
+    check(Oran7PointerParallax::offsetForPosition({500, 300}, {0, 0}, 30) == QPointF(), "empty viewport has no offset");
+    qmlRegisterType<Oran7PointerParallax>("Oran7UI.Impl", 1, 0, "Oran7PointerParallax");
+    qmlRegisterType<Oran7ProcessLoadMonitor>("Client", 1, 0, "Oran7ProcessLoadMonitor");
     QQmlPropertyMap theme;
     theme.insert("isDark",true);
     theme.insert("Primary", QVariantMap{{"durationMid", 100}, {"durationVerySlow", 100}, {"durationFast", 100}});
@@ -42,12 +51,38 @@ int main(int argc, char** argv) {
     auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
     check(window, "offscreen window");
     auto* workspace = findItem(window->contentItem(), "workspace");
+    auto* parallax = qobject_cast<Oran7PointerParallax*>(findItem(workspace, "recordingAvatarParallax"));
+    check(parallax, "native cursor tracker instantiated");
+    parallax->setActive(false);
+    check(!parallax->tracking() && parallax->offset().isNull(), "disabled tracker stops polling and resets offset");
     auto* source = findItem(workspace, "recordingSourcePanel");
     auto* output = findItem(workspace, "recordingOutputPanel");
     auto* preview = findItem(workspace, "recordingPreviewPanel");
     auto* center = findItem(workspace, "recordingCenterColumn");
     auto* toolbar = findItem(workspace, "recordingCenterToolbar");
     check(source && output && preview, "three panels instantiated");
+    auto* loadStrip = findItem(workspace, "recordingProcessLoad");
+    auto* restoreSettings = findItem(workspace, "recordingRestoreSettings");
+    auto* cpuLoad = findItem(workspace, "recordingCpuLoadValue");
+    auto* gpuLoad = findItem(workspace, "recordingGpuLoadValue");
+    check(loadStrip && restoreSettings && cpuLoad && gpuLoad
+          && loadStrip->mapToItem(restoreSettings, QPointF(loadStrip->width(), 0)).x() <= 0,
+          "process load strip is immediately left of restore settings");
+    check(cpuLoad->property("text") == QStringLiteral("—") && gpuLoad->property("text") == QStringLiteral("—"),
+          "unavailable samples display placeholders");
+    workspace->setProperty("processCpuPercent", 80);
+    workspace->setProperty("processGpuPercent", 79);
+    settle();
+    check(cpuLoad->property("text") == QStringLiteral("80%") && gpuLoad->property("text") == QStringLiteral("79%")
+          && cpuLoad->property("color") == workspace->property("errorColor")
+          && gpuLoad->property("color") == workspace->property("textColor"),
+          "only the number at or above the high-load threshold is highlighted");
+    workspace->setProperty("processCpuPercent", 23);
+    workspace->setProperty("processGpuPercent", 94);
+    settle();
+    check(cpuLoad->property("color") == workspace->property("textColor")
+          && gpuLoad->property("color") == workspace->property("errorColor"),
+          "CPU and GPU highlights update independently");
     auto* fileFormat = findItem(workspace, "recordingFileFormat");
     check(fileFormat && fileFormat->property("currentIndex").toInt() == 0, "local format defaults to MP4");
     QMetaObject::invokeMethod(fileFormat, "activated", Q_ARG(int, 1)); settle(); QTest::qWait(100);
@@ -63,6 +98,142 @@ int main(int argc, char** argv) {
     check(previewBadge->mapToItem(preview, QPointF(previewBadge->width(), 0)).x() <= preview->width() - 6,
         "preview status badge remains inside the frame");
     window->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/wide.png");
+    const auto initialPanelColor = workspace->property("panelColor").value<QColor>();
+    const QList<QQuickItem*> skinLayoutItems{source, output, preview, toolbar};
+    QList<QRectF> skinRects;
+    for (auto* part : skinLayoutItems) skinRects.append(QRectF(part->position(), part->size()));
+    // 皮肤切换必须保持混音器和内部控件的布局一致，宽／窄窗口都比较默认基线。
+    auto mixerGeometry = [&] {
+        QList<QRectF> result;
+        for (const auto* name : {"recordingSystemAudioTool", "recordingMicrophoneTool", "recordingAudio", "recordingMicrophone",
+                                 "recordingSystemVolume", "recordingMicrophoneVolume", "recordingSystemLevelMeter", "recordingMicrophoneLevelMeter",
+                                 "recordingControlRow", "recordingStatusRow"}) {
+            auto* item = findItem(toolbar, name);
+            result.append(QRectF(item->mapToItem(toolbar, QPointF()), item->size()));
+        }
+        return result;
+    };
+    const auto defaultMixerWide = mixerGeometry();
+    window->setWidth(850); settle();
+    const auto defaultMixerNarrow = mixerGeometry();
+    window->setWidth(1320); settle();
+    const int captureAppliesBeforeSkin = captureFixture->property("captureApplies").toInt();
+    theme.insert("Oran7ScreenCapture", QVariantMap{{"ScaleMode", "Fit"}, {"workspaceSkin", "violet"}});
+    settle();
+    check(workspace->property("violetSkin").toBool()
+        && workspace->property("panelColor").value<QColor>() != initialPanelColor, "violet skin applies without recreating workspace");
+    auto* snowfield = findItem(workspace, "recordingVioletLandscape");
+    auto* roundedSnowfield = findItem(workspace, "recordingRoundedSnowfield");
+    check(snowfield && snowfield->property("status").toInt() == 1 && roundedSnowfield
+          && roundedSnowfield->isVisible() && roundedSnowfield->size() == workspace->size(),
+          "rounded violet snowfield covers the workspace");
+    auto* frost = findItem(workspace, "recordingFrostedCards");
+    auto frostMatchesSnowfield = [&] {
+        const QRectF sampled = frost->property("backdropRect").toRectF();
+        const QSizeF painted(snowfield->property("paintedWidth").toReal(),
+                             snowfield->property("paintedHeight").toReal());
+        const QPointF imageOrigin((snowfield->width() - painted.width()) / 2,
+                                  (snowfield->height() - painted.height()) / 2);
+        const auto offset = sampled.topLeft() - snowfield->mapToItem(frost, imageOrigin);
+        return sampled.size() == painted && qAbs(offset.x()) < 1 && qAbs(offset.y()) < 1;
+    };
+    check(frost && frost->isVisible() && frostMatchesSnowfield(), "frost aligns with the visible snowfield");
+    auto* avatar = findItem(workspace, "recordingStudioAvatar");
+    check(avatar && avatar->isVisible() && avatar->opacity() > 0.45
+          && workspace->property("avatarTintColor").value<QColor>() == QColor("#51436f"),
+          "violet skin retains a higher-contrast avatar outline");
+    for (int i = 0; i < skinLayoutItems.size(); ++i)
+        check(QRectF(skinLayoutItems[i]->position(), skinLayoutItems[i]->size()) == skinRects[i], "skin leaves all panel geometry unchanged");
+    check(mixerGeometry() == defaultMixerWide, "violet mixer matches default control layout in wide windows");
+    check(captureFixture->property("captureApplies").toInt() == captureAppliesBeforeSkin,
+        "skin selection does not reconfigure capture");
+    // 两种表皮都走真实鼠标输入，防止新增装饰拦截点击或委托绑定在第一次点击后失效。
+    auto* skinAudio = findItem(workspace, "recordingAudio");
+    const bool initialAudioEnabled = skinAudio->property("checked").toBool();
+    QSignalSpy skinAudioEdits(skinAudio, SIGNAL(switchToggleChanged(bool)));
+    auto clickSkinAudio = [&] {
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                         skinAudio->mapToScene(QPointF(skinAudio->width()/2, skinAudio->height()/2)).toPoint());
+        settle();
+    };
+    clickSkinAudio();
+    check(skinAudioEdits.count() == 1 && skinAudio->property("checked").toBool() != initialAudioEnabled
+        && toolbar->property("systemEnabled").toBool() != initialAudioEnabled,
+        "violet switch click emits once and updates actual audio options");
+    skinAudio->forceActiveFocus(); QTest::keyClick(window, Qt::Key_Space); settle();
+    check(skinAudioEdits.count() == 2 && skinAudio->property("checked").toBool() == initialAudioEnabled,
+        "violet switch keyboard activation restores audio state");
+    const QImage violetWide = window->grabWindow();
+    const int rightEdge = violetWide.width() - 1, bottomEdge = violetWide.height() - 1;
+    const QColor windowColor = window->color();
+    check(violetWide.pixelColor(0, 0) == windowColor && violetWide.pixelColor(rightEdge, 0) == windowColor
+        && violetWide.pixelColor(0, bottomEdge) == windowColor && violetWide.pixelColor(rightEdge, bottomEdge) == windowColor
+        && violetWide.pixelColor(rightEdge / 2, 0) != windowColor, "snowfield and tint leave all four corners transparent");
+    violetWide.save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/violet-wide.png");
+    auto* standby = findItem(preview, "recordingPreviewStandby");
+    check(standby && !standby->isVisible(), "working capture has no standby overlay");
+    captureFixture->setProperty("previewState", "Idle"); settle();
+    check(standby->isVisible() && standby->property("color") != preview->property("canvasColor"),
+          "violet standby uses a distinct canvas");
+    window->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/violet-standby.png");
+    captureFixture->setProperty("previewState", "Running"); settle();
+    window->setWidth(850); settle();
+    check(mixerGeometry() == defaultMixerNarrow, "violet mixer matches default control layout in narrow windows");
+    check(qAbs(findItem(toolbar, "recordingMicrophoneTool")->y()-findItem(toolbar, "recordingSystemAudioTool")->y()) < 1,
+          "both skins keep audio channels on the same row in narrow windows");
+    auto* violetAudioTools = findItem(toolbar, "recordingAudioTools");
+    auto* violetAudioFlick = violetAudioTools->property("contentItem").value<QObject*>();
+    violetAudioFlick->setProperty("contentX", violetAudioFlick->property("contentWidth").toReal()-violetAudioFlick->property("width").toReal());
+    settle();
+    auto* violetMicrophone = findItem(toolbar, "recordingMicrophone");
+    check(violetMicrophone->mapToItem(violetAudioTools, QPointF(violetMicrophone->width(), 0)).x() <= violetAudioTools->width(),
+          "narrow violet mixer keeps microphone reachable by scrolling");
+    violetAudioFlick->setProperty("contentX", 0); settle();
+    window->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/violet-narrow.png");
+    auto* outerScroll = findItem(workspace, "recordingWorkspaceScroll");
+    auto* horizontalBar = findItem(outerScroll, "recordingWorkspaceHorizontalScrollBar");
+    check(horizontalBar && horizontalBar->isVisible() && horizontalBar->height() >= 6
+        && horizontalBar->mapToItem(outerScroll, QPointF(0, horizontalBar->height())).y() <= outerScroll->height(),
+          "overflowing narrow workspace shows its horizontal scrollbar inside the viewport");
+    auto* outerFlick = outerScroll->property("contentItem").value<QObject*>();
+    outerFlick->setProperty("contentX", outerFlick->property("contentWidth").toReal()-outerFlick->property("width").toReal());
+    settle();
+    check(frostMatchesSnowfield(), "frost stays aligned when the narrow workspace scrolls");
+    check(output->mapToItem(outerScroll, QPointF()).x() >= 0
+        && output->mapToItem(outerScroll, QPointF(output->width(), 0)).x() <= outerScroll->width(),
+          "narrow horizontal scroll reaches the entire output panel");
+    window->setHeight(440); settle();
+    check(findItem(workspace, "recordingOutputPanelScroll")->height() >= 100,
+          "short workspace reserves a usable output settings viewport above action cards");
+    outerFlick->setProperty("contentY", outerFlick->property("contentHeight").toReal()-outerFlick->property("height").toReal());
+    settle();
+    for (const auto* name : {"startLocalRecording", "stopLocalRecording", "startLiveStreaming"}) {
+        auto* action = findItem(workspace, name);
+        const auto topLeft = action->mapToItem(outerScroll, QPointF());
+        const auto bottomRight = action->mapToItem(outerScroll, QPointF(action->width(), action->height()));
+        check(topLeft.x() >= 0 && topLeft.y() >= 0 && bottomRight.x() <= outerScroll->width() && bottomRight.y() <= outerScroll->height(),
+              "short narrow workspace keeps output actions reachable without clipping");
+    }
+    window->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/violet-narrow-output.png");
+    window->setHeight(780); settle();
+    outerFlick->setProperty("contentX", 0); outerFlick->setProperty("contentY", 0); settle();
+    window->setWidth(1320); settle();
+    theme.insert("Oran7ScreenCapture", QVariantMap{{"ScaleMode", "Fit"}, {"workspaceSkin", "default"}});
+    settle();
+    check(!workspace->property("violetSkin").toBool() && workspace->property("panelColor").value<QColor>() == initialPanelColor,
+        "default skin restores exact original palette");
+    check(avatar->isVisible() && !roundedSnowfield->isVisible() && !frost->isVisible(),
+        "default skin restores original decoration");
+    clickSkinAudio();
+    check(skinAudioEdits.count() == 3 && skinAudio->property("checked").toBool() != initialAudioEnabled,
+        "default switch retains original mouse interaction after changing skins");
+    QMetaObject::invokeMethod(workspace, "editLiveAudio", Q_ARG(QVariant, QString("audioEnabled")), Q_ARG(QVariant, initialAudioEnabled));
+    settle();
+    clickSkinAudio();
+    check(skinAudioEdits.count() == 4 && skinAudio->property("checked").toBool() != initialAudioEnabled,
+        "default switch reflects external option changes after a previous click");
+    clickSkinAudio();
+    check(skinAudio->property("checked").toBool() == initialAudioEnabled, "switch checks restore initial audio options");
     auto* pageState = workspace->property("pageState").value<QObject*>();
     auto draft = [&](const char* name) { return pageState->property(name).value<QJSValue>().toVariant().toMap(); };
     auto click = [&](const char* name) {
@@ -171,13 +342,14 @@ int main(int argc, char** argv) {
     check(source->y() == center->y() && center->y() == output->y()
         && source->x() < center->x() && center->x() < output->x(), "medium layout keeps tools beside preview");
     check(toolbar->width() == preview->width() && toolbar->y() >= preview->height()
-        && findItem(toolbar, "stopLocalRecording")->mapToItem(toolbar, QPointF(0,0)).x()
-            + findItem(toolbar, "stopLocalRecording")->width() <= toolbar->width(), "compact center toolbar keeps actions inside its bounds");
+        && findItem(workspace, "startLocalRecording")->mapToItem(output, QPointF(0,0)).x() >= 0,
+        "independent mixer stays below preview while output actions live in the right panel");
+    check(findItem(toolbar,"recordingAudioTools")->width() >= 446, "narrow workspace never collapses the mixer viewport");
     window->grabWindow().save(QStringLiteral(ORAN7_TEST_ARTIFACT_DIR)+"/medium.png");
     window->setWidth(560); settle();
     check(source->y() == center->y() && center->y() == output->y()
         && source->x() < center->x() && center->x() < output->x()
-        && source->width() == 230 && output->width() == 260 && preview->width() >= 280, "small layout preserves three columns and usable widths");
+        && source->width() == 230 && output->width() == 260 && preview->width() >= 480, "small layout preserves three columns and usable widths");
     auto* scroll = findItem(workspace, "recordingWorkspaceScroll");
     auto* studio = findItem(workspace, "recordingStudioGrid");
     check(scroll && studio && studio->width() > scroll->width(), "narrow workspace scrolls horizontally");
@@ -231,12 +403,12 @@ int main(int argc, char** argv) {
     auto stableGeometry=[&] {
         auto* controls=findItem(toolbar,"recordingControlRow");
         auto* status=findItem(toolbar,"recordingStatusRow");
-        check(toolbar->height()<=90 && controls && status && status->y()>=controls->y()+controls->height(), "toolbar is compact control row plus one status row");
+        check(toolbar->height()<=112 && controls && status && status->y()>=controls->y()+controls->height(), "mixer has a compact audio row, heading and status row");
         auto centerY=[&](const char* name) { auto* item=findItem(toolbar,name); return item->mapToItem(toolbar,QPointF(0,item->height()/2)).y(); };
-        check(qAbs(centerY("recordingSystemAudioTool")-centerY("recordingMicrophoneTool"))<1 && qAbs(centerY("recordingSystemAudioTool")-centerY("startLocalRecording"))<2, "audio and recording actions stay on one line at all widths");
+        check(qAbs(centerY("recordingSystemAudioTool")-centerY("recordingMicrophoneTool"))<1, "independent audio tools stay on one line at all widths");
         check(qAbs(centerY("recordingStatus")-centerY("recordingOutputLocation"))<2, "status and output path share one footer line");
 
-        auto snapshot=[&] { return QVariantList{preview->y(),preview->height(),toolbar->y(),toolbar->height(),findItem(toolbar,"startLocalRecording")->width(),findItem(toolbar,"stopLocalRecording")->width()}; };
+        auto snapshot=[&] { return QVariantList{preview->y(),preview->height(),toolbar->y(),toolbar->height(),findItem(workspace,"startLocalRecording")->width(),findItem(workspace,"stopLocalRecording")->width()}; };
         check(previewBadge->mapToItem(preview, QPointF(previewBadge->width(), 0)).x() <= preview->width() - 6
             && previewTools->mapToItem(preview, QPointF()).x() >= 6,
             "preview badge and floating tools remain within narrow frame");
@@ -257,7 +429,7 @@ int main(int argc, char** argv) {
     window->setWidth(850);settle();stableGeometry();
     auto* audioTools=findItem(toolbar,"recordingAudioTools");
     auto* audioFlick=audioTools->property("contentItem").value<QObject*>();
-    check(findItem(toolbar,"recordingSystemAudioTool")->width()==220 && findItem(toolbar,"recordingMicrophoneTool")->width()==220 && audioFlick->property("contentWidth").toReal()>audioFlick->property("width").toReal(), "audio modules keep compact widths and scroll in narrow preview column");
+    check(findItem(toolbar,"recordingSystemAudioTool")->width()>=220 && findItem(toolbar,"recordingMicrophoneTool")->width()>=220 && audioTools->width()>=446, "both audio modules retain usable width in narrow windows");
     audioFlick->setProperty("contentX",audioFlick->property("contentWidth").toReal()-audioFlick->property("width").toReal());settle();
     check(microphone->mapToItem(audioTools,QPointF(microphone->width(),0)).x()<=audioTools->width(), "microphone tools remain reachable by horizontal scrolling");
     window->setWidth(1320);settle();
@@ -409,6 +581,31 @@ int main(int argc, char** argv) {
     check(fake->property("recordingState")=="Recording","cancel live connection preserves recording");
     liveSession->setProperty("state","Idle");liveSession->setProperty("busy",false);
     fake->setProperty("recordingState","Idle");fake->setProperty("recordingBusy",false);settle();
+    check(QMetaObject::invokeMethod(workspace,"editLiveAudio",Q_ARG(QVariant,QString("systemVolume")),Q_ARG(QVariant,23)),"edit final unsaved audio value");
+    check(QMetaObject::invokeMethod(workspace,"editLive",Q_ARG(QVariant,QString("bitrateKbps")),Q_ARG(QVariant,8000)),"edit final unsaved RTMP value");
+    check(QMetaObject::invokeMethod(pageState,"editOutput",Q_ARG(QVariant,QString("filePrefix")),Q_ARG(QVariant,QString::fromUtf8("退出前最终输入")),Q_ARG(QVariant,true)),"edit deferred final recording value");
+    const int appliesBeforeClose=fake->property("captureApplies").toInt();
+    window->close(); // 不等两秒，也不再推进事件循环。
+    auto persistedLive=fake->property("liveOptions").value<QJSValue>().toVariant().toMap();
+    auto persistedOutput=fake->property("options").value<QJSValue>().toVariant().toMap();
+    check(persistedLive.value("systemVolume").toInt()==23 && persistedLive.value("bitrateKbps").toInt()==8000
+          && persistedOutput.value("filePrefix").toString()==QString::fromUtf8("退出前最终输入"),"window close synchronously flushes audio, live and deferred file settings");
+    check(fake->property("captureApplies").toInt()==appliesBeforeClose,"exit flush never restarts or applies capture");
+    const int savesBeforeRepeat=fake->property("saves").toInt();
+    QMetaObject::invokeMethod(fake,"settingsFlushRequested");
+    check(fake->property("saves").toInt()==savesBeforeRepeat,"controller fallback flush is idempotent after window close");
+    QMetaObject::invokeMethod(workspace,"editLiveAudio",Q_ARG(QVariant,QString("microphoneVolume")),Q_ARG(QVariant,37));
+    QMetaObject::invokeMethod(fake,"settingsFlushRequested");
+    check(fake->property("liveOptions").value<QJSValue>().toVariant().toMap().value("microphoneVolume").toInt()==37,
+          "backend quit notification flushes settings without a window closing event");
+    fake->setProperty("reject",true);
+    QMetaObject::invokeMethod(workspace,"editLive",Q_ARG(QVariant,QString("bitrateKbps")),Q_ARG(QVariant,9000));
+    QMetaObject::invokeMethod(fake,"settingsFlushRequested");
+    check(fake->property("liveOptions").value<QJSValue>().toVariant().toMap().value("bitrateKbps").toInt()==8000 && workspace->property("liveDirty").toBool(),
+          "failed exit save preserves last committed values and leaves unsaved draft identifiable");
+    fake->setProperty("reject",false);
+    QMetaObject::invokeMethod(fake,"settingsFlushRequested");
+    check(!workspace->property("liveDirty").toBool(),"failed exit flush remains retryable");
     check(warnings.isEmpty(), "no QML warnings or binding loops");
     std::printf("PASS: %d layout/runtime checks + %d recording workflow checks\n", checks, result.toInt());
 }

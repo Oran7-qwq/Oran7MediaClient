@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <atomic>
 #include <condition_variable>
@@ -100,7 +101,10 @@ void entryPoints()
     Oran7LogSink other(Oran7LogSink::Options{});
     check(!other.installQtHandler(), "second handler rejected");
     INFO_LOG << "[Test] Cookie: MACRO_SENTINEL";
+    INFO_LOG << "format-sentinel";
     qWarning("Authorization: Bearer QT_SENTINEL");
+    qWarning("qrc:/qt-project.org/imports/Qt5Compat/GraphicalEffects/GaussianBlur.qml:288:5: QML ShaderEffect: Cannot find member data");
+    qWarning("QML ShaderEffect: Cannot find member data");
     qInfo("https://user:URL_SENTINEL@example.test/signed?auth=QUERY_SENTINEL");
     {
         QQmlEngine engine;
@@ -114,6 +118,22 @@ void entryPoints()
     av_log(nullptr, AV_LOG_WARNING, "https://example.test/private?token=FFMPEG_SENTINEL\n");
     av_log(nullptr, AV_LOG_FATAL, "ffmpeg-recoverable-fatal\n");
     check(sink.flush(), "all entry points flushed");
+
+    // 宏日志只能有一套时间与级别前缀；外层 Oran7LogSink 已统一补全。
+    QByteArray formatLine;
+    for (const auto& line : console.split('\n'))
+        if (line.contains("format-sentinel")) formatLine = line;
+    const QString formatText = QString::fromUtf8(formatLine);
+    check(!formatLine.isEmpty(), "macro format line present");
+    check(formatText.count(QStringLiteral("[INFO]")) == 1, "macro emits one level prefix");
+    static const QRegularExpression timestamp(
+        QStringLiteral(R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})"));
+    check(formatText.count(timestamp) == 1, "macro emits one timestamp");
+    check(!console.contains("Qt5Compat/GraphicalEffects/GaussianBlur.qml"),
+          "known Qt5Compat teardown warning filtered");
+    check(console.contains("QML ShaderEffect: Cannot find member data"),
+          "other ShaderEffect warnings preserved");
+
     sink.shutdown();
     check(writer != std::this_thread::get_id(), "I/O stays on dedicated writer");
     QByteArray files;

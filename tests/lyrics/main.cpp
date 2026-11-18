@@ -3,6 +3,8 @@
 #include <QCoreApplication>
 #include <QTemporaryDir>
 #include <QUrlQuery>
+#include <QTimer>
+#include <QTest>
 #include <cstring>
 #include <cstdio>
 static void check(bool ok,const char* message) { if(!ok){std::fprintf(stderr,"FAIL: %s\n",message);std::exit(1);} }
@@ -68,5 +70,25 @@ int main(int argc,char** argv){
  service->load("https://cdn/no-metadata",root.path(),{});check(missing==beforeMissing+1,"unsearchable source produces terminal missing state");
  service->load("https://cdn/fail",root.path(),track);last(log)->complete("{}",QNetworkReply::ConnectionRefusedError);events();check(missing==beforeMissing+2,"current transport error publishes missing");
  service->load("https://cdn/end",root.path(),track);const int beforeDelete=log.aborted;service.reset();check(log.aborted==beforeDelete+1&&log.managers==log.destroyed,"service destruction aborts and releases transport");
+ {
+  Oran7RequestLog shared;
+  auto stable=std::make_unique<Oran7LyricsService>(Oran7LyricsService::MetadataReader{},nullptr,
+      Oran7LyricsService::FetcherFactory{},std::make_unique<Oran7Network>(shared));
+  int delivered=0,ticks=0;
+  QObject::connect(stable.get(),&Oran7LyricsService::lyricsAvailable,[&](const QString&){++delivered;});
+  QTimer heartbeat;heartbeat.setInterval(2);QObject::connect(&heartbeat,&QTimer::timeout,[&]{++ticks;});heartbeat.start();
+  for(int i=0;i<30;++i) {
+   Oran7Track current;current.songId=8000+i;current.title="pending";
+   stable->load(QString("https://example.invalid/%1").arg(i),root.path(),current);
+   check(shared.managers==1 && shared.destroyed==0,"switches never destroy or rebuild the shared network manager");
+   check(last(shared)->request().transferTimeout()==15000,"all lyrics sources have a bounded network transfer timeout");
+  }
+  QTest::qWait(80);
+  check(ticks>5 && delivered==0 && shared.aborted==29,"pending lyrics and repeated cancellation preserve GUI heartbeat without publishing stale results");
+  last(shared)->complete(R"({"lrc":{"lyric":"[00:01]latest"}})");events();
+  check(delivered==1,"only newest request may publish through the shared transport");
+  stable->stop();check(shared.destroyed==0,"stopping lyrics does not synchronously tear down the network backend");
+  stable.reset();check(shared.destroyed==1,"service lifetime owns and finally releases its shared manager");
+ }
  Oran7Async::waitForDone();std::puts("PASS: local LRC/cache, real fetch cascade/auth/CDN id, queued stale success/failure, cancellation, same-id isolation, RAII cleanup");
 }

@@ -37,6 +37,7 @@ Window {
             return {ok:true,msg:"已保存"}
         }
         signal liveSettingsChanged()
+        signal settingsFlushRequested()
         function applyLiveSettings(values) { if (reject || (liveBusy && liveSession.state!=="Streaming")) return {ok:false,msg:"设置被拒绝"}; liveOptions=Object.assign({},liveOptions,values);return {ok:true,msg:"已保存"} }
         function startLive() { if (liveBusy) return false;liveSession.state="Connecting";liveSession.busy=true;return true }
         function stopLive() { liveSession.state="Stopping" }

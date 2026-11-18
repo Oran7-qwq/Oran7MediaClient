@@ -108,6 +108,10 @@ ApplicationWindow {
         mode: Oran7Theme.Oran7MainGUI.backgroundMode
         dwmEnabled: mainWindow.backgroundDwmApplied
         nativeReady: mainWindow.backgroundNativeReady
+        // 启动阶段保留裁切余量，交接完成后才开始响应鼠标，避免交接时改变取景。
+        parallaxMotionAllowed: mainWindow.startupReleased
+        parallaxEnabled: Oran7Theme.Oran7MainGUI.backgroundParallaxEnabled === true
+        parallaxPadding: Number(Oran7Theme.Oran7MainGUI.backgroundParallaxAmplitude)
         prepareActive: !mainWindow.startupManaged || Oran7Startup.preparingMain
         // 启动仍允许隐藏预热；正常运行后隐藏/最小化不再后台解码视频背景。
         playbackAllowed: !mainWindow.startupReleased || (mainWindow.visible && mainWindow.visibility !== Window.Minimized)
@@ -115,7 +119,7 @@ ApplicationWindow {
         videoUrl: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundVideo)
             ? "file:///" + Oran7Theme.Oran7MainGUI.backgroundVideo : "qrc:/image/background.mp4"
         imageUrl: filehepler.fileExists("file:///" + Oran7Theme.Oran7MainGUI.backgroundImage)
-            ? "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/default_background.jpeg"
+            ? "file:///" + Oran7Theme.Oran7MainGUI.backgroundImage : "qrc:/image/default_background.jpg"
         imageWidth: Math.min(Screen.width * Screen.devicePixelRatio, 1920)
         imageHeight: Math.min(Screen.height * Screen.devicePixelRatio, 1080)
     }
