@@ -3,6 +3,7 @@
 
 // 持久化键兼容旧版本；业务使用 Oran7AppConfig 分组字段。
 namespace Oran7ConfigKeys {
+inline const QString Visualizer = QStringLiteral("visualizer");
 inline const QString SchemaVersion = QStringLiteral("schemaVersion");
 inline const QString WindowWidth = QStringLiteral("window.width");
 inline const QString WindowHeight = QStringLiteral("window.height");

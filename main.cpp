@@ -16,6 +16,8 @@
 #include "Oran7AppConfigManager.h"
 #include "Oran7MediaClient.h"
 #include "Oran7AudioEffects.h"
+#include "Oran7AudioVisualizer.h"
+#include "Oran7SpectrumItem.h"
 #include "Oran7EqualizerModel.h"
 #include "Oran7ProcessLoadMonitor.h"
 #include "Oran7ApplicationContext.h"
@@ -211,6 +213,11 @@ int main(int argc, char* argv[])
     {
         // 确保全局单例被创建-->
         client = Oran7ApplicationContext::instance().client();
+        auto* visualizer = client->visualizer();
+        visualizer->setDeveloperMode(uiPreferences.developerMode());
+        QObject::connect(&uiPreferences, &Oran7UiPreferences::developerModeChanged, visualizer, [&uiPreferences, visualizer] {
+            visualizer->setDeveloperMode(uiPreferences.developerMode());
+        });
         qmlRegisterType<Oran7BackgroundFrameMonitor>("Oran7Startup", 1, 0, "Oran7BackgroundFrameMonitor");
         qmlRegisterSingletonType(QUrl("qrc:/src/qml/Basic/BasicConfig.qml"), "BasicConfig", 1, 0, "BasicConfig");
         qmlRegisterSingletonType(QUrl("qrc:/src/qml/Settings/GlobalSettings/Oran7MainUiSetting.qml"),
@@ -300,6 +307,9 @@ int main(int argc, char* argv[])
                                                         QStringLiteral("均衡器模型由 Client.audioEffects 持有"));
         qmlRegisterUncreatableType<Oran7AudioEffects>("Client", 1, 0, "Oran7AudioEffects",
                                                       QStringLiteral("音效由 Client 持有"));
+        qmlRegisterUncreatableType<Oran7AudioVisualizer>("Client", 1, 0, "Oran7AudioVisualizer",
+                                                       QStringLiteral("音频可视化由 Client 持有"));
+        qmlRegisterType<Oran7SpectrumItem>("Client", 1, 0, "Oran7SpectrumItem");
 
         qmlRegisterSingletonType<Oran7MediaClient>("Client", 1, 0, "Client",
                                                    [client](QQmlEngine* engine, QJSEngine* scriptEngine) -> QObject*

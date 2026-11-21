@@ -12,6 +12,7 @@
 class Oran7MediaPlayer;
 class Oran7PlaybackState;
 class Oran7AudioParameterQueue;
+class Oran7AudioSpectrumTap;
 struct Frame;
 struct AVFrame;
 struct ID3D11Device;
@@ -46,6 +47,8 @@ public:
     std::shared_ptr<Oran7AudioParameterQueue> audioParameterQueue() const;
     using AudioParameterProvider = std::function<Oran7AudioParameters()>;
     void setAudioParameterProvider(AudioParameterProvider provider);
+    using SpectrumSink = std::function<void(std::shared_ptr<Oran7AudioSpectrumTap>)>;
+    void setSpectrumSink(SpectrumSink sink) { m_spectrumSink = std::move(sink); }
 
     QString source() const { return m_source; }
     QString playingSource() const;
@@ -79,6 +82,7 @@ private:
     std::unique_ptr<Oran7MediaPlayer> m_player;
     std::shared_ptr<Oran7AudioParameterQueue> m_audioQueue;
     AudioParameterProvider m_audioProvider;
+    SpectrumSink m_spectrumSink;
     std::shared_ptr<Oran7EventMailbox> m_mailbox;
     QTimer m_progressTimer;
     QTimer m_switchTimer;
@@ -88,6 +92,7 @@ private:
     quint64 m_generation = 0;
     quint64 m_commandRevision = 0;
     bool m_pendingSwitch = false;
+    bool m_musicPlayback = true;
     bool m_pauseWhenPrepared = false;
     bool m_shutdown = false;
     int m_retiringPlayers = 0;

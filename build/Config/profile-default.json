@@ -2,28 +2,29 @@
     "__component__": {
         "Oran7CaptionBar": {
             "__tokens__": {
-                "colorPrimaryBase": "$genColor(#fb7185)"
+                "colorPrimaryBase": "$genColor(#fb7185)",
+                "isSimpleMode": false
             }
         },
         "Oran7MainGUI": {
             "__tokens__": {
                 "backgroundImage": "C:/Users/funny/Oran7Program/Oran7MediaClient/build/Config/wallpaperResource/427d72b51f698a44236122b52ffa666f.jpg",
                 "backgroundMode": "Video",
-                "colorPrimaryBase": "$genColor(#ff5858)",
+                "colorPrimaryBase": "$genColor(#fb7185)",
                 "soundEffectVolume": 0.2,
-                "themeColor": "#ff5858"
+                "themeColor": "#fb7185"
             }
         },
         "Oran7MusicLyricsIsland": {
             "__tokens__": {
                 "backgroundImage_url": "C:/Users/funny/Pictures/OranMediaClientWallPaper/fe8e786c53df14a8bcbcaf14ee8f648d.jpg",
                 "floatingBackdropColor": "$genColor(#292929)",
-                "floatingCenterX": 1604,
+                "floatingCenterX": 1967,
                 "floatingEnabled": true,
                 "floatingLyricsHeight": 61,
                 "floatingPositionVersion": 2,
-                "floatingX": 1358.59375,
-                "floatingY": 23,
+                "floatingX": 1789,
+                "floatingY": 184,
                 "lyricsFontSize": 28
             }
         },

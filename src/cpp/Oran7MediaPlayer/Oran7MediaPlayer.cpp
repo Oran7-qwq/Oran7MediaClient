@@ -327,3 +327,8 @@ void Oran7MediaPlayer::oran7mp_setAudioParameterQueue(std::shared_ptr<Oran7Audio
     if (ffplayer_)
         ffplayer_->setAudioParameterQueue(std::move(queue));
 }
+
+void Oran7MediaPlayer::oran7mp_setAudioSpectrumTap(std::shared_ptr<Oran7AudioSpectrumTap> tap)
+{
+    if (ffplayer_) ffplayer_->setAudioSpectrumTap(std::move(tap));
+}

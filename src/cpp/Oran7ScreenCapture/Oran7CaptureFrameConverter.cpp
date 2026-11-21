@@ -4,6 +4,8 @@
 #include <QSize>
 #include <QThread>
 #include <wrl/client.h>
+#include <cerrno>
+#include <cstddef>
 #include <cstring>
 extern "C"
 {
@@ -17,6 +19,63 @@ using Microsoft::WRL::ComPtr;
 namespace
 {
 constexpr int kPool = 3;
+
+void fillBlack(AVFrame* frame)
+{
+    for (int plane = 0; plane < 2; ++plane)
+        for (int y = 0; y < frame->height / (plane + 1); ++y)
+            std::memset(frame->data[plane] + y * frame->linesize[plane], plane ? 128 : 16, frame->width);
+}
+
+// 每个 UV 采样是两个相邻字节，旋转时将 UV 对视为一个像素。
+void copyRecordingRegion(AVFrame* frame, const QRect& area, const uint8_t* const source[2],
+                         const int stride[2], const Oran7CaptureComposition& composition)
+{
+    if (area != QRect(0, 0, frame->width, frame->height))
+        fillBlack(frame);
+    for (int plane = 0; plane < 2; ++plane)
+    {
+        const int step = plane + 1;
+        const QSize size(area.width() / step, area.height() / step);
+        auto* target = frame->data[plane] + area.y() / step * frame->linesize[plane] + area.x();
+        if (!composition.transformsPixels())
+        {
+            for (int y = 0; y < size.height(); ++y)
+                std::memcpy(target + y * frame->linesize[plane], source[plane] + y * stride[plane], area.width());
+            continue;
+        }
+
+        const auto input = composition.inputSize(size);
+        const auto offset = [&](int x, int y) -> std::ptrdiff_t {
+            const auto point = composition.sourceRect(QRect(x, y, 1, 1), input).topLeft();
+            return std::ptrdiff_t(point.y()) * stride[plane] + point.x() * step;
+        };
+        const auto start = offset(0, 0);
+        const auto column = offset(1, 0) - start;
+        const auto row = offset(0, 1) - start;
+        for (int y = 0; y < size.height(); ++y)
+        {
+            auto* dst = target + y * frame->linesize[plane];
+            const auto* src = source[plane] + start + y * row;
+            if (plane == 0)
+                for (int x = 0; x < size.width(); ++x)
+                    dst[x] = src[x * column];
+            else
+                for (int x = 0; x < size.width(); ++x)
+                    std::memcpy(dst + x * 2, src + x * column, 2);
+        }
+    }
+}
+
+AVFrame* finishOutput(Oran7CaptureFrameConverter::Frame frame, const AVFrame* source)
+{
+    frame->pts = source->pts;
+    frame->color_range = AVCOL_RANGE_MPEG;
+    frame->colorspace = AVCOL_SPC_BT709;
+    frame->color_primaries = AVCOL_PRI_BT709;
+    frame->color_trc = AVCOL_TRC_BT709;
+    return frame.release();
+}
 }
 struct Oran7CaptureFrameConverter::Oran7Resources
 {
@@ -30,13 +89,15 @@ struct Oran7CaptureFrameConverter::Oran7Resources
     std::shared_ptr<Oran7CaptureTextureSlot> m_sharedSlots[kPool];
     int m_poolW = 0, m_poolH = 0, m_index = 0;
     int m_fps;
-    FrameTransfer m_download = &av_hwframe_transfer_data;
+    FrameTransfer m_download = nullptr;
+    ComPtr<ID3D11Texture2D> m_bgraReadback;
+    QSize m_bgraReadbackSize;
     ComPtr<ID3D11Texture2D> m_encodeNv12Tex, m_encodeReadback;
     ComPtr<ID3D11VideoProcessorOutputView> m_encodeOutputView;
     ComPtr<ID3D11VideoProcessorEnumerator> m_encodeVpEnum;
     ComPtr<ID3D11VideoProcessor> m_encodeVp;
     QSize m_encodeSourceSize, m_encodeTargetSize;
-    bool m_gpuConversionUnavailable = false;
+    bool m_gpuConversionUnavailable[2] = {};
     struct Oran7SwsDeleter
     {
         void operator()(SwsContext* context) const { sws_freeContext(context); }
@@ -48,15 +109,18 @@ struct Oran7CaptureFrameConverter::Oran7Resources
     };
     std::unique_ptr<AVBufferPool, Oran7PoolDeleter> m_recordingPool;
     QSize m_recordingPoolSize;
+    Frame m_softwareRegion;
     Frame allocateRecordingFrame(int width, int height);
+    int downloadFrame(AVFrame* result, const AVFrame* input);
     QThread* m_owner = QThread::currentThread(); // 只作线程断言，不跨线程解引用。
     ~Oran7Resources() { Q_ASSERT(m_owner == QThread::currentThread()); }
     bool ensurePreviewPool(int w, int h);
     bool ensurePreviewProcessor(int w, int h);
     bool convertPreviewWithProcessor(int idx, ID3D11Texture2D* srcTex, int w, int h, int slice);
     bool copyPreviewTexture(int idx, ID3D11Texture2D* srcTex, const D3D11_TEXTURE2D_DESC& sdesc, int slice);
-    AVFrame* convertRecordingFrame(const AVFrame* frame, int width, int height);
-    AVFrame* convertRecordingWithProcessor(const AVFrame* frame, int width, int height);
+    AVFrame* convertRecordingFrame(const AVFrame* frame, int width, int height, const Oran7CaptureComposition&);
+    AVFrame* convertRecordingWithProcessor(const AVFrame* frame, int width, int height,
+                                           const Oran7CaptureComposition::Oran7Blit&, const Oran7CaptureComposition&);
 };
 
 Oran7CaptureFrameConverter::Frame Oran7CaptureFrameConverter::Oran7Resources::allocateRecordingFrame(int width,
@@ -91,8 +155,7 @@ Oran7CaptureFrameConverter::Oran7CaptureFrameConverter(ID3D11Device* device, int
     : m_impl(std::make_unique<Oran7Resources>())
 {
     m_impl->m_fps = fps;
-    if (download)
-        m_impl->m_download = download;
+    m_impl->m_download = download;
     m_impl->m_capDev = device;
     if (device)
     {
@@ -106,18 +169,21 @@ void Oran7CaptureFrameConverter::beginRecording()
 {
     Q_ASSERT(m_impl->m_owner == QThread::currentThread());
     endRecording();
-    m_impl->m_gpuConversionUnavailable = false;
+    m_impl->m_gpuConversionUnavailable[0] = false;
+    m_impl->m_gpuConversionUnavailable[1] = false;
 }
 void Oran7CaptureFrameConverter::endRecording()
 {
     Q_ASSERT(m_impl->m_owner == QThread::currentThread());
     m_impl->m_recordingPool.reset();
     m_impl->m_recordingPoolSize = {};
+    m_impl->m_softwareRegion.reset();
 }
-Oran7CaptureFrameConverter::Frame Oran7CaptureFrameConverter::recording(const AVFrame* source, int width, int height)
+Oran7CaptureFrameConverter::Frame Oran7CaptureFrameConverter::recording(const AVFrame* source, int width, int height,
+                                                                        const Oran7CaptureComposition& composition)
 {
     Q_ASSERT(m_impl->m_owner == QThread::currentThread());
-    return Frame(m_impl->convertRecordingFrame(source, width, height));
+    return Frame(m_impl->convertRecordingFrame(source, width, height, composition));
 }
 Oran7CaptureFrameConverter::Oran7PreviewResult Oran7CaptureFrameConverter::preview(const AVFrame* source)
 {
@@ -209,53 +275,144 @@ bool Oran7CaptureFrameConverter::Oran7Resources::ensurePreviewPool(int w, int h)
     return true;
 }
 
-AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingFrame(const AVFrame* hwFrame, int dstW, int dstH)
+int Oran7CaptureFrameConverter::Oran7Resources::downloadFrame(AVFrame* result, const AVFrame* input)
+{
+    if (m_download)
+        return m_download(result, input, 0);
+    if (input->hw_frames_ctx)
+        return av_hwframe_transfer_data(result, input, 0);
+    // 窗口采集的 Surface 不属于 FFmpeg 帧池，回读其实际可见区域。
+    auto* source = reinterpret_cast<ID3D11Texture2D*>(input->data[0]);
+    if (!source || !m_capDev || !m_capCtx)
+        return AVERROR(EINVAL);
+    D3D11_TEXTURE2D_DESC sourceDesc{};
+    source->GetDesc(&sourceDesc);
+    ComPtr<ID3D11Device> sourceDevice;
+    source->GetDevice(sourceDevice.GetAddressOf());
+    const auto slice = UINT(reinterpret_cast<uintptr_t>(input->data[1]));
+    if (sourceDevice.Get() != m_capDev.Get() || sourceDesc.Format != DXGI_FORMAT_B8G8R8A8_UNORM ||
+        sourceDesc.SampleDesc.Count != 1 || slice >= sourceDesc.ArraySize ||
+        UINT(input->width) > sourceDesc.Width || UINT(input->height) > sourceDesc.Height)
+        return AVERROR(EINVAL);
+
+    const QSize size(input->width, input->height);
+    if (!m_bgraReadback || size != m_bgraReadbackSize)
+    {
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = size.width();
+        desc.Height = size.height();
+        desc.MipLevels = desc.ArraySize = desc.SampleDesc.Count = 1;
+        desc.Format = sourceDesc.Format;
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        if (FAILED(m_capDev->CreateTexture2D(&desc, nullptr, m_bgraReadback.ReleaseAndGetAddressOf())))
+            return AVERROR(EIO);
+        m_bgraReadbackSize = size;
+    }
+    result->format = AV_PIX_FMT_BGRA;
+    result->width = size.width();
+    result->height = size.height();
+    const int allocated = av_frame_get_buffer(result, 32);
+    if (allocated < 0)
+        return allocated;
+    const D3D11_BOX region{0, 0, 0, UINT(size.width()), UINT(size.height()), 1};
+    m_capCtx->CopySubresourceRegion(m_bgraReadback.Get(), 0, 0, 0, 0, source,
+                                    D3D11CalcSubresource(0, slice, sourceDesc.MipLevels), &region);
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if (FAILED(m_capCtx->Map(m_bgraReadback.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
+        return AVERROR(EIO);
+    const auto* pixels = static_cast<const uint8_t*>(mapped.pData);
+    for (int y = 0; y < size.height(); ++y)
+        std::memcpy(result->data[0] + size_t(y) * result->linesize[0], pixels + size_t(y) * mapped.RowPitch, size.width() * 4);
+    m_capCtx->Unmap(m_bgraReadback.Get(), 0);
+    return 0;
+}
+
+AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingFrame(const AVFrame* hwFrame, int dstW, int dstH,
+                                                                          const Oran7CaptureComposition& composition)
 {
     // hwFrame 来自 ddagrab → D3D11 硬件帧
     // av_hwframe_transfer_data 正确处理 data[1] 子资源索引
-    if (!hwFrame || hwFrame->format != AV_PIX_FMT_D3D11)
+    if (!hwFrame || (hwFrame->format != AV_PIX_FMT_D3D11 && hwFrame->format != AV_PIX_FMT_NV12 &&
+                     hwFrame->format != AV_PIX_FMT_BGRA) ||
+        hwFrame->width <= 0 || hwFrame->height <= 0)
     {
         WARNING_LOG << "downloadD3d11: invalid hwFrame";
         return nullptr;
     }
 
-    if (!m_gpuConversionUnavailable)
+    const int outW = dstW > 0 ? dstW : hwFrame->width;
+    const int outH = dstH > 0 ? dstH : hwFrame->height;
+    const QRect canvas(0, 0, outW, outH);
+    const auto blit = composition.blit(QSize(hwFrame->width, hwFrame->height), canvas.size());
+    if (blit.destination.isEmpty())
     {
-        if (auto* converted = convertRecordingWithProcessor(hwFrame, dstW, dstH))
+        auto black = allocateRecordingFrame(outW, outH);
+        if (!black)
+            return nullptr;
+        fillBlack(black.get());
+        return finishOutput(std::move(black), hwFrame);
+    }
+    auto& gpuUnavailable = m_gpuConversionUnavailable[composition.swapsAxes()];
+    const bool hardware = hwFrame->format == AV_PIX_FMT_D3D11;
+    if (hardware && !gpuUnavailable)
+    {
+        if (auto* converted = convertRecordingWithProcessor(hwFrame, outW, outH, blit, composition))
             return converted;
-        m_gpuConversionUnavailable = true;
+        gpuUnavailable = true;
         WARNING_LOG << "[CaptureDiag] GPU NV12 conversion unavailable, using CPU fallback";
     }
 
-    Frame bgra(av_frame_alloc());
+    Frame bgra(hardware ? av_frame_alloc() : av_frame_clone(hwFrame));
     if (!bgra)
         return nullptr;
 
-    int ret = m_download(bgra.get(), hwFrame, 0);
-    if (ret < 0)
+    if (hardware)
     {
-        WARNING_LOG << "av_hwframe_transfer_data failed:" << ret;
-        return nullptr;
+        const int ret = downloadFrame(bgra.get(), hwFrame);
+        if (ret < 0)
+        {
+            WARNING_LOG << "capture readback failed:" << ret;
+            return nullptr;
+        }
+        av_frame_copy_props(bgra.get(), hwFrame);
     }
-    av_frame_copy_props(bgra.get(), hwFrame);
 
     // 校验下载后的软件像素格式；ddagrab output_fmt=bgra + allow_fallback
     // 正常情况下是 BGRA，个别 GPU/驱动可能降级为其他 8bit 格式，这里按实际格式转换
     const AVPixelFormat srcFmt = AVPixelFormat(bgra->format);
-    if (srcFmt != AV_PIX_FMT_BGRA)
+    if (hardware && srcFmt != AV_PIX_FMT_BGRA)
     {
         const char* name = av_get_pix_fmt_name(srcFmt);
         WARNING_LOG << "downloadD3d11: downloaded format:" << (name ? name : "?")
                     << " (expected BGRA), using it directly";
     }
 
-    int srcW = bgra->width;
-    int srcH = bgra->height;
-    int outW = (dstW > 0) ? dstW : srcW;
-    int outH = (dstH > 0) ? dstH : srcH;
+    const auto cpuBlit = composition.blit(QSize(bgra->width, bgra->height), canvas.size());
+    const auto& src = cpuBlit.source;
+    const auto& area = cpuBlit.destination;
+    if (area.isEmpty())
+    {
+        auto black = allocateRecordingFrame(outW, outH);
+        if (!black)
+            return nullptr;
+        fillBlack(black.get());
+        return finishOutput(std::move(black), hwFrame);
+    }
+    if (src != QRect(0, 0, bgra->width, bgra->height))
+    {
+        bgra->crop_left = src.x();
+        bgra->crop_top = src.y();
+        bgra->crop_right = bgra->width - src.x() - src.width();
+        bgra->crop_bottom = bgra->height - src.y() - src.height();
+        if (av_frame_apply_cropping(bgra.get(), AV_FRAME_CROP_UNALIGNED) < 0)
+            return nullptr;
+    }
 
     // sws_getCachedContext 可能释放旧实例，先交出所有权，再接管返回值。
-    m_sws.reset(sws_getCachedContext(m_sws.release(), srcW, srcH, srcFmt, outW, outH, AV_PIX_FMT_NV12, SWS_BICUBIC,
+    const auto regionSize = composition.inputSize(area.size());
+    m_sws.reset(sws_getCachedContext(m_sws.release(), bgra->width, bgra->height, srcFmt,
+                                     regionSize.width(), regionSize.height(), AV_PIX_FMT_NV12, SWS_BICUBIC,
                                      nullptr, nullptr, nullptr));
     if (!m_sws)
     {
@@ -271,28 +428,50 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingFrame(const
     {
         return nullptr;
     }
-    int rows = sws_scale(m_sws.get(), bgra->data, bgra->linesize, 0, srcH, dst->data, dst->linesize);
-    if (rows != outH)
+    AVFrame* writeTarget = dst.get();
+    if (area != canvas || composition.transformsPixels())
     {
-        WARNING_LOG << "BGRA→NV12 incomplete:" << rows << "/" << outH;
+        // 让 swscale 写入独立的对齐缓冲，避免 SIMD 写过子矩形污染黑边。
+        if (!m_softwareRegion || QSize(m_softwareRegion->width, m_softwareRegion->height) != regionSize)
+        {
+            Frame region(av_frame_alloc());
+            if (!region)
+                return nullptr;
+            region->width = regionSize.width();
+            region->height = regionSize.height();
+            region->format = AV_PIX_FMT_NV12;
+            if (av_frame_get_buffer(region.get(), 32) < 0)
+                return nullptr;
+            m_softwareRegion = std::move(region);
+        }
+        writeTarget = m_softwareRegion.get();
+    }
+    int rows = sws_scale(m_sws.get(), bgra->data, bgra->linesize, 0, bgra->height,
+                         writeTarget->data, writeTarget->linesize);
+    if (rows != regionSize.height())
+    {
+        WARNING_LOG << "BGRA→NV12 incomplete:" << rows << "/" << regionSize.height();
         return nullptr;
     }
-    dst->pts = hwFrame->pts;
-    dst->color_range = AVCOL_RANGE_MPEG;
-    dst->colorspace = AVCOL_SPC_BT709;
-    dst->color_primaries = AVCOL_PRI_BT709;
-    dst->color_trc = AVCOL_TRC_BT709;
-    return dst.release();
+    if (writeTarget != dst.get())
+    {
+        const uint8_t* planes[] = {writeTarget->data[0], writeTarget->data[1]};
+        copyRecordingRegion(dst.get(), area, planes, writeTarget->linesize, composition);
+    }
+    return finishOutput(std::move(dst), hwFrame);
 }
 
 AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingWithProcessor(const AVFrame* frame, int width,
-                                                                                   int height)
+                                                                                   int height,
+                                                                                   const Oran7CaptureComposition::Oran7Blit& blit,
+                                                                                   const Oran7CaptureComposition& composition)
 {
     if (!frame || !frame->data[0] || !m_capVideoDev || !m_capVideoCtx || !m_capCtx || width <= 0 || height <= 0 ||
         (width & 1) || (height & 1))
         return nullptr;
     auto* texture = reinterpret_cast<ID3D11Texture2D*>(frame->data[0]);
-    const QSize source(frame->width, frame->height), target(width, height);
+    const QSize source(frame->width, frame->height);
+    const auto target = composition.inputSize(QSize(width, height));
     if (!m_encodeVp || source != m_encodeSourceSize || target != m_encodeTargetSize)
     {
         m_encodeVp.Reset();
@@ -304,8 +483,8 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingWithProcess
         content.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
         content.InputWidth = source.width();
         content.InputHeight = source.height();
-        content.OutputWidth = width;
-        content.OutputHeight = height;
+        content.OutputWidth = target.width();
+        content.OutputHeight = target.height();
         content.InputFrameRate = {UINT(m_fps), 1};
         content.OutputFrameRate = content.InputFrameRate;
         content.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
@@ -313,8 +492,8 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingWithProcess
             FAILED(m_capVideoDev->CreateVideoProcessor(m_encodeVpEnum.Get(), 0, &m_encodeVp)))
             return nullptr;
         D3D11_TEXTURE2D_DESC desc{};
-        desc.Width = width;
-        desc.Height = height;
+        desc.Width = target.width();
+        desc.Height = target.height();
         desc.MipLevels = 1;
         desc.ArraySize = 1;
         desc.Format = DXGI_FORMAT_NV12;
@@ -342,10 +521,18 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingWithProcess
     ComPtr<ID3D11VideoProcessorInputView> input;
     if (FAILED(m_capVideoDev->CreateVideoProcessorInputView(texture, m_encodeVpEnum.Get(), &inputDesc, &input)))
         return nullptr;
-    RECT sourceRect{0, 0, source.width(), source.height()}, targetRect{0, 0, width, height};
+    const auto native = [](const QRect& rect) {
+        return RECT{rect.x(), rect.y(), rect.x() + rect.width(), rect.y() + rect.height()};
+    };
+    const auto sourceRect = native(blit.source);
+    // 仍走一次 VideoProcessor + NV12 回读，在写入最终帧时应用旋转和镜像。
+    const auto region = composition.transformsPixels()
+        ? QRect(QPoint(), composition.inputSize(blit.destination.size())) : blit.destination;
+    const auto destinationRect = native(region);
+    const auto targetRect = native(QRect(QPoint(), target));
     m_capVideoCtx->VideoProcessorSetStreamFrameFormat(m_encodeVp.Get(), 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
     m_capVideoCtx->VideoProcessorSetStreamSourceRect(m_encodeVp.Get(), 0, TRUE, &sourceRect);
-    m_capVideoCtx->VideoProcessorSetStreamDestRect(m_encodeVp.Get(), 0, TRUE, &targetRect);
+    m_capVideoCtx->VideoProcessorSetStreamDestRect(m_encodeVp.Get(), 0, TRUE, &destinationRect);
     m_capVideoCtx->VideoProcessorSetOutputTargetRect(m_encodeVp.Get(), TRUE, &targetRect);
     m_capVideoCtx->VideoProcessorSetStreamAutoProcessingMode(m_encodeVp.Get(), 0, FALSE);
     D3D11_VIDEO_PROCESSOR_COLOR_SPACE inputColor{}, outputColor{};
@@ -370,18 +557,12 @@ AVFrame* Oran7CaptureFrameConverter::Oran7Resources::convertRecordingWithProcess
         return nullptr;
     }
     const auto* data = static_cast<const uint8_t*>(mapped.pData);
-    for (int y = 0; y < height; ++y)
-        std::memcpy(result->data[0] + y * result->linesize[0], data + size_t(y) * mapped.RowPitch, width);
-    data += size_t(height) * mapped.RowPitch;
-    for (int y = 0; y < height / 2; ++y)
-        std::memcpy(result->data[1] + y * result->linesize[1], data + size_t(y) * mapped.RowPitch, width);
+    const uint8_t* planes[] = {data + size_t(region.y()) * mapped.RowPitch + region.x(),
+        data + size_t(target.height() + region.y() / 2) * mapped.RowPitch + region.x()};
+    const int stride[] = {int(mapped.RowPitch), int(mapped.RowPitch)};
+    copyRecordingRegion(result.get(), blit.destination, planes, stride, composition);
     m_capCtx->Unmap(m_encodeReadback.Get(), 0);
-    result->pts = frame->pts;
-    result->color_range = AVCOL_RANGE_MPEG;
-    result->colorspace = AVCOL_SPC_BT709;
-    result->color_primaries = AVCOL_PRI_BT709;
-    result->color_trc = AVCOL_TRC_BT709;
-    return result.release();
+    return finishOutput(std::move(result), frame);
 }
 
 bool Oran7CaptureFrameConverter::Oran7Resources::ensurePreviewProcessor(int w, int h)

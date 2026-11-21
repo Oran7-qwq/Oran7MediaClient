@@ -7,6 +7,7 @@ QtObject {
     property int previewStarts: 0
     property int scale: -1
     property bool attachAllowed: false
+    property Item previewHost
     property var captureValues: ({outputIndex: 0, fps: 60, drawMouse: true, debugLog: false})
     property QtObject capture: QtObject {
         property string fileFormat: "mp4"
@@ -31,6 +32,10 @@ QtObject {
     function screenCaptureMonitors() { return [{outputIndex: 0, width: 1920, height: 1080, primary: true, attached: true}] }
     function screenCaptureSettings() { return captureValues }
     function applyScreenCaptureSettings(index, fps, mouse, debug) { return {ok: true, pending: false, msg: "已保存"} }
-    function attachVideoItem(key, host) { attempts++; return attachAllowed }
+    function attachVideoItem(key, host) {
+        attempts++
+        if (attachAllowed) previewHost = host
+        return attachAllowed
+    }
     function setScaleMode(key, value) { scale = value }
 }

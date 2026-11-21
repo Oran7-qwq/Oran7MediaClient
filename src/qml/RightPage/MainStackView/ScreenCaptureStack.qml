@@ -8,6 +8,8 @@ Item {
     id: root
     property string pageName: ""
     readonly property bool isActive: StackView.status === StackView.Active
+    // 两套皮肤共用编辑器计算画面矩形，D3D11 直接铺满该矩形。
+    Component.onCompleted: Client.setScaleMode(Client.ScreenCaptureRender, Client.Fill)
 
     Oran7ProcessLoadMonitor {
         id: processLoad
@@ -27,12 +29,13 @@ Item {
             Oran7ScreenCaptureComponent {
                 renderObject: Client.ScreenCaptureRender
                 openScreenInfo: workspace.showScreenInfo
+                infoFontFamily: workspace.fontFamily
+                infoPixelSize: workspace.captionPixelSize
+                sourceSizeHint: Qt.size(workspace.previewSource.width || 0, workspace.previewSource.height || 0)
             }
         }
         onPreviewScaleChanged: function(fill) {
             Oran7Theme.saveComponentToken("Oran7ScreenCapture", "ScaleMode", fill ? "Fill" : "Fit")
-            Client.setScaleMode(Client.ScreenCaptureRender, fill ? Client.Fill : Client.Fit)
         }
-        Component.onCompleted: Client.setScaleMode(Client.ScreenCaptureRender, fillPreview ? Client.Fill : Client.Fit)
     }
 }

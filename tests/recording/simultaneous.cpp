@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <future>
 #include <utility>
 
@@ -83,6 +84,35 @@ static void readback(const QString& path, int width, int height, int fps, double
     check(vi >= 0 && ai >= 0, "both output files contain H264 and AAC");
     check(f->streams[vi]->codecpar->width == width && f->streams[vi]->codecpar->height == height,
           "independent scaling survives readback");
+    const auto* decoder = avcodec_find_decoder(f->streams[vi]->codecpar->codec_id);
+    auto* context = avcodec_alloc_context3(decoder);
+    auto* decoded = av_frame_alloc();
+    check(decoder && context && decoded && avcodec_parameters_to_context(context, f->streams[vi]->codecpar) >= 0 &&
+              avcodec_open2(context, decoder, nullptr) >= 0, "decode the actual composed output");
+    bool seenAlpha = false, seenTransformedAlpha = false, seenPrimaryAfterReorder = false;
+    const auto inspect = [&] {
+        while (avcodec_receive_frame(context, decoded) == 0)
+        {
+            const auto sample = [&](int plane, int x, int y) {
+                const int shift = plane == 0 ? 0 : 1;
+                return int(decoded->data[plane][decoded->linesize[plane] * (y >> shift) + (x >> shift)]);
+            };
+            const auto matches = [](int value, int expected) { return std::abs(value - expected) <= 12; };
+            const int left = width / 4, middle = width / 2, right = width * 3 / 4;
+            const int top = height / 4, bottom = height * 13 / 16;
+            if (matches(sample(0, left, top), 235) && matches(sample(2, left, top), 128) &&
+                matches(sample(0, middle, top), 149) && matches(sample(2, middle, top), 184) &&
+                matches(sample(0, right, top), 63) && matches(sample(2, right, top), 240))
+                seenAlpha = true;
+            if (matches(sample(0, left, top), 235) && matches(sample(0, left, height / 2), 149) &&
+                matches(sample(0, left, bottom), 63) && matches(sample(2, left, bottom), 240) &&
+                matches(sample(0, right, bottom), 173) && matches(sample(2, right, bottom), 26))
+                seenTransformedAlpha = true;
+            if (seenTransformedAlpha && sample(0, left, bottom) > 210 && sample(0, middle, top) > 210)
+                seenPrimaryAfterReorder = true;
+            av_frame_unref(decoded);
+        }
+    };
     int frames = 0, audioPackets = 0;
     int64_t last = AV_NOPTS_VALUE;
     double first = 0, end = 0;
@@ -91,6 +121,8 @@ static void readback(const QString& path, int width, int height, int fps, double
     {
         if (p.stream_index == vi)
         {
+            check(avcodec_send_packet(context, &p) >= 0, "encoded frame reaches the decoder");
+            inspect();
             check(last == AV_NOPTS_VALUE || p.dts >= last, "independent DTS stays monotonic");
             const double t = p.dts * av_q2d(f->streams[vi]->time_base);
             if (!frames)
@@ -105,6 +137,13 @@ static void readback(const QString& path, int width, int height, int fps, double
     }
     check(end - first >= minDuration && frames >= int(minDuration * fps * .8) && audioPackets > 10,
           "stopping one output does not truncate surviving output");
+    avcodec_send_packet(context, nullptr);
+    inspect();
+    check(seenAlpha, "decoded MP4 and RTMP preserve transparent, half-transparent and opaque image pixels");
+    check(seenTransformedAlpha, "decoded MP4 and RTMP transform alpha and color together");
+    check(seenPrimaryAfterReorder, "decoded overlap follows scene reorder on both MP4 and RTMP");
+    av_frame_free(&decoded);
+    avcodec_free_context(&context);
     avformat_close_input(&f);
 }
 int main(int argc, char** argv)
@@ -232,12 +271,40 @@ int main(int argc, char** argv)
         source.width = 96;
         source.height = 64;
         source.opaque = bgra;
+        const auto scene = std::make_shared<Oran7CaptureScene>();
+        const auto auxiliary = std::make_shared<Oran7SceneFrameMailbox>();
+        Oran7CaptureFrameConverter::Frame overlay(av_frame_alloc());
+        overlay->format = AV_PIX_FMT_BGRA;
+        overlay->width = 64;
+        overlay->height = 48;
+        check(av_frame_get_buffer(overlay.get(), 32) >= 0, "allocate a static image source frame");
+        for (int y = 0; y < overlay->height; ++y)
+        {
+            auto* pixel = overlay->data[0] + y * overlay->linesize[0];
+            for (int x = 0; x < overlay->width; ++x, pixel += 4)
+            {
+                const uint8_t alpha = x < 22 ? 0 : x < 44 ? 128 : 255;
+                pixel[0] = 0;
+                pixel[1] = y < overlay->height / 2 ? 0 : alpha;
+                pixel[2] = y < overlay->height / 2 ? alpha : 0;
+                pixel[3] = alpha;
+            }
+        }
+        auxiliary->submit(std::move(overlay));
+        videoFeed->setScene(scene);
+        const Oran7CaptureScene::Layer primaryLayer{{true, false}, {}, true};
+        const Oran7CaptureScene::Layer overlayLayer{{true, false}, auxiliary, false, true};
+        auto transformed = overlayLayer;
+        transformed.composition.width = transformed.composition.height = 0.75;
+        transformed.composition.quarterTurns = 1;
+        transformed.composition.mirrored = true;
+        transformed.composition.crop = {0.125, 0.125, 0.75, 0.75};
         Oran7CaptureOutputRouter router(nullptr, videoFeed, &download);
         local.attach(videoFeed, audioFeed);
         const auto sourceEpoch = videoFeed->snapshot().epoch;
         QElapsedTimer elapsed;
         elapsed.start();
-        bool attached = false, stopped = false;
+        bool attached = false, moved = false, reordered = false, stopped = false;
         int dualFrames = 0, singleFramesWithBothActive = 0;
         std::future<void> closing;
         while (elapsed.elapsed() < 2400)
@@ -246,7 +313,18 @@ int main(int argc, char** argv)
             {
                 live.attach(videoFeed, audioFeed);
                 attached = true;
+                scene->setLayers({primaryLayer, overlayLayer});
                 check(videoFeed->snapshot().epoch == sourceEpoch, "second output does not invalidate source epoch");
+            }
+            if (!moved && elapsed.elapsed() >= 650)
+            {
+                scene->setLayers({primaryLayer, transformed});
+                moved = true;
+            }
+            if (!reordered && elapsed.elapsed() >= 950)
+            {
+                scene->setLayers({transformed, primaryLayer});
+                reordered = true;
             }
             if (!stopped && elapsed.elapsed() >= 1500)
             {
@@ -323,5 +401,5 @@ int main(int argc, char** argv)
         readback(localPath, 96, 64, 60, stopRecordingFirst ? 1.2 : 2.1);
         readback(remotePath, live.width, live.height, live.fps, stopRecordingFirst ? 1.7 : .8);
     }
-    std::puts("PASS: matching/different sizes, independent FPS and bitrate, MP4 plus RTMP, both stop orders");
+    std::puts("PASS: matching/different sizes, scene compositing, MP4 plus RTMP, both stop orders");
 }

@@ -175,7 +175,7 @@ Rectangle {
         }
         ListElement {
             iconImage: "qrc:/image/arcticons_star-music-tag-editor.png"
-            iconText: "终末地 • 帝江号"
+            iconText: "ORAN远程"
             pageName: "NAME?1"
         }
         ListElement {

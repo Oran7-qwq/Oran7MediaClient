@@ -33,6 +33,7 @@ ApplicationWindow {
     readonly property var preferences: typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences : null
 
     Oran7HdrWindowOutput { window: mainWindow }
+    Oran7AudioVisualizerWindow { visualizer: Client.visualizer }
 
     readonly property bool startupManaged: typeof Oran7Startup !== "undefined" && Oran7Startup !== null
     readonly property bool startupReleased: !startupManaged || Oran7Startup.finished
@@ -91,6 +92,7 @@ ApplicationWindow {
 
         // 设置全局mainWindow引用
         BasicConfig.mainWindow = mainWindow;
+        Client.visualizer.setHostWindow(mainWindow)
 
         // 共享主窗口背景渲染源（视频/静态图一体），供开发者头像窗口、歌词窗口复用同一份背景
         BasicConfig.backgroundVideoSource = mainWindowBackground;

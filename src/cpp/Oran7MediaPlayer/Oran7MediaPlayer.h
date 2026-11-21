@@ -14,6 +14,7 @@
 // 前向声明：Oran7FFplayerCore 仅作指针成员；ID3D11Device 仅作指针形参（完整类型在 .cpp 侧 include）
 class Oran7FFplayerCore;
 class Oran7AudioParameterQueue;
+class Oran7AudioSpectrumTap;
 struct ID3D11Device;
 
 /*-
@@ -203,6 +204,7 @@ public:
      *        队列由播放器共享持有，播放器退役后仍可安全读到回调停止。
      */
     void oran7mp_setAudioParameterQueue(std::shared_ptr<Oran7AudioParameterQueue> queue);
+    void oran7mp_setAudioSpectrumTap(std::shared_ptr<Oran7AudioSpectrumTap> tap);
 
 private:
     std::mutex mutex_;                    // 线程同步互斥量

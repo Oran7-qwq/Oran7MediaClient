@@ -22,6 +22,11 @@ class Oran7DesktopCaptureWorker : public QObject
     void setDebugLog(bool on) { m_control->debugLog.store(on, std::memory_order_release); }
     std::shared_ptr<Oran7CaptureControl> control() const { return m_control; }
     std::shared_ptr<Oran7RecordingFeed> recordingFeed() const { return m_recordingFeed; }
+    void setAuxiliaryOutput(std::shared_ptr<Oran7CaptureScene> scene, std::shared_ptr<Oran7SceneFrameMailbox> frames)
+    {
+        m_scene = std::move(scene);
+        m_sceneFrames = std::move(frames);
+    }
   public slots:
     void start();
     void stop();
@@ -59,6 +64,8 @@ class Oran7DesktopCaptureWorker : public QObject
     std::unique_ptr<Oran7CaptureFrameConverter> m_converter;
     std::shared_ptr<Oran7RecordingFeed> m_recordingFeed = std::make_shared<Oran7RecordingFeed>();
     std::unique_ptr<Oran7CaptureOutputRouter> m_outputRouter;
+    std::shared_ptr<Oran7CaptureScene> m_scene;
+    std::shared_ptr<Oran7SceneFrameMailbox> m_sceneFrames;
     int64_t m_debugLastPts = AV_NOPTS_VALUE;
     int m_rawCount = 0;
     qint64 m_rawT0 = 0;

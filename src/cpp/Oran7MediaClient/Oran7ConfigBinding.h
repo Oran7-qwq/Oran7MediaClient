@@ -33,6 +33,8 @@ public:
     void saveVolume(int volume);
     Oran7AudioConfig audio() const;
     void saveAudio(const Oran7AudioConfig& audio);
+    Oran7VisualizerConfig visualizer() const;
+    bool saveVisualizer(const Oran7VisualizerConfig& visualizer);
     bool roamFilterLiked() const;
     bool saveRoamFilterLiked(bool enabled);
     void loadWindowSize(QQmlApplicationEngine& engine);

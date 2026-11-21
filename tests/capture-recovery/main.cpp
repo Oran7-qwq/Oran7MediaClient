@@ -5,6 +5,8 @@
 #include <QScopeGuard>
 #include "Live/Oran7LiveBackend.h"
 #include "Oran7AppConfigManager.h"
+#include "Oran7CaptureSceneStore.h"
+#include "Oran7WindowCaptureWorker.h"
 #include <QGuiApplication>
 #include <QSignalSpy>
 #include <QTest>
@@ -12,6 +14,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <QTimer>
+#include <QFile>
+#include <QTemporaryDir>
 #include <algorithm>
 
 static std::mutex liveAudioProbeMutex;
@@ -183,10 +187,65 @@ static void invalidate(Oran7DesktopCaptureWorker* worker, const QString& reason)
 }
 #include "async-cases.h"
 
+static void sceneStoreChecks()
+{
+    QTemporaryDir directory;
+    check(directory.isValid(), "scene storage test uses a temporary directory");
+    const auto path = directory.filePath("capture-scenes.json");
+    Oran7CaptureSceneStore first(path);
+    check(first.load().value("ok").toBool() && !QFile::exists(path), "missing scene file starts empty");
+    const QVariantMap transform{{"fit", true}, {"geometry", QVariantList{0.32, 0.4, 0.5, 0.6}},
+        {"crop", QVariantList{0.1, 0.25, 0.75, 0.5}}, {"scale", 0.75}, {"quarterTurns", 1}, {"mirrored", true}};
+    const QVariantMap window{{"kind", "window"}, {"name", "Document"}, {"executable", "C:/Apps/Editor.exe"},
+        {"windowClass", "EditorWindow"}, {"width", 840}, {"height", 640}, {"transform", transform}};
+    const QVariantMap display{{"kind", "display"}, {"name", "Monitor"}, {"monitorPath", "PERSISTENT-DISPLAY-KEY"},
+        {"width", 1920}, {"height", 1080}, {"transform", transform}};
+    const QVariantMap image{{"kind", "image"}, {"name", "test.png"}, {"file", directory.filePath("test.png")},
+        {"width", 128}, {"height", 96}, {"hidden", true}, {"locked", true}, {"transform", transform}};
+    const QVariantMap blank{{"id", "first"}, {"name", "First"}, {"sources", QVariantList{}}};
+    const QVariantMap mixed{{"id", "second"}, {"name", "Second"}, {"sources", QVariantList{display, window, image}}};
+    QVariantMap library{{"active", "second"}, {"scenes", QVariantList{blank, mixed}}};
+    check(first.save(library).value("ok").toBool(), "save a mixed scene and active scene ID");
+    Oran7CaptureSceneStore reopened(path);
+    auto restored = reopened.load().value("library").toMap();
+    const auto sources = restored.value("scenes").toList().last().toMap().value("sources").toList();
+    check(restored.value("active") == "second" && sources.size() == 3 && sources[0].toMap().value("kind") == "display" &&
+          sources[1].toMap().value("kind") == "window" && sources[1].toMap().value("transform").toMap() == transform &&
+          sources[2].toMap() == image,
+          "restart restores all source kinds, stacking, transforms and source flags");
+    library["active"] = "first";
+    check(first.save(library).value("ok").toBool(), "switching scenes updates the active ID");
+    restored["active"] = "second";
+    restored["extra"] = true;
+    check(!reopened.save(restored).value("ok").toBool(), "a stale instance cannot overwrite a more recent scene file");
+    {
+        QFile corrupt(path);
+        check(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate) && corrupt.write("broken-scene-data") == 17,
+              "write the isolated damaged scene fixture");
+    }
+    Oran7CaptureSceneStore damaged(path);
+    check(!damaged.load().value("ok").toBool() && !damaged.save(library).value("ok").toBool(),
+          "damaged data is protected from automatic overwrite");
+    QFile verify(path);
+    check(verify.open(QIODevice::ReadOnly) && verify.readAll() == "broken-scene-data", "damaged file remains intact");
+    QVariantMap candidate(window);
+    candidate["token"] = "new-runtime-handle";
+    candidate["executable"] = "c:/apps/editor.exe";
+    QVariantMap unrelated(candidate);
+    unrelated["name"] = "Another document";
+    check(oran7MatchCaptureWindow(window, {unrelated}).isEmpty() &&
+          oran7MatchCaptureWindow(window, {unrelated, candidate}) == "new-runtime-handle",
+          "a missing window waits and a matching reopened window resolves a new handle");
+    QVariantMap duplicate(candidate);
+    duplicate["token"] = "ambiguous-handle";
+    check(oran7MatchCaptureWindow(window, {candidate, duplicate}).isEmpty(), "ambiguous same-title windows remain pending");
+}
+
 int main(int argc, char** argv)
 {
     qputenv("QT_QPA_PLATFORM", "offscreen");
     QGuiApplication app(argc, argv);
+    sceneStoreChecks();
     D3D11VideoItem item;
     auto& config = Oran7AppConfigManager::ins();
     auto saved = config.snapshot();
@@ -498,5 +557,37 @@ int main(int argc, char** argv)
         check(audioCaptureStarts.load()==opened,"queued audio startup cannot run after shutdown");
     }
     asyncChecks(item, config);
+    {
+        mode = 0;
+        outputs = {QVariantMap{{"outputIndex", 0}, {"attached", true}, {"primary", true}, {"deviceName", "DISPLAY-A"}},
+                   QVariantMap{{"outputIndex", 2}, {"attached", true}, {"deviceName", "DISPLAY-B"}}};
+        Oran7ScreenCaptureController capture;
+        capture.setVideoItem(&item);
+        check(capture.start(), "scene controller starts the primary display");
+        until([&] { return capture.previewStateName() == "Running"; });
+        const int primary = capture.captureSettings().value("outputIndex").toInt();
+        const int secondary = primary == 0 ? 2 : 0;
+        const int initialStarts = starts.load();
+        const int copy = capture.addSceneLayer(primary);
+        check(copy > 0 && liveWorkers == 1 && starts == initialStarts, "duplicate primary layer reuses the DDA session");
+        const int first = capture.addSceneLayer(secondary);
+        const int second = capture.addSceneLayer(secondary);
+        check(first > 0 && second > first, "one display can have independent scene layers");
+        until([&] { return starts == initialStarts + 1; });
+        check(liveWorkers == 2, "secondary display starts exactly one worker for both layers");
+        capture.removeSceneLayer(first);
+        check(liveWorkers == 2, "removing a layer keeps its display active for other layers");
+        capture.removeSceneLayer(second);
+        until([&] { return liveWorkers == 1; });
+        check(capture.addSceneLayer(secondary) > 0, "a retiring display can be added again");
+        until([&] { return liveWorkers == 2; });
+        const auto request = capture.applyCaptureSettings(secondary, capture.captureSettings().value("fps").toInt(), true, false);
+        check(request.value("ok").toBool() && request.value("pending").toBool(), "switch primary to a display already in the scene");
+        until([&] { return capture.previewStateName() == "Running" && liveWorkers == 2; });
+        check(capture.captureSettings().value("outputIndex").toInt() == secondary,
+              "primary handoff preserves the auxiliary layer on the former primary display");
+        capture.shutdown();
+        check(liveWorkers == 0, "shutdown joins all display workers");
+    }
     std::printf("PASS: %d controller recovery checks\n", checks);
 }

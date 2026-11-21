@@ -12,6 +12,7 @@
 #include <d3d11.h>
 #include <wrl/client.h>
 #include "D3d11Videoitem.h"
+#include "Oran7CaptureComposition.h"
 #include "Oran7SignalingClient.h"
 #include "Oran7RecordingSession.h"
 #include "Live/Oran7LiveSession.h"
@@ -19,6 +20,8 @@ using Microsoft::WRL::ComPtr;
 struct Oran7CaptureControl;
 class Oran7RecordingFeed;
 class Oran7AudioCaptureFeed;
+class Oran7CaptureSceneSources;
+class Oran7CaptureSceneStore;
 
 //  =====================  CaptureOutputInfo  ==================
 
@@ -37,6 +40,7 @@ struct CaptureOutputInfo
     int height = 0;
     QString deviceName;  // "\\.\DISPLAY1"
     QString monitorName; // Windows 友好名称，例如 X7IQ；不可用时为空。
+    QString monitorPath; // 物理显示器设备路径，保存场景时优先于 DISPLAY 号。
     QString adapterName; // 所属 GPU 描述
 };
 
@@ -110,6 +114,18 @@ class Oran7ScreenCaptureController : public QObject
 
     /*! @note 读取当前生效的抓屏参数 */
     Q_INVOKABLE QVariantMap captureSettings() const;
+    Q_INVOKABLE void setPreviewComposition(bool enabled, bool fit, const QRectF& geometry, double scale,
+                                          const QRectF& crop, int quarterTurns, bool mirrored, bool removed);
+    Q_INVOKABLE int addSceneLayer(int outputIndex);
+    Q_INVOKABLE QVariantList sceneWindows() const;
+    Q_INVOKABLE int addWindowSceneLayer(const QString& token);
+    Q_INVOKABLE QVariantMap restoreSceneSource(const QVariantMap& source, const QString& token);
+    Q_INVOKABLE QVariantMap openSceneImage(const QUrl& url);
+    Q_INVOKABLE QVariantMap loadSceneLibrary();
+    Q_INVOKABLE QVariantMap saveSceneLibrary(const QVariantMap& library);
+    Q_INVOKABLE void removeSceneLayer(int layerId);
+    Q_INVOKABLE QObject* attachSceneLayer(int layerId, QQuickItem* host);
+    Q_INVOKABLE void setSceneLayers(const QVariantList& layers);
 
     /**
      * @brief 应用抓屏参数（QML 端唯一的写入入口）
@@ -174,6 +190,7 @@ class Oran7ScreenCaptureController : public QObject
     void settingsFlushRequested(); // 退出冻结前同步补交 QML 防抖草稿，不等待定时器。
     void previewStateChanged();
     void captureRequestFinished(const QVariantMap& result);
+    void sceneLayerError(int layerId, const QString& message);
     void liveChanged();
     void liveSettingsChanged();
     void audioLevelsChanged();
@@ -243,6 +260,9 @@ class Oran7ScreenCaptureController : public QObject
     std::unique_ptr<QThread> m_thread;
     std::shared_ptr<Oran7CaptureControl> m_control;
     std::shared_ptr<Oran7RecordingFeed> m_feed;
+    Oran7CaptureComposition m_composition;
+    std::unique_ptr<Oran7CaptureSceneSources> m_sceneSources;
+    std::unique_ptr<Oran7CaptureSceneStore> m_sceneStore;
     //=================== CaptureRecording ===================//
     std::unique_ptr<Oran7LiveSession> m_live;
     std::unique_ptr<Oran7RecordingSession> m_recording;

@@ -18,6 +18,53 @@ Window {
             property var statistics: ({})
         }
         readonly property bool liveBusy: liveSession.busy
+        property var previewComposition: ({})
+        property var sceneLayers: []
+        property int nextSceneId: 0
+        property int removedSceneId: 0
+        property string addedWindowToken: ""
+        property bool rejectWindowSource: false
+        property bool sceneLibraryEnabled: false
+        property bool windowPresent: true
+        property bool showSceneBackdrop: false
+        property Component sceneBackdrop: Component { Rectangle { anchors.fill: parent; color: "white" } }
+        property var savedSceneLibrary: ({})
+        signal sceneLayerError(int id, string message)
+        function addSceneLayer(outputIndex) { return ++nextSceneId }
+        function sceneWindows() {
+            return [{token: "window-one", name: "模拟编辑器", application: "editor.exe", executable: "C:/Apps/editor.exe",
+                        windowClass: "Editor", width: 1000, height: 680, minimized: false},
+                    {token: "window-two", name: "模拟播放器", application: "player.exe", executable: "C:/Apps/player.exe",
+                        windowClass: "Player", width: 800, height: 600, minimized: true}]
+        }
+        function addWindowSceneLayer(token) {
+            if (rejectWindowSource)
+                return 0
+            addedWindowToken = token
+            return ++nextSceneId
+        }
+        function loadSceneLibrary() { return {ok: true, library: savedSceneLibrary} }
+        function saveSceneLibrary(library) {
+            savedSceneLibrary = JSON.parse(JSON.stringify(library))
+            return {ok: true}
+        }
+        function restoreSceneSource(source, token) {
+            if (source.kind === "image")
+                return {id: ++nextSceneId, url: "file:///" + source.file, width: source.width, height: source.height}
+            return {id: ++nextSceneId, error: source.kind === "window" && !windowPresent ? "等待窗口重新打开" : ""}
+        }
+        function openSceneImage(url) {
+            const path = decodeURIComponent(url.toString().replace(/^file:\/\/\//, ""))
+            return {id: ++nextSceneId, url, file: path, name: "Scene image", width: 128, height: 96}
+        }
+        function removeSceneLayer(id) { removedSceneId = id }
+        function attachSceneLayer(id, host) { return showSceneBackdrop ? sceneBackdrop.createObject(host) : null }
+        function setSceneLayers(layers) {
+            sceneLayers = layers
+            const primary = layers.find(layer => layer.id === 0)
+            if (primary)
+                previewComposition = Object.assign({enabled: true, x: primary.geometry.x, y: primary.geometry.y}, primary)
+        }
         property var liveOptions: ({platform:"custom",server:"rtmp://example.test/live",streamKey:"FICTIONAL",width:1920,height:1080,fps:60,bitrateKbps:6000,audioEnabled:true,microphoneEnabled:false,systemVolume:100,microphoneVolume:100})
         property bool audioMonitoringEnabled: false
         function setAudioMonitoringEnabled(value) { audioMonitoringEnabled=value }
@@ -68,8 +115,8 @@ Window {
         signal started()
         signal errorOccurred(string err)
         function restartPreview() { return !recordingBusy }
-        function screenCaptureMonitors() { return [{outputIndex: 1,width: 1920,height: 1080,monitorName: "LQ156T1JW05",primary: false,attached: true},
-            {outputIndex: 4,width: 2560,height: 1440,monitorName: "X7IQ",primary: true,attached: true},
+        function screenCaptureMonitors() { return [{outputIndex: 1,width: 1920,height: 1080,monitorName: "LQ156T1JW05",deviceName: "DISPLAY-A",monitorPath: "monitor-a",primary: false,attached: true},
+            {outputIndex: 4,width: 2560,height: 1440,monitorName: "X7IQ",deviceName: "DISPLAY-B",monitorPath: "monitor-b",primary: true,attached: true},
             {outputIndex: 7,width: 0,height: 0,primary: false,attached: false}] }
         function screenCaptureSettings() { return Object.assign({}, capture) }
         function applyScreenCaptureSettings(index, fps, mouse, debug) {
@@ -100,6 +147,7 @@ Window {
         controller: fake
         previewComponent: Component {
             Rectangle {
+                readonly property real previewSourceAspect: 16 / 9
                 color: "#101216"
                 Label { anchors.centerIn: parent; text: "桌面画面预览"; color: "#aaaaaa" }
             }

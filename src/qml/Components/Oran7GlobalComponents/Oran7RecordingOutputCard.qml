@@ -21,11 +21,15 @@ Rectangle {
     property color hoverColor: "#2b394c"
     property color borderColor: "#334154"
     property color errorColor: "#ed8795"
+    property string fontFamily: ""
+    property int controlPixelSize: 15
+    property int headingPixelSize: 17
+    property int captionPixelSize: 13
     readonly property var session: controller && controller.liveSession ? controller.liveSession : null
     readonly property bool busy: live ? !!session && session.busy : !!controller && controller.recordingBusy
     readonly property string sessionState: live ? (session ? session.state : "Idle") : (controller ? controller.recordingState : "Idle")
     readonly property string error: live ? (session ? session.error : "") : (controller ? controller.recordingError : "")
-    implicitHeight: 96
+    implicitHeight: 110
     gradient: Gradient {
         orientation: Gradient.Horizontal
         GradientStop {
@@ -64,17 +68,26 @@ Rectangle {
                 Rectangle { anchors.centerIn: parent; width: 6; height: 6; radius: 3; color: root.error ? root.errorColor : root.accentColor; opacity: root.busy ? 1 : 0.55 }
             }
             Label {
-                text: root.live ? "LIVE" : "REC"; font.pixelSize: 10; font.bold: true
+                text: root.live ? "LIVE" : "REC"; font.family: root.fontFamily; font.pixelSize: root.captionPixelSize; font.bold: true
                 color: root.busy ? (root.violetSkin ? "#ffffff" : root.surfaceColor) : root.paperInkColor
                 leftPadding: 5; rightPadding: 5; topPadding: 1; bottomPadding: 1
                 background: Rectangle { radius: 3; color: root.busy ? root.accentColor : root.paperColor }
             }
-            Label { Layout.fillWidth: true; Layout.minimumWidth: 0; text: root.live ? qsTranslate("Oran7Ui", "直播推流") : qsTranslate("Oran7Ui", "本地录制"); font.pixelSize: 12; font.bold: true; color: root.textColor; elide: Text.ElideRight }
+            Label {
+                Layout.fillWidth: true; Layout.minimumWidth: 0
+                text: root.live ? qsTranslate("Oran7Ui", "直播推流") : qsTranslate("Oran7Ui", "本地录制")
+                font.family: root.fontFamily; font.pixelSize: root.headingPixelSize; font.bold: true
+                color: root.textColor; elide: Text.ElideRight
+                ToolTip.visible: titleHover.hovered && truncated
+                ToolTip.text: text
+                HoverHandler { id: titleHover }
+            }
             Label {
                 objectName: root.live ? "liveFormatBadge" : "recordingFormatBadge"
                 visible: root.violetSkin
                 text: root.live ? "RTMP" : String(root.pageState.outputDraft.format || "mp4").toUpperCase()
-                font.pixelSize: 9; color: root.textColor; leftPadding: 5; rightPadding: 5; topPadding: 1; bottomPadding: 1
+                font.family: root.fontFamily; font.pixelSize: root.captionPixelSize
+                color: root.textColor; leftPadding: 5; rightPadding: 5; topPadding: 1; bottomPadding: 1
                 background: Rectangle { radius: 3; color: "#0affffff"; border.color: root.borderColor }
             }
             Rectangle { visible: !root.violetSkin; width: 5; height: 5; radius: 2.5; color: root.error ? root.errorColor : root.busy ? root.accentColor : root.mutedTextColor }
@@ -89,7 +102,11 @@ Rectangle {
                 : root.sessionState === "Recording" ? qsTranslate("Oran7Ui", "正在录制")
                 : root.sessionState === "Stopping" ? qsTranslate("Oran7Ui", "正在保存文件，请稍候…")
                 : String(root.pageState.outputDraft.format || "mp4").toUpperCase() + "  /  " + root.pageState.outputDraft.fps + " FPS"
-            font.pixelSize: 10; color: root.error ? root.errorColor : root.mutedTextColor; elide: Text.ElideRight
+            font.family: root.fontFamily; font.pixelSize: root.captionPixelSize
+            color: root.error ? root.errorColor : root.mutedTextColor; elide: Text.ElideRight
+            ToolTip.visible: summaryHover.hovered && truncated
+            ToolTip.text: text
+            HoverHandler { id: summaryHover }
         }
         RowLayout {
             Layout.fillWidth: true; spacing: 6
@@ -97,7 +114,8 @@ Rectangle {
                 polished: root.violetSkin
                 objectName: root.live ? "startLiveStreaming" : "startLocalRecording"
                 Layout.fillWidth: true; Layout.minimumWidth: 0
-                implicitHeight: 30; font.pixelSize: 12; font.bold: true; cornerRadius: 5
+                implicitHeight: Math.max(36, implicitContentHeight + topPadding + bottomPadding)
+                font.family: root.fontFamily; font.pixelSize: root.controlPixelSize; font.bold: true; cornerRadius: 5
                 primary: root.violetSkin
                 destructive: !root.violetSkin && root.live && root.busy
                 accentColor: root.accentColor; textColor: root.textColor; dangerColor: root.errorColor
@@ -117,8 +135,10 @@ Rectangle {
                 polished: root.violetSkin
                 objectName: root.live ? "" : "stopLocalRecording"
                 visible: !root.live
-                Layout.minimumWidth: 60; Layout.preferredWidth: 65; Layout.maximumWidth: 72
-                leftPadding: 8; rightPadding: 8; implicitHeight: 30; font.pixelSize: 12; cornerRadius: 5
+                Layout.preferredWidth: implicitWidth
+                leftPadding: 8; rightPadding: 8
+                implicitHeight: Math.max(36, implicitContentHeight + topPadding + bottomPadding)
+                font.family: root.fontFamily; font.pixelSize: root.controlPixelSize; cornerRadius: 5
                 text: qsTranslate("Oran7Ui", "停止"); destructive: true
                 dangerColor: root.errorColor; surfaceColor: root.surfaceColor; hoverColor: root.hoverColor; borderColor: root.borderColor
                 enabled: !!root.controller && root.controller.recordingBusy && root.sessionState !== "Stopping"

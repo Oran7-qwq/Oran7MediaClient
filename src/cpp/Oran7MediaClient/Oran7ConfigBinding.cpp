@@ -151,6 +151,14 @@ void Oran7ConfigBinding::saveAudio(const Oran7AudioConfig& audio) {
     m_config.saveConfig();
 }
 bool Oran7ConfigBinding::roamFilterLiked() const { return m_config.snapshot().player.roamFilterLiked; }
+Oran7VisualizerConfig Oran7ConfigBinding::visualizer() const { return m_config.snapshot().visualizer; }
+bool Oran7ConfigBinding::saveVisualizer(const Oran7VisualizerConfig& visualizer)
+{
+    auto saved = m_config.snapshot();
+    saved.visualizer = visualizer;
+    m_config.updateConfig(saved);
+    return m_config.saveConfig();
+}
 bool Oran7ConfigBinding::saveRoamFilterLiked(bool enabled)
 {
     auto saved = m_config.snapshot();

@@ -58,6 +58,11 @@ Oran7AppConfigManager::Oran7AppConfigManager(const QString& filePath, const QJso
 
 QString Oran7AppConfigManager::configFilePath() { return m_filePath; }
 
+Oran7VisualizerConfig Oran7AppConfigManager::defaultVisualizerConfig() const
+{
+    return Oran7VisualizerConfig::fromJson(m_defaultConfig.value(Visualizer).toObject());
+}
+
 bool Oran7AppConfigManager::loadConfig()
 {
     // 同一存储只加载一次，避免丢失尚未落盘的音量/窗口/列表修改。

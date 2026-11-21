@@ -12,6 +12,8 @@ import Client 1.0
 Oran7SettingsPanel {
     id: root
     property var equalizerEditor: null
+    readonly property var visualizer: Client.visualizer ?? null
+    readonly property var preferences: typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences : null
     function openEqualizer() {
         if (equalizerEditor) { equalizerEditor.requestActivate(); return }
         const component = Qt.createComponent(Qt.resolvedUrl("../../Components/Oran7GlobalComponents/Oran7EqualizerWindow.qml"))
@@ -856,6 +858,88 @@ Oran7SettingsPanel {
                             enableMouseArea: true
                             enableHoverHandler: true
                             onLeftClicked: Client.audioEffects.reset()
+                        }
+                    }
+                }
+                Oran7SettingItem {
+                    id: visualizerSetting
+                    objectName: "audioVisualizerSettingsGroup"
+                    visible: !!root.visualizer
+                    index: 5
+                    text: qsTranslate("Oran7Ui", "音频可视化效果")
+                    fontBold: true
+                    gradientMaskEnabled: true
+                    enableMouseArea: true
+                    enableHoverHandler: true
+                    property bool expand: false
+                    onRightClicked: expand = !expand
+                    onLeftClicked: expand = !expand
+                }
+                Oran7ExpandItem {
+                    expand: visualizerSetting.visible && visualizerSetting.expand
+                    Column {
+                        id: visualizerOptions
+                        readonly property var values: root.visualizer ? root.visualizer.settings : ({})
+                        Oran7SettingItem {
+                            text: qsTranslate("Oran7Ui", "启用音频可视化")
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                objectName: "audioVisualizerEnabledSwitch"
+                                checked: visualizerOptions.values.enabled === true
+                                onSwitchToggleChanged: checked => root.visualizer.setOption("enabled", checked)
+                            }
+                        }
+                        Oran7SettingItem {
+                            showTag: false
+                            text: qsTranslate("Oran7Ui", "当前柱数 %1").arg(root.visualizer ? root.visualizer.barCount : 0)
+                        }
+                        Repeater {
+                            model: [
+                                { key: "bar_width", label: qsTranslate("Oran7Ui", "频谱柱宽（px）"), min: 1, max: 24 },
+                                { key: "bar_gap", label: qsTranslate("Oran7Ui", "柱间距（px）"), min: 0, max: 16 },
+                                { key: "height", label: qsTranslate("Oran7Ui", "频谱高度（px）"), min: 40, max: 800 },
+                                { key: "max_height", label: qsTranslate("Oran7Ui", "最大柱高（px，0 不限）"), min: 0, max: 1280 },
+                                { key: "bottom_offset", label: qsTranslate("Oran7Ui", "底部偏移（px）"), min: 0, max: 200 },
+                                { key: "opacity", label: qsTranslate("Oran7Ui", "不透明度"), min: 0.2, max: 1, step: 0.05 },
+                                { key: "gain", label: qsTranslate("Oran7Ui", "灵敏度"), min: 0.5, max: 8, step: 0.05 },
+                                { key: "min_frequency", label: qsTranslate("Oran7Ui", "最低频率（Hz）"), min: 20, max: 200, developerOnly: true },
+                                { key: "max_frequency", label: qsTranslate("Oran7Ui", "最高频率（Hz）"), min: 8000, max: 20000, step: 100, developerOnly: true }
+                            ]
+                            delegate: Oran7NumSettingGroup {
+                                required property var modelData
+                                objectName: "audioVisualizer_" + modelData.key
+                                visible: !modelData.developerOnly || root.preferences?.developerMode === true
+                                title: modelData.label
+                                value: visualizerOptions.values[modelData.key] ?? modelData.min
+                                sliderValueFrom: modelData.min
+                                sliderValueTo: modelData.max
+                                stepSize: modelData.step ?? 1
+                                valueDecimals: stepSize < 1 ? 2 : 0
+                                onMoved: value => root.visualizer.setOption(modelData.key, value)
+                                onCommitted: value => root.visualizer.setOption(modelData.key, value)
+                            }
+                        }
+                        Oran7OptionSettingGroup {
+                            title: qsTranslate("Oran7Ui", "频谱显示屏幕")
+                            options: [{label: qsTranslate("Oran7Ui", "主屏")}, {label: qsTranslate("Oran7Ui", "跟随主窗口")}]
+                            currentIndex: visualizerOptions.values.screen === "mainWindow" ? 1 : 0
+                            onOptionSelected: index => root.visualizer.setOption("screen", index === 1 ? "mainWindow" : "primary")
+                        }
+                        Oran7SettingItem {
+                            text: qsTranslate("Oran7Ui", "频谱窗口置顶")
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                checked: visualizerOptions.values.always_on_top === true
+                                onSwitchToggleChanged: checked => root.visualizer.setOption("always_on_top", checked)
+                            }
+                        }
+                        Oran7SettingItem {
+                            text: qsTranslate("Oran7Ui", "频谱两端贴边")
+                            showTag: false
+                            Oran7SwitchToggleItem {
+                                checked: visualizerOptions.values.stretch_to_edges === true
+                                onSwitchToggleChanged: checked => root.visualizer.setOption("stretch_to_edges", checked)
+                            }
                         }
                     }
                 }

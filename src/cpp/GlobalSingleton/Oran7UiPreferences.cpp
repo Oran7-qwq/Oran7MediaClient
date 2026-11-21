@@ -138,7 +138,7 @@ void Oran7UiPreferences::applyFont()
     const auto installed = fontFamilies();
     if (!installed.contains(m_fontFamily))
     {
-        for (const auto& family : families)
+        for (const auto& family : std::as_const(families))
             if (installed.contains(family))
             {
                 m_fontFamily = family;

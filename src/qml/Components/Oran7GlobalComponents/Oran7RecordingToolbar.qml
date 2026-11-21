@@ -29,7 +29,9 @@ Rectangle {
     property color toggleThumbColor: "white"
     property real toggleHeight: 20
     property string fontFamily: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
-    property real textPixelSize: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).pixelSize > 0 ? (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).pixelSize : 16
+    property int controlPixelSize: 15
+    property int headingPixelSize: 17
+    property int captionPixelSize: 13
     property var audioOptions: ({})
     property var audioEdit: function(key,value) {}
     readonly property bool liveSupported: controller && typeof controller.previewAudioSettings === "function"
@@ -47,12 +49,29 @@ Rectangle {
         ? ({Idle: qsTranslate("Oran7Ui", "就绪"), Preparing: qsTranslate("Oran7Ui", "正在准备编码器与输出…"), Recording: qsTranslate("Oran7Ui", "正在录制"), Stopping: qsTranslate("Oran7Ui", "正在保存文件，请稍候…"), Error: qsTranslate("Oran7Ui", "录制失败")})[root.controller.recordingState] || qsTranslate("Oran7Ui", "就绪")
         : qsTranslate("Oran7Ui", "录制控制器尚未就绪")
     // 皮肤仅决定外观，两种皮肤共用默认混音器布局与尺寸。
-    readonly property real preferredToolbarHeight: 110
+    readonly property int audioChannelHeight: Math.max(36, controlPixelSize + 17)
+    readonly property int statusHeight: captionPixelSize + 10
+    readonly property int volumeReadoutWidth: Math.ceil(volumeMetrics.advanceWidth) + 3
+    // 为图标、开关边距和 40 px 滑杆留出空间。
+    readonly property real minimumAudioToolWidth: Math.max(220,
+        Math.ceil(Math.max(systemLabel.implicitWidth, microphoneLabel.implicitWidth)) + volumeReadoutWidth + toggleHeight * 2 + 88)
+    readonly property real preferredToolbarHeight: Math.ceil(headingMetrics.height) + audioChannelHeight + statusHeight + 44
     implicitHeight: preferredToolbarHeight
     color: root.panelColor
     radius: 12
     border.color: root.borderColor
     border.width: 1
+
+    FontMetrics {
+        id: headingMetrics
+        font.family: root.fontFamily; font.pixelSize: root.headingPixelSize; font.bold: true
+    }
+    TextMetrics {
+        id: volumeMetrics
+        text: "100%"
+        font.family: root.fontFamily
+        font.pixelSize: root.captionPixelSize
+    }
 
     Rectangle {
         anchors.fill: parent; anchors.margins: 1; radius: 11
@@ -95,6 +114,7 @@ Rectangle {
         borderColor: root.borderColor
         dangerColor: root.errorColor
         font.family: root.fontFamily
+        font.pixelSize: root.controlPixelSize
         contentItem: RowLayout {
             spacing: 6
             Oran7RecordingIcon {
@@ -233,39 +253,39 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             Label {
-                text: "03 / AUDIO"; font.pixelSize: 10; font.bold: true; color: root.paperInkColor
+                text: "03 / AUDIO"; font.family: root.fontFamily; font.pixelSize: root.captionPixelSize; font.bold: true; color: root.paperInkColor
                 leftPadding: 4; rightPadding: 4
                 background: Rectangle { radius: 2; color: root.paperColor }
             }
-            Label { text: qsTranslate("Oran7Ui", "音频混音"); font.pixelSize: 12; font.bold: true; color: root.textColor }
+            Label { text: qsTranslate("Oran7Ui", "音频混音"); font.family: root.fontFamily; font.pixelSize: root.headingPixelSize; font.bold: true; color: root.textColor }
             Item { Layout.fillWidth: true }
-            Label { text: qsTranslate("Oran7Ui", "实时监测"); font.pixelSize: 10; color: root.mutedTextColor }
+            Label { text: qsTranslate("Oran7Ui", "实时监测"); font.family: root.fontFamily; font.pixelSize: root.captionPixelSize; color: root.mutedTextColor }
         }
         RowLayout {
             objectName: "recordingControlRow"
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
-            Layout.minimumHeight: 40
-            Layout.maximumHeight: 40
+            Layout.preferredHeight: root.audioChannelHeight + 8
+            Layout.minimumHeight: Layout.preferredHeight
+            Layout.maximumHeight: Layout.preferredHeight
             spacing: 8
             ScrollView {
                 id: audioTools
                 objectName: "recordingAudioTools"
                 Layout.fillWidth: true; Layout.minimumWidth: 446
-                Layout.preferredHeight: 40
+                Layout.fillHeight: true
                 clip: true
                 contentWidth: audioRow.width
-                contentHeight: 40
+                contentHeight: root.audioChannelHeight + 8
                 ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded; implicitHeight: 4 }
                 ScrollBar.vertical.policy: ScrollBar.AlwaysOff
                 Row {
                     id: audioRow
                     y: 4
-                    width: implicitWidth; height: 32; spacing: 6
+                    width: implicitWidth; height: root.audioChannelHeight; spacing: 6
                     Rectangle {
                         objectName: "recordingSystemAudioTool"
-                        width: Math.max(220, (audioTools.availableWidth - 6) / 2)
-                        height: 32; radius: 6
+                        width: Math.max(root.minimumAudioToolWidth, (audioTools.availableWidth - audioRow.spacing) / 2)
+                        height: audioRow.height; radius: 6
                         color: root.violetSkin ? (systemHover.hovered ? root.hoverColor : "transparent") : systemHover.hovered ? Qt.tint(root.surfaceColor, "#0cffffff") : Qt.darker(root.surfaceColor, 1.16)
                         border.color: root.violetSkin ? "transparent" : root.systemEnabled ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.55)
                         Behavior on color { ColorAnimation { duration: 120 } }
@@ -273,7 +293,7 @@ Rectangle {
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 6; spacing: 4
                             Oran7RecordingIcon { Layout.preferredWidth: 16; Layout.preferredHeight: 16; glyph: "speaker"; ink: root.systemEnabled ? root.accentColor : root.mutedTextColor }
-                            Label { text: qsTranslate("Oran7Ui", "系统声音"); color: root.textColor; font.family: root.fontFamily; font.pixelSize: 11 }
+                            Label { id: systemLabel; text: qsTranslate("Oran7Ui", "系统声音"); color: root.textColor; font.family: root.fontFamily; font.pixelSize: root.controlPixelSize }
                             Item {
                                 implicitWidth: root.toggleHeight * 2 + 4; implicitHeight: root.toggleHeight
                                 Oran7AudioSwitch {
@@ -309,13 +329,13 @@ Rectangle {
                                     sourceCaption: qsTranslate("Oran7Ui", "系统声音")
                                 }
                             }
-                            Label { text: Math.round(root.systemVolume) + "%"; color: root.mutedTextColor; font.pixelSize: 10; Layout.preferredWidth: 28; horizontalAlignment: Text.AlignRight }
+                            Label { text: Math.round(root.systemVolume) + "%"; color: root.mutedTextColor; font: volumeMetrics.font; Layout.preferredWidth: root.volumeReadoutWidth; horizontalAlignment: Text.AlignRight }
                         }
                     }
                     Rectangle {
                         objectName: "recordingMicrophoneTool"
-                        width: Math.max(220, (audioTools.availableWidth - 6) / 2)
-                        height: 32; radius: 6
+                        width: Math.max(root.minimumAudioToolWidth, (audioTools.availableWidth - audioRow.spacing) / 2)
+                        height: audioRow.height; radius: 6
                         color: root.violetSkin ? (microphoneHover.hovered ? root.hoverColor : "transparent") : microphoneHover.hovered ? Qt.tint(root.surfaceColor, "#0cffffff") : Qt.darker(root.surfaceColor, 1.16)
                         border.color: root.violetSkin ? "transparent" : root.microphoneEnabled ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.28) : Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.55)
                         Behavior on color { ColorAnimation { duration: 120 } }
@@ -327,7 +347,7 @@ Rectangle {
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 6; spacing: 4
                             Oran7RecordingIcon { Layout.preferredWidth: 16; Layout.preferredHeight: 16; glyph: "microphone"; ink: root.microphoneEnabled ? root.accentColor : root.mutedTextColor }
-                            Label { text: qsTranslate("Oran7Ui", "麦克风"); color: root.textColor; font.family: root.fontFamily; font.pixelSize: 10 }
+                            Label { id: microphoneLabel; text: qsTranslate("Oran7Ui", "麦克风"); color: root.textColor; font.family: root.fontFamily; font.pixelSize: root.controlPixelSize }
                             Item {
                                 implicitWidth: root.toggleHeight * 2 + 4; implicitHeight: root.toggleHeight
                                 Oran7AudioSwitch {
@@ -361,7 +381,7 @@ Rectangle {
                                     sourceCaption: qsTranslate("Oran7Ui", "麦克风")
                                 }
                             }
-                            Label { text: Math.round(root.microphoneVolume) + "%"; color: root.mutedTextColor; font.pixelSize: 10; Layout.preferredWidth: 28; horizontalAlignment: Text.AlignRight }
+                            Label { text: Math.round(root.microphoneVolume) + "%"; color: root.mutedTextColor; font: volumeMetrics.font; Layout.preferredWidth: root.volumeReadoutWidth; horizontalAlignment: Text.AlignRight }
                         }
                     }
                 }
@@ -371,7 +391,7 @@ Rectangle {
         RowLayout {
             objectName: "recordingStatusRow"
             Layout.fillWidth: true
-            Layout.preferredHeight: 18; Layout.minimumHeight: 18; Layout.maximumHeight: 18
+            Layout.preferredHeight: root.statusHeight; Layout.minimumHeight: root.statusHeight; Layout.maximumHeight: root.statusHeight
             spacing: 8
             Rectangle {
                 implicitWidth: 10; implicitHeight: 10; radius: 5
@@ -385,7 +405,7 @@ Rectangle {
                 Layout.preferredWidth: Math.min(implicitWidth, root.width * 0.55)
                 Layout.minimumWidth: 0
                 color: (root.controller && root.controller.recordingError) || root.audioLevels.error ? root.errorColor : root.textColor
-                font.family: root.fontFamily; font.pixelSize: 11
+                font.family: root.fontFamily; font.pixelSize: root.captionPixelSize
                 elide: Text.ElideRight
                 text: (root.controller && root.controller.recordingBusy && root.liveSession && (root.liveSession.busy || root.liveSession.error) ? root.stateCaption + " · " : "") + (root.liveSession && (root.liveSession.busy || root.liveSession.error)
                     ? (root.liveSession.error ? qsTranslate("Oran7Ui",root.liveSession.error)
@@ -408,7 +428,7 @@ Rectangle {
                 Layout.fillWidth: true; Layout.minimumWidth: 0
                 text: root.controller && root.controller.recordingOutputPath ? root.controller.recordingOutputPath : qsTranslate("Oran7Ui", "录制后显示文件保存位置")
                 color: root.mutedTextColor
-                font.family: root.fontFamily; font.pixelSize: 10
+                font.family: root.fontFamily; font.pixelSize: root.captionPixelSize
                 elide: Text.ElideMiddle
                 horizontalAlignment: Text.AlignRight
                 ToolTip.visible: pathHover.hovered

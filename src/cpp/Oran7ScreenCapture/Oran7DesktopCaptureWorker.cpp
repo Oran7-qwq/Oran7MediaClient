@@ -176,7 +176,8 @@ QString Oran7DesktopCaptureWorker::initGraph()
     if (!captureDevice)
         return "capture d3d11 device is null";
     m_converter = std::make_unique<Oran7CaptureFrameConverter>(captureDevice, m_fps);
-    m_outputRouter = std::make_unique<Oran7CaptureOutputRouter>(captureDevice,m_recordingFeed);
+    if (!m_sceneFrames)
+        m_outputRouter = std::make_unique<Oran7CaptureOutputRouter>(captureDevice, m_recordingFeed);
 
     // 2) Build filter graph: ddagrab -> buffersink（去掉 fps filter，源头直接设置帧率）
     m_graph.reset(avfilter_graph_alloc());
@@ -215,13 +216,10 @@ QString Oran7DesktopCaptureWorker::initGraph()
     if (ret < 0)
         return "link src->sink failed: " + ffErrStr(ret);
 
-    // 诊断：配置前打开 FFmpeg 详细日志，便于捕获 ddagrab 内部失败原因
+    // 多个采集图可并行配置，日志级别沿用应用全局设置。
     {
-        const int oldLevel = av_log_get_level();
-        av_log_set_level(AV_LOG_DEBUG);
         INFO_LOG << "[CaptureDiag] --- avfilter_graph_config start (output_idx=" << m_outputIndex << ") ---";
         ret = avfilter_graph_config(m_graph.get(), nullptr);
-        av_log_set_level(oldLevel);
         if (ret < 0)
         {
             WARNING_LOG << "[CaptureDiag] --- avfilter_graph_config FAILED ret=" << ret << " ---";
@@ -242,6 +240,7 @@ void Oran7DesktopCaptureWorker::grabLoop()
     qint64 rawFrames = 0, submittedFrames = 0, previewNs = 0, conversionNs = 0, conversions = 0;
     QElapsedTimer stage;
     bool firstFrame = true;
+    bool hasSceneFrame = false;
     const auto reportCaptureError = [this](const char* operation, int error)
     {
         if (m_control->stopRequested.load())
@@ -319,7 +318,8 @@ void Oran7DesktopCaptureWorker::grabLoop()
                 }
                 //------------------------------------------//
 
-                m_recordingFeed->publish(f->width, f->height, m_hwdev.get());
+                if (m_outputRouter)
+                    m_recordingFeed->publish(f->width, f->height, m_hwdev.get());
                 ++rawFrames;
                 stage.start();
                 auto preview = m_converter->preview(f);
@@ -338,6 +338,25 @@ void Oran7DesktopCaptureWorker::grabLoop()
                 {
                     firstFrame = false;
                     emit firstFrameReady();
+                }
+
+                if (m_sceneFrames)
+                {
+                    if (m_scene->outputActive.load())
+                    {
+                        auto frame = m_converter->recording(f, f->width & ~1, f->height & ~1);
+                        if (frame)
+                        {
+                            m_sceneFrames->submit(std::move(frame));
+                            hasSceneFrame = true;
+                        }
+                    }
+                    else if (hasSceneFrame)
+                    {
+                        m_sceneFrames->submit({});
+                        hasSceneFrame = false;
+                    }
+                    continue;
                 }
 
                 // 原始桌面帧只抓取一次，各输出独立缩放、限帧和提交。
@@ -369,6 +388,8 @@ void Oran7DesktopCaptureWorker::grabLoop()
 
 void Oran7DesktopCaptureWorker::cleanup()
 {
+    if (m_sceneFrames)
+        m_sceneFrames->close();
     m_recordingFeed->close();
     // 先释放转换器及其设备引用，再释放过滤图和 FFmpeg 设备。
     m_outputRouter.reset();

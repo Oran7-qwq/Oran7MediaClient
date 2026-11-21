@@ -45,6 +45,7 @@
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingToolbar.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingOutputCard.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingPreview.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingViewport.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7RecordingIcon.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7StartupSurface.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7WindowGeometryState.qml</file>
@@ -89,5 +90,6 @@
         <file>src/qml/Components/Oran7GlobalComponents/Oran7LyricsIsland.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7LyricsIslandState.qml</file>
         <file>src/qml/Components/Oran7GlobalComponents/Oran7LyricsFloatingWindow.qml</file>
+        <file>src/qml/Components/Oran7GlobalComponents/Oran7AudioVisualizerWindow.qml</file>
     </qresource>
 </RCC>

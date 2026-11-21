@@ -3,6 +3,7 @@
 #include "Oran7PlaybackState.h"
 #include "Oran7MediaPlayer.h"
 #include "Audio/Oran7AudioParameterQueue.h"
+#include "Oran7AudioSpectrumTap.h"
 #include "Oran7Async.h"
 #include "Oran7GlobalHelper.h"
 #include "ffmsg.h"
@@ -85,6 +86,7 @@ Oran7PlaybackController::~Oran7PlaybackController()
     m_switchTimer.stop();
     m_afterPlayersReleased.clear();
     if (m_render.stopPlayback) m_render.stopPlayback();
+    if (m_spectrumSink) m_spectrumSink({});
     m_player.reset();
 }
 
@@ -109,6 +111,7 @@ void Oran7PlaybackController::prepare(QString source, bool musicPlayback)
     m_callTimer.restart();
     const auto command = ++m_commandRevision;
     m_source = source;
+    m_musicPlayback = musicPlayback;
     QPointer<Oran7PlaybackController> guard(this);
     m_state.beginOpening(source);
     if (!guard || m_shutdown || command != m_commandRevision) return;
@@ -153,6 +156,11 @@ void Oran7PlaybackController::toggle()
             m_audioQueue = std::make_shared<Oran7AudioParameterQueue>();
             if (m_audioProvider) m_audioQueue->push(m_audioProvider());
             m_player->oran7mp_setAudioParameterQueue(m_audioQueue);
+            if (m_musicPlayback && m_spectrumSink) {
+                auto tap = std::make_shared<Oran7AudioSpectrumTap>();
+                m_player->oran7mp_setAudioSpectrumTap(tap);
+                m_spectrumSink(std::move(tap));
+            }
             if (m_render.beginPlayback) m_player->AddVideoRefreshCallback(m_render.beginPlayback());
             if (m_render.device) m_player->oran7mp_setD3D11Device(m_render.device());
             result = m_player->oran7mp_set_data_source(m_source.toUtf8().constData());
@@ -219,6 +227,7 @@ void Oran7PlaybackController::retirePlayer(bool pauseBeforeRelease)
 {
     if (!m_player) return;
     auto player = std::move(m_player);
+    if (m_spectrumSink) m_spectrumSink({});
     if (Oran7Async::isShuttingDown()) return; // unique_ptr 在退出闸门关闭后同步释放。
     ++m_retiringPlayers;
     const auto task = Oran7Async::run(this,

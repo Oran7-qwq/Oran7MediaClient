@@ -102,6 +102,23 @@
     "video": {
         "history": []
     },
+    "visualizer": {
+        "enabled": false,
+        "bar_width": 4,
+        "bar_gap": 2,
+        "height": 120,
+        "max_height": 0,
+        "bottom_offset": 0,
+        "opacity": 0.85,
+        "gain": 1.0,
+        "smoothing": 1.0,
+        "min_frequency": 200,
+        "max_frequency": 20000,
+        "fps": 60,
+        "screen": "primary",
+        "always_on_top": true,
+        "stretch_to_edges": true
+    },
     "audio": {
         "version": 2,
         "enabled": false,

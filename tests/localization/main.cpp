@@ -311,7 +311,21 @@ Item {
               "picker switches back to English");
         // 加载实际音乐面板；只替换 Client 边界，不启动播放器或读取账号。
         QQmlComponent clientFixture(&engine);
-        clientFixture.setData("import QtQml\nQtObject { property QtObject musicQueue: QtObject { property bool roamFilterLiked:false } }", QUrl());
+        clientFixture.setData(R"QML(
+import QtQml
+QtObject {
+    property QtObject musicQueue: QtObject { property bool roamFilterLiked: false }
+    property QtObject visualizer: QtObject {
+        property var settings: ({enabled: false, bar_width: 4})
+        property int barCount: 200
+        function setOption(key, value) {
+            const next = Object.assign({}, settings)
+            next[key] = value
+            settings = next
+        }
+    }
+}
+)QML", QUrl());
         std::unique_ptr<QObject> fakeClient(clientFixture.create());
         check(bool(fakeClient), "isolated music queue boundary");
         qmlRegisterSingletonInstance("Client", 1, 0, "Client", fakeClient.get());
@@ -430,6 +444,47 @@ Item {
         fakeQueue->setProperty("roamFilterLiked", false);
         check(!roamSwitch->property("checked").toBool(), "backend preference changes resynchronize switch after click");
         roamGroup->setProperty("expand", false);
+        auto* spectrumGroup = item(musicItem, "audioVisualizerSettingsGroup");
+        check(spectrumGroup && spectrumGroup->property("text").toString() == "Audio visualization" &&
+              spectrumGroup->setProperty("expand", true), "expand the translated visualizer controls");
+        QElapsedTimer spectrumLoad; spectrumLoad.start();
+        while (spectrumLoad.elapsed() < 3000) {
+            const auto* control = item(musicItem, "audioVisualizerEnabledSwitch");
+            if (control && control->isVisible()) break;
+            QTest::qWait(20);
+        }
+        auto* spectrumSwitch = item(musicItem, "audioVisualizerEnabledSwitch");
+        check(spectrumSwitch && spectrumSwitch->isVisible() && !spectrumSwitch->property("checked").toBool() &&
+              QMetaObject::invokeMethod(spectrumSwitch, "switchToggleChanged", Q_ARG(bool, true)) &&
+              spectrumSwitch->property("checked").toBool(), "visualizer switch commits through the actual music settings");
+        auto* spectrumWidth = item(musicItem, "audioVisualizer_bar_width");
+        check(spectrumWidth && spectrumWidth->property("sliderValueTo").toInt() == 24 &&
+              QMetaObject::invokeMethod(spectrumWidth, "committed", Q_ARG(double, 24), Q_ARG(int, 0), Q_ARG(double, 1)) &&
+              spectrumWidth->property("value").toInt() == 24, "visualizer slider accepts a 24 px bar width");
+        auto* spectrumHeight = item(musicItem, "audioVisualizer_height");
+        auto* spectrumGain = item(musicItem, "audioVisualizer_gain");
+        auto* spectrumCap = item(musicItem, "audioVisualizer_max_height");
+        check(spectrumHeight && spectrumHeight->property("sliderValueTo").toInt() == 800 &&
+              spectrumGain && spectrumGain->property("sliderValueTo").toDouble() == 8,
+              "visualizer sliders expose the expanded height and sensitivity limits");
+        check(spectrumCap && spectrumCap->isVisible() && spectrumCap->property("sliderValueFrom").toInt() == 0 &&
+              spectrumCap->property("sliderValueTo").toInt() == 1280 &&
+              spectrumCap->property("title").toString() == "Max bar height (px, 0 = unlimited)" &&
+              QMetaObject::invokeMethod(spectrumCap, "committed", Q_ARG(double, 360), Q_ARG(int, 0), Q_ARG(double, 1)) &&
+              spectrumCap->property("value").toInt() == 360, "the translated height cap is visible and commits through the panel");
+        check(!item(musicItem, "audioVisualizer_smoothing") && !item(musicItem, "audioVisualizer_fps"),
+              "fixed smoothing and frame rate have no controls in the music settings");
+        auto* minFrequency = item(musicItem, "audioVisualizer_min_frequency");
+        auto* maxFrequency = item(musicItem, "audioVisualizer_max_frequency");
+        check(minFrequency && maxFrequency && !minFrequency->isVisible() && !maxFrequency->isVisible(),
+              "ordinary mode hides the frequency bounds");
+        check(preferences.selectDeveloperMode(true), "enable developer mode for visualizer settings");
+        QCoreApplication::processEvents();
+        check(minFrequency->isVisible() && maxFrequency->isVisible(),
+              "developer mode reveals the advanced frequency controls immediately");
+        check(preferences.selectDeveloperMode(false) && !minFrequency->isVisible() && !maxFrequency->isVisible(),
+              "turning off developer mode hides the frequency controls immediately");
+        spectrumGroup->setProperty("expand", false);
         auto* playlistGroup = item(musicItem, "musicListViewSettings");
         check(playlistGroup && playlistGroup->setProperty("expand", true), "expand playlist appearance settings");
         auto& playlistTheme = Oran7Theme::instance();

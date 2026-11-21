@@ -1,7 +1,197 @@
 #include "Oran7CaptureOutputRouter.h"
 #include <QElapsedTimer>
+#include <QImage>
+#include <QTransform>
 #include <algorithm>
 #include <array>
+#include <cstring>
+
+namespace
+{
+constexpr double redWeight = 0.2126, greenWeight = 0.7152, blueWeight = 0.0722;
+
+double luma(double red, double green, double blue)
+{
+    return redWeight * red + greenWeight * green + blueWeight * blue;
+}
+
+uint8_t over(uint8_t foreground, uint8_t background, uint8_t alpha, int neutral)
+{
+    if (alpha == 0)
+        return background;
+    if (alpha == 255)
+        return foreground;
+    // 预乘的 YUV 保留视频黑位和色度中点，合成前抵消该偏移。
+    const int remainder = (background * (255 - alpha) + neutral * alpha + 127) / 255;
+    return uint8_t(std::clamp(foreground + remainder - neutral, 0, 255));
+}
+}
+
+void Oran7CaptureOutputRouter::ImageOverlay::prepare(const SceneInput& layer,
+                                                    const Oran7CaptureComposition::Oran7Blit& blit)
+{
+    const int turns = layer.composition.enabled ? layer.composition.quarterTurns : 0;
+    const bool mirror = layer.composition.enabled && layer.composition.mirrored;
+    if (source == layer.auxiliaryFrame && crop == blit.source && size == blit.destination.size() &&
+        quarterTurns == turns && mirrored == mirror)
+        return;
+
+    source = layer.auxiliaryFrame;
+    crop = blit.source;
+    size = blit.destination.size();
+    quarterTurns = turns;
+    mirrored = mirror;
+    opaque = visible = false;
+    if (source->format != AV_PIX_FMT_BGRA || !source->data[0] || (size.width() & 1) || (size.height() & 1))
+        return;
+
+    const QImage original(static_cast<const uchar*>(source->data[0]), source->width, source->height,
+                          source->linesize[0], QImage::Format_ARGB32_Premultiplied);
+    auto pixels = crop == original.rect() ? original : original.copy(crop);
+    if (quarterTurns)
+        pixels = pixels.transformed(QTransform().rotate(90 * quarterTurns));
+    if (mirrored)
+        pixels = pixels.mirrored(true, false);
+    pixels = pixels.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    if (pixels.isNull())
+        return;
+
+    const int width = size.width();
+    const auto count = std::size_t(width) * size.height();
+    y.resize(count);
+    uv.resize(count / 2);
+    alpha.resize(count);
+    chromaAlpha.resize(count / 4);
+    opaque = true;
+    for (int row = 0; row < size.height(); row += 2)
+    {
+        const auto* top = reinterpret_cast<const QRgb*>(pixels.constScanLine(row));
+        const auto* bottom = reinterpret_cast<const QRgb*>(pixels.constScanLine(row + 1));
+        const auto lumaOffset = std::size_t(row) * width;
+        const auto chromaOffset = lumaOffset / 2;
+        for (int column = 0; column < width; column += 2)
+        {
+            const QRgb block[] = {top[column], top[column + 1], bottom[column], bottom[column + 1]};
+            const auto offset = lumaOffset + column;
+            const std::size_t samples[] = {offset, offset + 1, offset + width, offset + width + 1};
+            int red = 0, green = 0, blue = 0, coverage = 0;
+            for (int index = 0; index < 4; ++index)
+            {
+                const auto pixel = block[index];
+                y[samples[index]] = uint8_t(16 + qRound(luma(qRed(pixel), qGreen(pixel), qBlue(pixel)) * 219 / 255));
+                alpha[samples[index]] = uint8_t(qAlpha(pixel));
+                opaque &= qAlpha(pixel) == 255;
+                red += qRed(pixel);
+                green += qGreen(pixel);
+                blue += qBlue(pixel);
+                coverage += qAlpha(pixel);
+            }
+            visible |= coverage > 0;
+            // NV12 每个 UV 对覆盖四个像素。颜色和 Alpha 使用同一组采样。
+            const auto chroma = chromaOffset + column;
+            const double brightness = luma(red, green, blue);
+            uv[chroma] = uint8_t(128 + qRound((blue - brightness) * 112 / (1020 * (1 - blueWeight))));
+            uv[chroma + 1] = uint8_t(128 + qRound((red - brightness) * 112 / (1020 * (1 - redWeight))));
+            chromaAlpha[chroma / 2] = uint8_t((coverage + 2) / 4);
+        }
+    }
+}
+
+void Oran7CaptureOutputRouter::ImageOverlay::blend(AVFrame& destination, const QPoint& origin) const
+{
+    const int width = size.width();
+    for (int plane = 0; plane < 2; ++plane)
+    {
+        const int step = plane + 1;
+        const auto& pixels = plane ? uv : y;
+        const auto& coverage = plane ? chromaAlpha : alpha;
+        const int neutral = plane ? 128 : 16;
+        for (int row = 0; row < size.height() / step; ++row)
+        {
+            auto* dst = destination.data[plane] + (origin.y() / step + row) * destination.linesize[plane] + origin.x();
+            const auto* src = pixels.data() + std::size_t(row) * width;
+            if (opaque)
+            {
+                std::memcpy(dst, src, width);
+                continue;
+            }
+            const auto* mask = coverage.data() + std::size_t(row) * width / step;
+            for (int column = 0; column < width; ++column)
+                dst[column] = over(src[column], dst[column], mask[column / step], neutral);
+        }
+    }
+}
+
+Oran7CaptureFrameConverter::Frame Oran7CaptureOutputRouter::composeScene(
+    Route& route, const AVFrame* source, const QSize& canvas, const Oran7CaptureComposition& fallback,
+    const std::vector<SceneInput>& layers)
+{
+    for (auto it = route.images.begin(); it != route.images.end();)
+    {
+        const bool active = std::any_of(layers.begin(), layers.end(), [&](const SceneInput& layer) {
+            return layer.image && !layer.composition.removed && layer.auxiliaryFrame.get() == it->first;
+        });
+        if (active)
+            ++it;
+        else
+            it = route.images.erase(it);
+    }
+
+    auto& converter = *route.converter;
+    const int width = canvas.width(), height = canvas.height();
+    if (layers.empty())
+        return converter.recording(source, width, height, fallback);
+    if (layers.size() == 1 && layers.front().primary)
+        return converter.recording(source, width, height, layers.front().composition);
+
+    const auto blackCanvas = [&] {
+        Oran7CaptureComposition blank;
+        blank.enabled = blank.removed = true;
+        return converter.recording(source, width, height, blank);
+    };
+    Oran7CaptureFrameConverter::Frame result;
+    for (const auto& layer : layers)
+    {
+        if (layer.composition.removed)
+            continue;
+        const auto* input = layer.primary ? source : layer.auxiliaryFrame.get();
+        if (!input)
+            continue;
+        const auto blit = layer.composition.blit(QSize(input->width, input->height), canvas);
+        const auto& area = blit.destination;
+        if (area.isEmpty())
+            continue;
+        if (layer.image)
+        {
+            auto& image = route.images[input];
+            image.prepare(layer, blit);
+            if (!image.visible)
+                continue;
+            if (!result)
+                result = blackCanvas();
+            if (result)
+                image.blend(*result, area.topLeft());
+            continue;
+        }
+        auto frame = converter.recording(input, width, height, layer.composition);
+        if (!frame)
+            continue;
+        if (!result || area == QRect(QPoint(), canvas))
+        {
+            result = std::move(frame);
+            continue;
+        }
+
+        // 捕获源只覆盖其目的矩形，矩形外保留下方图层。
+        for (int plane = 0; plane < 2; ++plane)
+            for (int y = area.y() / (plane + 1); y < (area.y() + area.height()) / (plane + 1); ++y)
+                std::memcpy(result->data[plane] + y * result->linesize[plane] + area.x(),
+                            frame->data[plane] + y * frame->linesize[plane] + area.x(), area.width());
+    }
+    if (result)
+        return result;
+    return blackCanvas();
+}
 
 Oran7CaptureOutputRouter::Statistics Oran7CaptureOutputRouter::submit(const AVFrame* source, int64_t nowUs)
 {
@@ -37,6 +227,28 @@ Oran7CaptureOutputRouter::Statistics Oran7CaptureOutputRouter::submit(const AVFr
             due[dueCount++] = {&output, &route};
     }
 
+    if (!dueCount)
+        return stats;
+    const auto composition = m_feed->composition();
+    std::vector<SceneInput> scene;
+    if (m_feed->scene())
+    {
+        const auto layers = m_feed->scene()->layers();
+        std::map<const Oran7SceneFrameMailbox*, std::shared_ptr<AVFrame>> sampled;
+        scene.reserve(layers.size());
+        for (const auto& layer : layers)
+        {
+            std::shared_ptr<AVFrame> auxiliary;
+            if (!layer.primary && !layer.composition.removed && layer.frames)
+            {
+                auto [frame, inserted] = sampled.try_emplace(layer.frames.get());
+                if (inserted)
+                    frame->second = layer.frames->latest();
+                auxiliary = frame->second;
+            }
+            scene.push_back({layer.composition, std::move(auxiliary), layer.primary, layer.image});
+        }
+    }
     const bool sharePixels = dueCount == 2 && due[0].output->width == due[1].output->width
                              && due[0].output->height == due[1].output->height;
     Oran7CaptureFrameConverter::Frame secondFrame;
@@ -58,7 +270,7 @@ Oran7CaptureOutputRouter::Statistics Oran7CaptureOutputRouter::submit(const AVFr
             }
             QElapsedTimer conversion;
             conversion.start();
-            frame = route.converter->recording(source, output.width, output.height);
+            frame = composeScene(route, source, QSize(output.width, output.height), composition, scene);
             stats.conversionNs += conversion.nsecsElapsed();
             ++stats.conversions;
 

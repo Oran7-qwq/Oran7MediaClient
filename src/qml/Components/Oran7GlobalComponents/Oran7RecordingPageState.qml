@@ -111,8 +111,8 @@ Item {
             var name = qsTranslate("Oran7Ui", "显示器 ") + (m.outputIndex + 1)
             if (m.monitorName && String(m.monitorName).trim().length)
                 name += "：" + String(m.monitorName).trim()
-            next.push({outputIndex: m.outputIndex, attached: m.attached,
-                name: name,
+            next.push({outputIndex: m.outputIndex, attached: m.attached, width: m.width, height: m.height,
+                name: name, deviceName: m.deviceName || "", monitorPath: m.monitorPath || "",
                 details: m.width + " × " + m.height + (m.primary ? qsTranslate("Oran7Ui", " · 主屏") : "")
                     + (m.attached ? "" : qsTranslate("Oran7Ui", " · 未连接")),
                 label: name + " · " + m.width + "×" + m.height

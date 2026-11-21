@@ -11,6 +11,7 @@
 #include "Oran7PlaybackController.h"
 #include "Oran7ScreenCaptureBridge.h"
 #include "Oran7AudioEffects.h"
+#include "Oran7AudioVisualizer.h"
 
 #include "Oran7GlobalHelper.h"
 #include "Oran7AppConfigManager.h"
@@ -54,6 +55,22 @@ Oran7MediaClient::Oran7MediaClient(const QString &host,quint16 port,QObject *par
     m_legacyClient = std::make_unique<Oran7LegacyServerClient>(host, port);
     // Client 保留 QML 状态入口，播放生命周期交由 Controller。
     m_playback = std::make_unique<Oran7PlaybackState>();
+    m_visualizer = std::make_unique<Oran7AudioVisualizer>(Oran7AppConfigManager::ins().defaultVisualizerConfig());
+    m_visualizer->load(m_configBinding->visualizer());
+    QQmlEngine::setObjectOwnership(m_visualizer.get(), QQmlEngine::CppOwnership);
+    m_visualizerSaveTimer = std::make_unique<QTimer>();
+    m_visualizerSaveTimer->setInterval(300);
+    m_visualizerSaveTimer->setSingleShot(true);
+    connect(m_visualizer.get(), &Oran7AudioVisualizer::edited, this, [this] { m_visualizerSaveTimer->start(); });
+    connect(m_visualizerSaveTimer.get(), &QTimer::timeout, this, [this] {
+        if (!m_configBinding->saveVisualizer(m_visualizer->config()))
+            WARNING_LOG << "音频可视化设置保存失败";
+    });
+    connect(m_playback.get(), &Oran7PlaybackState::stateChanged, m_visualizer.get(), [this] {
+        const auto state = m_playback->state();
+        m_visualizer->setPlaying(state == Oran7PlaybackState::Playing,
+                                 state == Oran7PlaybackState::Seeking || state == Oran7PlaybackState::Opening);
+    });
     m_videoHistory->bindPlayback(*m_playback);
     connect(m_videoHistory.get(),&Oran7VideoHistory::resumeRequested,this,[this](int seconds) {
         m_playbackController->seekTo(seconds);
@@ -71,6 +88,9 @@ Oran7MediaClient::Oran7MediaClient(const QString &host,quint16 port,QObject *par
             [renderBridge] { return renderBridge->beginPlayback(); },
             [renderBridge] { renderBridge->stopPlayback(); },
             [renderBridge] { return renderBridge->device(); }});
+    m_playbackController->setSpectrumSink([visualizer = m_visualizer.get()](auto tap) {
+        visualizer->setTap(std::move(tap));
+    });
     // 桥先创建并连接控制器信号，之后 Client 只连接桥，不再管理采集对象。
     m_captureBridge = std::make_unique<Oran7ScreenCaptureBridge>(
         Oran7ScreenCaptureBridge::Oran7RenderHooks{
@@ -190,6 +210,11 @@ Oran7MediaClient::~Oran7MediaClient()
 
 void Oran7MediaClient::shutdown()
 {
+    if (m_visualizerSaveTimer->isActive()) {
+        m_visualizerSaveTimer->stop();
+        if (!m_configBinding->saveVisualizer(m_visualizer->config()))
+            WARNING_LOG << "音频可视化设置保存失败";
+    }
     if (m_videoHistory) { m_videoHistory->captureProgress(); m_videoHistory->flush(); }
     if (m_videoHistory) m_videoHistory->shutdown();
     if (m_audioSaveTimer && m_audioSaveTimer->isActive()) saveAudioEffects();
@@ -204,6 +229,7 @@ void Oran7MediaClient::shutdown()
     resetNetworkPlayRequest();
     m_captureBridge->shutdown();
     m_playbackController->shutdown();
+    m_visualizer->shutdown();
 }
 
 QString Oran7MediaClient::mediaSource() const

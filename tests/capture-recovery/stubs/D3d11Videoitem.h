@@ -18,4 +18,5 @@ class D3D11VideoItem : public QQuickItem
     }
     Q_INVOKABLE void renderBlackFrame() {}
     void setDebugLog(bool) {}
+    void setContentRect(const QRectF&) {}
 };

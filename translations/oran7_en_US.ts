@@ -1291,6 +1291,70 @@ Changes are saved and applied automatically.</translation>
         <translation>Audio equalizer</translation>
     </message>
     <message>
+        <source>音频可视化效果</source>
+        <translation>Audio visualization</translation>
+    </message>
+    <message>
+        <source>启用音频可视化</source>
+        <translation>Enable audio visualization</translation>
+    </message>
+    <message>
+        <source>当前柱数 %1</source>
+        <translation>Bars: %1</translation>
+    </message>
+    <message>
+        <source>频谱柱宽（px）</source>
+        <translation>Bar width (px)</translation>
+    </message>
+    <message>
+        <source>柱间距（px）</source>
+        <translation>Bar spacing (px)</translation>
+    </message>
+    <message>
+        <source>频谱高度（px）</source>
+        <translation>Spectrum height (px)</translation>
+    </message>
+    <message>
+        <source>最大柱高（px，0 不限）</source>
+        <translation>Max bar height (px, 0 = unlimited)</translation>
+    </message>
+    <message>
+        <source>底部偏移（px）</source>
+        <translation>Bottom offset (px)</translation>
+    </message>
+    <message>
+        <source>灵敏度</source>
+        <translation>Sensitivity</translation>
+    </message>
+    <message>
+        <source>最低频率（Hz）</source>
+        <translation>Lowest frequency (Hz)</translation>
+    </message>
+    <message>
+        <source>最高频率（Hz）</source>
+        <translation>Highest frequency (Hz)</translation>
+    </message>
+    <message>
+        <source>频谱显示屏幕</source>
+        <translation>Spectrum display</translation>
+    </message>
+    <message>
+        <source>主屏</source>
+        <translation>Primary display</translation>
+    </message>
+    <message>
+        <source>跟随主窗口</source>
+        <translation>Follow main window</translation>
+    </message>
+    <message>
+        <source>频谱窗口置顶</source>
+        <translation>Keep spectrum above windows</translation>
+    </message>
+    <message>
+        <source>频谱两端贴边</source>
+        <translation>Stretch spectrum to screen edges</translation>
+    </message>
+    <message>
         <location line="+69"/>
         <source>低音增强 (dB)</source>
         <translation>Bass boost (dB)</translation>
@@ -1613,6 +1677,290 @@ are synced with your NetEase Music account.</translation>
         <location filename="../src/qml/RightPage/MainStackView/VideoPlayerStack.qml" line="+333"/>
         <source>画面信息</source>
         <translation>Frame info</translation>
+    </message>
+    <message>
+        <source>画面图层</source>
+        <translation>Scene layers</translation>
+    </message>
+    <message>
+        <source>添加采集源</source>
+        <translation>Add capture source</translation>
+    </message>
+    <message>
+        <source>场景</source>
+        <translation>Scene</translation>
+    </message>
+    <message>
+        <source>场景设置</source>
+        <translation>Scene settings</translation>
+    </message>
+    <message>
+        <source>场景名称</source>
+        <translation>Scene name</translation>
+    </message>
+    <message>
+        <source>重命名</source>
+        <translation>Rename</translation>
+    </message>
+    <message>
+        <source>新建场景</source>
+        <translation>New scene</translation>
+    </message>
+    <message>
+        <source>场景 %1</source>
+        <translation>Scene %1</translation>
+    </message>
+    <message>
+        <source>确认删除</source>
+        <translation>Confirm deletion</translation>
+    </message>
+    <message>
+        <source>删除场景</source>
+        <translation>Delete scene</translation>
+    </message>
+    <message>
+        <source>源</source>
+        <translation>Sources</translation>
+    </message>
+    <message>
+        <source>当前场景没有源</source>
+        <translation>This scene has no sources</translation>
+    </message>
+    <message>
+        <source>上移场景</source>
+        <translation>Move scene up</translation>
+    </message>
+    <message>
+        <source>下移场景</source>
+        <translation>Move scene down</translation>
+    </message>
+    <message>
+        <source>显示源</source>
+        <translation>Show source</translation>
+    </message>
+    <message>
+        <source>隐藏源</source>
+        <translation>Hide source</translation>
+    </message>
+    <message>
+        <source>解锁变换</source>
+        <translation>Unlock transform</translation>
+    </message>
+    <message>
+        <source>锁定变换</source>
+        <translation>Lock transform</translation>
+    </message>
+    <message>
+        <source>删除源</source>
+        <translation>Remove source</translation>
+    </message>
+    <message>
+        <source>上移源</source>
+        <translation>Move source up</translation>
+    </message>
+    <message>
+        <source>下移源</source>
+        <translation>Move source down</translation>
+    </message>
+    <message>
+        <source>窗口采集</source>
+        <translation>Window capture</translation>
+    </message>
+    <message>
+        <source>图片…</source>
+        <translation>Image…</translation>
+    </message>
+    <message>
+        <source>选择图片</source>
+        <translation>Select image</translation>
+    </message>
+    <message>
+        <source>图片文件</source>
+        <translation>Image file</translation>
+    </message>
+    <message>
+        <source>所有文件</source>
+        <translation>All files</translation>
+    </message>
+    <message>
+        <source>浏览…</source>
+        <translation>Browse…</translation>
+    </message>
+    <message>
+        <source>重新选择…</source>
+        <translation>Choose another…</translation>
+    </message>
+    <message>
+        <source>无法切换显示器</source>
+        <translation>Could not switch displays</translation>
+    </message>
+    <message>
+        <source>无法读取图片文件</source>
+        <translation>Could not read the image file</translation>
+    </message>
+    <message>
+        <source>默认场景</source>
+        <translation>Default scene</translation>
+    </message>
+    <message>
+        <source>待连接</source>
+        <translation>Waiting</translation>
+    </message>
+    <message>
+        <source>等待窗口重新打开</source>
+        <translation>Waiting for the window to reopen</translation>
+    </message>
+    <message>
+        <source>场景文件不可写</source>
+        <translation>The scene file cannot be written</translation>
+    </message>
+    <message>
+        <source>无法读取场景文件</source>
+        <translation>Could not read the scene file</translation>
+    </message>
+    <message>
+        <source>场景文件格式或版本不受支持</source>
+        <translation>Unsupported scene file format or version</translation>
+    </message>
+    <message>
+        <source>场景数据无效</source>
+        <translation>Invalid scene data</translation>
+    </message>
+    <message>
+        <source>无法恢复场景中的源</source>
+        <translation>Could not restore a source in this scene</translation>
+    </message>
+    <message>
+        <source>无法保存场景文件</source>
+        <translation>Could not save the scene file</translation>
+    </message>
+    <message>
+        <source>场景文件正在被写入</source>
+        <translation>The scene file is being written</translation>
+    </message>
+    <message>
+        <source>场景文件已被其他程序修改</source>
+        <translation>The scene file was changed by another process</translation>
+    </message>
+    <message>
+        <source>窗口采集…</source>
+        <translation>Window capture…</translation>
+    </message>
+    <message>
+        <source>选择采集窗口</source>
+        <translation>Choose a window to capture</translation>
+    </message>
+    <message>
+        <source>搜索窗口或应用</source>
+        <translation>Search windows or apps</translation>
+    </message>
+    <message>
+        <source>已最小化</source>
+        <translation>Minimized</translation>
+    </message>
+    <message>
+        <source>窗口已关闭或无法采集，请重新选择</source>
+        <translation>This window closed or cannot be captured. Choose another window.</translation>
+    </message>
+    <message>
+        <source>没有匹配的窗口</source>
+        <translation>No matching windows</translation>
+    </message>
+    <message>
+        <source>无法初始化 Windows 窗口采集</source>
+        <translation>Could not initialize Windows window capture</translation>
+    </message>
+    <message>
+        <source>当前系统不支持窗口采集</source>
+        <translation>Window capture is unavailable on this system</translation>
+    </message>
+    <message>
+        <source>无法采集此窗口，窗口可能已关闭</source>
+        <translation>Could not capture this window. It may have closed.</translation>
+    </message>
+    <message>
+        <source>无法创建窗口采集设备</source>
+        <translation>Could not create the window capture device</translation>
+    </message>
+    <message>
+        <source>无法创建窗口采集会话</source>
+        <translation>Could not create the window capture session</translation>
+    </message>
+    <message>
+        <source>无法启动窗口采集</source>
+        <translation>Could not start window capture</translation>
+    </message>
+    <message>
+        <source>采集窗口已关闭</source>
+        <translation>The captured window closed</translation>
+    </message>
+    <message>
+        <source>窗口采集画面已中断</source>
+        <translation>Window capture was interrupted</translation>
+    </message>
+    <message>
+        <source>窗口已最小化或隐藏</source>
+        <translation>The window is minimized or hidden</translation>
+    </message>
+    <message>
+        <source>等待窗口画面</source>
+        <translation>Waiting for a window frame</translation>
+    </message>
+    <message>
+        <source>无法更新窗口采集尺寸</source>
+        <translation>Could not update the window capture size</translation>
+    </message>
+    <message>
+        <source>无法读取窗口采集画面</source>
+        <translation>Could not read the window capture frame</translation>
+    </message>
+    <message>
+        <source>无法添加该采集源</source>
+        <translation>Could not add this capture source</translation>
+    </message>
+    <message>
+        <source>（隐藏）</source>
+        <translation> (hidden)</translation>
+    </message>
+    <message>
+        <source>已在最上层</source>
+        <translation>Already at the front</translation>
+    </message>
+    <message>
+        <source>已在最下层</source>
+        <translation>Already at the back</translation>
+    </message>
+    <message>
+        <source>裁剪</source>
+        <translation>Crop</translation>
+    </message>
+    <message>
+        <source>逆时针旋转</source>
+        <translation>Rotate counterclockwise</translation>
+    </message>
+    <message>
+        <source>镜像翻转</source>
+        <translation>Flip horizontally</translation>
+    </message>
+    <message>
+        <source>适配</source>
+        <translation>Fit</translation>
+    </message>
+    <message>
+        <source>置底</source>
+        <translation>Send to back</translation>
+    </message>
+    <message>
+        <source>重置</source>
+        <translation>Reset</translation>
+    </message>
+    <message>
+        <source>恢复画面</source>
+        <translation>Restore source</translation>
+    </message>
+    <message>
+        <source>只有一层画面，无需调整顺序</source>
+        <translation>Only one source layer</translation>
     </message>
     <message>
         <location filename="../src/qml/Components/Oran7GlobalComponents/Oran7RecordingWorkspace.qml" line="-188"/>

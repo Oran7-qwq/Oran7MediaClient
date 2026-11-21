@@ -28,6 +28,8 @@ class Oran7ConfigBinding;
 class Oran7TrackMetadataService;
 class Oran7LegacyServerClient;
 class Oran7AudioEffects;
+class Oran7AudioVisualizer;
+Q_MOC_INCLUDE("Oran7AudioVisualizer.h")
 struct ID3D11Device;
 
 // QML 命令与通知门面；业务状态和生命周期由各服务持有。
@@ -39,6 +41,7 @@ class Oran7MediaClient : public QObject
     Q_PROPERTY(Oran7CloudMusicService* cloudMusic READ cloudMusic CONSTANT)
     Q_PROPERTY(Oran7PlaybackViewModel* musicQueue READ musicQueue CONSTANT)
     Q_PROPERTY(Oran7AudioEffects* audioEffects READ audioEffects CONSTANT)
+    Q_PROPERTY(Oran7AudioVisualizer* visualizer READ visualizer CONSTANT)
     Q_PROPERTY(Oran7VideoHistory* videoHistory READ videoHistory CONSTANT)
     Q_PROPERTY(Oran7QQMusicSession* qqMusic READ qqMusic CONSTANT)
     Q_PROPERTY(Oran7QQMusicService* qqMusicService READ qqMusicService CONSTANT)
@@ -51,6 +54,7 @@ public:
     Oran7CloudMusicService* cloudMusic() const { return m_cloudMusic.get(); }
     Oran7PlaybackViewModel* musicQueue() const { return m_musicQueue.get(); }
     Oran7AudioEffects* audioEffects() const { return m_audioEffects.get(); }
+    Oran7AudioVisualizer* visualizer() const { return m_visualizer.get(); }
     Oran7VideoHistory* videoHistory() const { return m_videoHistory.get(); }
     Oran7QQMusicSession* qqMusic() const { return m_qqMusic.get(); }
     Oran7QQMusicService* qqMusicService() const { return m_qqMusicService.get(); }
@@ -155,6 +159,8 @@ private:
     // 保证逆序析构时 Controller/采集桥先释放，构造异常时同样成立。
     std::unique_ptr<Oran7PlaybackState> m_playback;
     std::unique_ptr<Oran7RenderBridge> m_renderBridge;
+    std::unique_ptr<Oran7AudioVisualizer> m_visualizer;
+    std::unique_ptr<QTimer> m_visualizerSaveTimer;
     std::unique_ptr<Oran7PlaybackController> m_playbackController;
     std::unique_ptr<Oran7ScreenCaptureBridge> m_captureBridge;
 

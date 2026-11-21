@@ -176,6 +176,15 @@ static void recordingChecks(Oran7SoftwareDevice& gpu)
     auto input = source(texture.Get(), 20, 16, 1);
     input->opaque = downloaded.get();
     input->pts = 12345;
+    // 模拟没有 FFmpeg hw_frames_ctx 的窗口 Surface，使用真实的软件 D3D11 设备回读。
+    Oran7CaptureFrameConverter windowConverter(gpu.device.Get(), 60);
+    const auto windowOutput = windowConverter.recording(input.get(), 16, 12);
+    check(windowOutput && windowOutput->data[0][0] >= 230 && windowOutput->data[1][0] >= 125 &&
+              windowOutput->data[1][0] <= 131, "external window surface encodes the correct padded texture slice");
+    auto resizedWindow = source(texture.Get(), 26, 20, 0);
+    const auto resizedOutput = windowConverter.recording(resizedWindow.get(), 18, 14);
+    check(resizedOutput && resizedOutput->width == 18 && resizedOutput->height == 14 && resizedOutput->data[0][0] <= 18,
+          "external window readback follows new visible dimensions");
     // 无 VideoDevice 的转换器必走下载 + swscale 回退。
     Oran7CaptureFrameConverter converter(nullptr, 60,
                                          [](AVFrame* destination, const AVFrame* hardware, int)
@@ -192,6 +201,56 @@ static void recordingChecks(Oran7SoftwareDevice& gpu)
           "CPU fallback converts downloaded white pixels to limited range");
     check(output->pts == 12345 && output->color_range == AVCOL_RANGE_MPEG && output->colorspace == AVCOL_SPC_BT709,
           "recording timing and SDR color metadata retained");
+    const auto luma = [](const AVFrame* frame, int x, int y) {
+        return frame->data[0][y * frame->linesize[0] + x];
+    };
+    Oran7CaptureComposition scene{true, false, 0.25, 0.25, 0.5, 0.5, 1};
+    const auto small = converter.recording(input.get(), 16, 12, scene);
+    check(small && small->width == 16 && small->height == 12 && luma(small.get(), 4, 3) >= 230 &&
+              luma(small.get(), 10, 3) == 16 && luma(small.get(), 4, 9) == 16 &&
+              small->data[1][10] == 128, "composition encodes right and bottom black space into the fixed output");
+    for (int y = 0; y < downloaded->height; ++y)
+        std::memset(downloaded->data[0] + y * downloaded->linesize[0], 0, 10 * 4);
+    scene.centerX = 0.0;
+    const auto cropped = converter.recording(input.get(), 16, 12, scene);
+    check(cropped && luma(cropped.get(), 1, 3) >= 230 && luma(cropped.get(), 5, 3) == 16,
+          "left overflow crops the source rather than squeezing it into view");
+    for (int y = 0; y < downloaded->height; ++y)
+        std::memset(downloaded->data[0] + y * downloaded->linesize[0], 255, downloaded->width * 4);
+    scene.centerY = -2.0;
+    const auto offscreen = converter.recording(input.get(), 16, 12, scene);
+    check(offscreen && luma(offscreen.get(), 8, 6) == 16, "fully cropped composition is a valid black output frame");
+
+    // 四个亮度明显不同的象限，可区分旋转方向、镜像和裁剪坐标。
+    for (int y = 0; y < downloaded->height; ++y)
+    {
+        auto* row = downloaded->data[0] + y * downloaded->linesize[0];
+        std::memset(row, y < 8 ? 25 : 156, 10 * 4);
+        std::memset(row + 10 * 4, y < 8 ? 78 : 239, 10 * 4);
+    }
+    scene = {true, false};
+    const auto quadrants = [&](const Frame& frame) {
+        check(bool(frame), "transformed NV12 frame is available");
+        return std::array{luma(frame.get(), 2, 2), luma(frame.get(), 13, 2),
+                          luma(frame.get(), 2, 9), luma(frame.get(), 13, 9)};
+    };
+    const auto base = quadrants(converter.recording(input.get(), 16, 12, scene));
+    scene.quarterTurns = 3;
+    check(quadrants(converter.recording(input.get(), 16, 12, scene)) ==
+              std::array{base[1], base[3], base[0], base[2]}, "counterclockwise rotation is encoded in the fixed frame");
+    scene.mirrored = true;
+    check(quadrants(converter.recording(input.get(), 16, 12, scene)) ==
+              std::array{base[3], base[1], base[2], base[0]}, "mirror flips horizontal coordinates after rotation");
+    scene.crop = QRectF(0, 0, 0.5, 1);
+    check(quadrants(converter.recording(input.get(), 16, 12, scene)) ==
+              std::array{base[3], base[3], base[2], base[2]}, "source crop follows the rotated and mirrored editor axes");
+    scene.removed = true;
+    const auto blank = converter.recording(input.get(), 16, 12, scene);
+    check(blank && luma(blank.get(), 8, 6) == 16 && blank->data[1][8] == 128,
+          "removed source keeps the encoder running with black frames");
+    for (int y = 0; y < downloaded->height; ++y)
+        std::memset(downloaded->data[0] + y * downloaded->linesize[0], 255, downloaded->width * 4);
+
     output->data[0][0] = 101;
     auto another = converter.recording(input.get(), 16, 12);
     check(another && another->data[0] != output->data[0] && output->data[0][0] == 101,

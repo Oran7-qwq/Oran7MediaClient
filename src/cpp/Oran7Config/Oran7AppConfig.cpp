@@ -28,6 +28,40 @@ QJsonObject merge(const QJsonObject& input, const QJsonObject& defaults) {
 }
 using namespace Oran7ConfigKeys;
 
+Oran7VisualizerConfig Oran7VisualizerConfig::fromJson(const QJsonObject& v)
+{
+    return {v["enabled"].toBool(), v["always_on_top"].toBool(), v["stretch_to_edges"].toBool(),
+            v["bar_width"].toInt(), v["bar_gap"].toInt(), v["height"].toInt(), v["max_height"].toInt(), v["bottom_offset"].toInt(),
+            v["min_frequency"].toInt(), v["max_frequency"].toInt(),
+            v["opacity"].toDouble(), v["gain"].toDouble(), v["screen"].toString()};
+}
+
+QJsonObject Oran7VisualizerConfig::toJson() const
+{
+    return {{"enabled", enabled}, {"always_on_top", alwaysOnTop}, {"stretch_to_edges", stretchToEdges},
+            {"bar_width", barWidth}, {"bar_gap", barGap}, {"height", height}, {"max_height", maxHeight}, {"bottom_offset", bottomOffset},
+            {"min_frequency", minFrequency}, {"max_frequency", maxFrequency}, {"fps", kFps},
+            {"opacity", opacity}, {"gain", gain}, {"smoothing", kSmoothing}, {"screen", screen}};
+}
+
+QJsonObject Oran7VisualizerConfig::normalize(const QJsonObject& input, const QJsonObject& defaults)
+{
+    auto result = merge(input, defaults);
+    const auto number = [&](const QString& key, double min, double max, bool integer = true) {
+        const auto v = input.value(key);
+        const auto n = v.toDouble();
+        result[key] = v.isDouble() && std::isfinite(n) && n >= min && n <= max && (!integer || std::floor(n) == n)
+            ? v : defaults.value(key);
+    };
+    number("bar_width", 1, 24); number("bar_gap", 0, 16); number("height", 40, 800); number("max_height", 0, 1280);
+    number("bottom_offset", 0, 200); number("min_frequency", 20, 200); number("max_frequency", 8000, 20000);
+    number("opacity", .2, 1, false); number("gain", .5, 8, false);
+    result["fps"] = kFps;
+    result["smoothing"] = kSmoothing;
+    if (result["screen"] != "primary" && result["screen"] != "mainWindow") result["screen"] = defaults["screen"];
+    return result;
+}
+
 bool Oran7AppConfig::normalize(const QJsonObject& input, const QJsonObject& defaults, QJsonObject* output, QString* error) {
     if (error) error->clear();
     const auto version = input.value(SchemaVersion);
@@ -41,6 +75,8 @@ bool Oran7AppConfig::normalize(const QJsonObject& input, const QJsonObject& defa
         migrated[LastVip] = migrated.value(LastSourceVip);
     // v2：统一默认值深合并和分组类型校验，不重命名用户键或歌曲行字段。
     auto result = merge(migrated, defaults);
+    if (defaults.value(Visualizer).isObject())
+        result[Visualizer] = Oran7VisualizerConfig::normalize(input.value(Visualizer).toObject(), defaults.value(Visualizer).toObject());
     const auto range = [&](const QString& key, double min, double max) {
         const auto v = value(result, key);
         if (!v.isDouble() || v.toDouble() < min || v.toDouble() > max) put(result, key, value(defaults, key));
@@ -108,6 +144,7 @@ bool Oran7AppConfig::normalize(const QJsonObject& input, const QJsonObject& defa
 
 Oran7AppConfig Oran7AppConfig::fromJson(const QJsonObject& json) {
     Oran7AppConfig result; result.m_extensions = json;
+    result.visualizer = Oran7VisualizerConfig::fromJson(json.value(Visualizer).toObject());
     result.window.width = value(json, WindowWidth).toVariant().toInt();
     result.window.height = value(json, WindowHeight).toVariant().toInt();
     result.window.x = value(json, WindowX).toVariant().toInt();
@@ -305,6 +342,10 @@ QJsonObject Oran7AppConfig::toJson() const {
     put(result, AudioCompRelease, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorReleaseMs)));
     put(result, AudioCompKnee, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorKneeDb)));
     put(result, AudioCompMakeup, QJsonValue::fromVariant(QVariant::fromValue(audio.compressorMakeupDb)));
+    auto visualizerGroup = result.value(Visualizer).toObject();
+    const auto visualizerValues = visualizer.toJson();
+    for (auto it = visualizerValues.begin(); it != visualizerValues.end(); ++it) visualizerGroup[it.key()] = it.value();
+    result[Visualizer] = visualizerGroup;
     result[SchemaVersion] = kVersion;
     return result;
 }

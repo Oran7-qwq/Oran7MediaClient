@@ -1,13 +1,23 @@
 #include "Oran7ScreenCapture.h"
 #include "Oran7DesktopCaptureWorker.h"
+#include "Oran7CaptureSceneSources.h"
+#include "Oran7CaptureSceneStore.h"
 #include "D3d11DeviceProvider.h"
 #include "Oran7AppConfigManager.h"
 #include "Oran7RecordingBackend.h"
 #include "Oran7AudioCaptureBackend.h"
 #include <QMetaEnum>
 #include <QQmlEngine>
+#include <algorithm>
 #include <cmath>
 #include <QHash>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QUrl>
+#include <cstring>
+#include <set>
 
 #include <dxgi.h>
 #include <libavutil/log.h>
@@ -20,11 +30,32 @@ QString ffErrStr(int err)
     av_strerror(err, buf, sizeof(buf));
     return QString::fromUtf8(buf);
 }
+
+std::optional<Oran7CaptureComposition> captureComposition(bool enabled, bool fit, const QRectF& geometry, double scale,
+                                                          const QRectF& crop, int quarterTurns, bool mirrored, bool removed)
+{
+    const auto valid = [](const QRectF& rect) {
+        return std::isfinite(rect.x()) && std::isfinite(rect.y()) && std::isfinite(rect.width()) &&
+               std::isfinite(rect.height()) && !rect.isEmpty();
+    };
+    if (!valid(geometry) || !valid(crop) || !std::isfinite(scale) || scale <= 0 || quarterTurns < 0 || quarterTurns > 3)
+        return std::nullopt;
+    const QRectF clippedCrop = crop.intersected(QRectF(0, 0, 1, 1));
+    if (clippedCrop.width() < 0.001 || clippedCrop.height() < 0.001)
+        return std::nullopt;
+    return Oran7CaptureComposition{enabled, fit, std::clamp(geometry.x(), -4.0, 5.0), std::clamp(geometry.y(), -4.0, 5.0),
+        std::min(geometry.width(), 8.0), std::min(geometry.height(), 8.0), std::min(scale, 8.0),
+        clippedCrop, quarterTurns, mirrored, removed};
+}
 } // namespace
 
 // ================= Controller (lives in main/GUI thread) =================
 Oran7ScreenCaptureController::Oran7ScreenCaptureController(QObject* parent)
-    : QObject(parent), m_live(std::make_unique<Oran7LiveSession>()), m_recording(std::make_unique<Oran7RecordingSession>())
+    : QObject(parent),
+      m_sceneSources(std::make_unique<Oran7CaptureSceneSources>([this](int id, const QString& message) {
+          emit sceneLayerError(id, message);
+      })),
+      m_live(std::make_unique<Oran7LiveSession>()), m_recording(std::make_unique<Oran7RecordingSession>())
 {
     av_log_set_level(AV_LOG_INFO);
     const auto audio = Oran7AppConfigManager::ins().snapshot().live;
@@ -228,6 +259,7 @@ void Oran7ScreenCaptureController::shutdown()
     }
     m_control.reset();
     m_feed.reset();
+    m_sceneSources->shutdown();
     if (m_item)
         m_item->renderBlackFrame();
     setPreviewState(Oran7PreviewState::Idle);
@@ -243,9 +275,9 @@ void Oran7ScreenCaptureController::shutdown()
  *       保证枚举的就是抓屏将要用的那块设备。
  */
 // 以 GDI 设备名关联 Windows 显示路径与 DXGI 输出，不能按两套枚举的顺序对齐。
-static QHash<QString, QString> captureMonitorNames()
+static QHash<QString, QPair<QString, QString>> captureMonitorNames()
 {
-    QHash<QString, QString> names;
+    QHash<QString, QPair<QString, QString>> names;
 #ifdef _WIN32
     for (int attempt = 0; attempt < 3; ++attempt)
     {
@@ -277,14 +309,15 @@ static QHash<QString, QString> captureMonitorNames()
                 DisplayConfigGetDeviceInfo(&target.header) != ERROR_SUCCESS)
                 continue;
             const QString name = QString::fromWCharArray(target.monitorFriendlyDeviceName).trimmed();
-            if (name.isEmpty())
-                continue;
             const QString key = QString::fromWCharArray(source.viewGdiDeviceName).toUpper();
             // 镜像模式下一个采集源可能连接多个物理显示器，保留各个名称。
-            auto list = names.value(key).split(QStringLiteral(" / "), Qt::SkipEmptyParts);
-            if (!list.contains(name))
+            auto& entry = names[key];
+            auto list = entry.first.split(QStringLiteral(" / "), Qt::SkipEmptyParts);
+            if (!name.isEmpty() && !list.contains(name))
                 list.push_back(name);
-            names.insert(key, list.join(QStringLiteral(" / ")));
+            entry.first = list.join(QStringLiteral(" / "));
+            if (entry.second.isEmpty())
+                entry.second = QString::fromWCharArray(target.monitorDevicePath);
         }
         break;
     }
@@ -338,7 +371,9 @@ static QVector<CaptureOutputInfo> enumerateCaptureOutputs(QString* err = nullptr
         info.outputIndex = static_cast<int>(i); // 原始序号原样透传，不做任何压缩
         info.attached = odesc.AttachedToDesktop;
         info.deviceName = QString::fromWCharArray(odesc.DeviceName);
-        info.monitorName = monitorNames.value(info.deviceName.toUpper());
+        const auto monitor = monitorNames.value(info.deviceName.toUpper());
+        info.monitorName = monitor.first;
+        info.monitorPath = monitor.second;
         info.adapterName = adapterName;
         const RECT& r = odesc.DesktopCoordinates;
         info.width = r.right - r.left;
@@ -373,6 +408,7 @@ QVariantList Oran7ScreenCaptureController::monitors() const
         item["height"] = m.height;
         item["deviceName"] = m.deviceName;
         item["monitorName"] = m.monitorName;
+        item["monitorPath"] = m.monitorPath;
         item["adapterName"] = m.adapterName;
         out.push_back(item);
     }
@@ -749,18 +785,174 @@ void Oran7ScreenCaptureController::drivePreview()
         recoverCapture(QStringLiteral("当前没有可用的显示输出，请连接显示器后重连预览"));
         return;
     }
+    if (!m_sceneSources->preparePrimary(target.deviceName))
+    {
+        // 目标显示器若曾是辅助源，等旧 DDA 会话退出再作为主源打开。
+        QTimer::singleShot(10, this, &Oran7ScreenCaptureController::schedulePreview);
+        return;
+    }
     startWorker(std::move(target));
 }
+void Oran7ScreenCaptureController::setPreviewComposition(bool enabled, bool fit, const QRectF& geometry, double scale,
+                                                         const QRectF& crop, int quarterTurns, bool mirrored, bool removed)
+{
+    const auto composition = captureComposition(enabled, fit, geometry, scale, crop, quarterTurns, mirrored, removed);
+    if (!composition)
+        return;
+    m_composition = *composition;
+    if (m_feed)
+        m_feed->setComposition(m_composition);
+}
+
+int Oran7ScreenCaptureController::addSceneLayer(int outputIndex)
+{
+    if (m_shuttingDown)
+        return 0;
+    for (const auto& value : monitors())
+    {
+        const auto monitor = value.toMap();
+        if (monitor.value("attached").toBool() && monitor.value("outputIndex").toInt() == outputIndex)
+            return m_sceneSources->addLayer(monitor.value("deviceName").toString(), outputIndex);
+    }
+    return 0;
+}
+
+QVariantList Oran7ScreenCaptureController::sceneWindows() const { return oran7CaptureWindows(); }
+
+int Oran7ScreenCaptureController::addWindowSceneLayer(const QString& token)
+{
+    return m_shuttingDown ? 0 : m_sceneSources->addWindowLayer(oran7FindCaptureWindow(token));
+}
+
+QVariantMap Oran7ScreenCaptureController::openSceneImage(const QUrl& url)
+{
+    const QString error = QStringLiteral("无法读取图片文件");
+    const QFileInfo file(url.toLocalFile());
+    if (m_shuttingDown || !url.isLocalFile() || !file.isFile())
+        return {{"error", error}};
+    QImageReader reader(file.absoluteFilePath());
+    reader.setAutoTransform(true);
+    const auto image = reader.read();
+    if (image.isNull())
+        return {{"error", error}};
+
+    // 预乘 Alpha 后再缩放，透明像素的颜色不会渗到可见边缘。
+    const auto pixels = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (pixels.isNull())
+        return {{"error", error}};
+    std::shared_ptr<AVFrame> frame(av_frame_alloc(), [](AVFrame* value) { av_frame_free(&value); });
+    if (!frame)
+        return {{"error", error}};
+    frame->format = AV_PIX_FMT_BGRA;
+    frame->width = pixels.width();
+    frame->height = pixels.height();
+    if (av_frame_get_buffer(frame.get(), 32) < 0)
+        return {{"error", error}};
+    for (int y = 0; y < frame->height; ++y)
+        std::memcpy(frame->data[0] + y * frame->linesize[0], pixels.constScanLine(y), std::size_t(frame->width) * 4);
+
+    const int id = m_sceneSources->addImageLayer(std::move(frame));
+    return {{"id", id}, {"name", file.fileName()}, {"file", file.absoluteFilePath()}, {"url", url},
+            {"width", pixels.width()}, {"height", pixels.height()}};
+}
+
+QVariantMap Oran7ScreenCaptureController::restoreSceneSource(const QVariantMap& source, const QString& token)
+{
+    if (m_shuttingDown)
+        return {};
+    const auto kind = source.value("kind").toString();
+    if (kind == "image")
+    {
+        auto image = openSceneImage(QUrl::fromLocalFile(source.value("file").toString()));
+        if (!image.contains("id"))
+            image.insert("id", m_sceneSources->addImageLayer({}));
+        return image;
+    }
+    if (kind == "window")
+    {
+        if (source.value("name").toString().isEmpty() || source.value("windowClass").toString().isEmpty())
+            return {};
+        const auto target = oran7FindCaptureWindow(token.isEmpty() ? oran7MatchCaptureWindow(source, oran7CaptureWindows()) : token);
+        if (!token.isEmpty() && !target.window)
+            return {};
+        return {{"id", m_sceneSources->addSavedWindowLayer(source, target)},
+                {"error", target.window ? QString() : QStringLiteral("等待窗口重新打开")}};
+    }
+    if (kind != "display")
+        return {};
+    const auto path = source.value("monitorPath").toString();
+    const auto device = source.value("deviceName").toString();
+    if (path.isEmpty() && device.isEmpty())
+        return {};
+    for (const auto& value : monitors())
+    {
+        const auto options = value.toMap();
+        if (!options.value("attached").toBool())
+            continue;
+        const auto match = path.isEmpty() ? options.value("deviceName").toString() : options.value("monitorPath").toString();
+        if (match.compare(path.isEmpty() ? device : path, Qt::CaseInsensitive) == 0)
+            return {{"id", m_sceneSources->addLayer(options.value("deviceName").toString(), options.value("outputIndex").toInt())}};
+    }
+    return {{"id", m_sceneSources->addLayer(QStringLiteral("missing-display:") + (path.isEmpty() ? device : path), -1)},
+            {"error", QStringLiteral("显示器已断开")}};
+}
+
+QVariantMap Oran7ScreenCaptureController::loadSceneLibrary()
+{
+    if (!m_sceneStore)
+        m_sceneStore = std::make_unique<Oran7CaptureSceneStore>(
+            QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(QStringLiteral("../Config/capture-scenes.json")));
+    return m_sceneStore->load();
+}
+
+QVariantMap Oran7ScreenCaptureController::saveSceneLibrary(const QVariantMap& library)
+{
+    return m_sceneStore ? m_sceneStore->save(library) : QVariantMap{{"ok", false}, {"message", QStringLiteral("场景文件不可写")}};
+}
+
+void Oran7ScreenCaptureController::removeSceneLayer(int layerId) { m_sceneSources->removeLayer(layerId); }
+
+QObject* Oran7ScreenCaptureController::attachSceneLayer(int layerId, QQuickItem* host)
+{
+    return m_sceneSources->attachLayer(layerId, host);
+}
+
+void Oran7ScreenCaptureController::setSceneLayers(const QVariantList& layers)
+{
+    if (m_shuttingDown)
+        return;
+    std::set<int> ids;
+    std::vector<Oran7CaptureSceneSources::Composition> result;
+    result.reserve(layers.size());
+    for (const auto& value : layers)
+    {
+        const auto item = value.toMap();
+        const int id = item.value("id", -1).toInt();
+        const auto composition = captureComposition(true, item.value("fit").toBool(), item.value("geometry").toRectF(),
+            item.value("scale").toDouble(), item.value("crop").toRectF(), item.value("quarterTurns").toInt(),
+            item.value("mirrored").toBool(), item.value("removed").toBool());
+        if (id < 0 || !ids.insert(id).second || !composition)
+            return;
+        result.emplace_back(id, *composition);
+    }
+    if (ids.count(0))
+        m_sceneSources->setCompositions(std::move(result));
+}
+
 void Oran7ScreenCaptureController::startWorker(Oran7CaptureTarget target)
 {
     m_activeTarget = std::move(target);
     m_activeRequest = m_pendingCapture ? m_pendingCapture->id : 0;
     m_thread = std::make_unique<QThread>();
-    auto* worker = new Oran7DesktopCaptureWorker(m_item->frameSubmitter(), m_activeTarget.settings.outputIndex,
+    const auto preview = m_sceneSources->primaryPreview();
+    preview->setConsumer(0, m_item->frameSubmitter());
+    auto* worker = new Oran7DesktopCaptureWorker([preview](AVFrame* frame) { preview->submit(frame); }, m_activeTarget.settings.outputIndex,
                                                  m_activeTarget.settings.drawMouse, m_activeTarget.settings.fps);
     worker->setDebugLog(m_activeTarget.debugLog);
     m_control = worker->control();
     m_feed = worker->recordingFeed();
+    m_feed->setScene(m_sceneSources->scene());
+    m_feed->setComposition(m_composition);
     worker->moveToThread(m_thread.get());
     const quint64 gen = ++m_workerGen;
     auto* thread = m_thread.get();
@@ -829,6 +1021,7 @@ void Oran7ScreenCaptureController::teardownWorker()
 {
     ++m_workerGen; // 停止后旧 started/error/首帧均失效；finished 另按线程身份回收。
     m_startTimer.stop();
+    m_sceneSources->stop();
     if (!m_thread)
         return;
     if (m_feed)
@@ -862,6 +1055,15 @@ void Oran7ScreenCaptureController::confirmPreview(quint64 generation)
     m_restoreTarget.reset();
     m_recoveryAttempts = 0; // 图创建/started 不代表恢复；只在实际产帧后清零。
     m_previewError.clear();
+    std::map<QString, int> outputs;
+    if (m_sceneSources->hasLayers())
+        for (const auto& value : monitors())
+        {
+            const auto monitor = value.toMap();
+            if (monitor.value("attached").toBool())
+                outputs.emplace(monitor.value("deviceName").toString(), monitor.value("outputIndex").toInt());
+        }
+    m_sceneSources->start(m_activeTarget.settings.fps, m_activeTarget.settings.drawMouse, outputs);
     setPreviewState(Oran7PreviewState::Running);
     emit captureSettingsChanged();
     if (request && request->id == m_activeRequest)

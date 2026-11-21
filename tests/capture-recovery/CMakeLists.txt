@@ -18,12 +18,14 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/controller.cpp" "${CONTROLLER_SOURCE}")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CAP}/Oran7ScreenCapture.cpp")
 add_executable(recovery_checks main.cpp "${CMAKE_CURRENT_BINARY_DIR}/controller.cpp"
     "${CAP}/Oran7ScreenCapture.h" "${CAP}/Oran7DesktopCaptureWorker.h"
-    "${CAP}/Oran7CaptureFrameConverter.cpp" "${CAP}/Oran7RecordingSession.cpp"
+    "${CAP}/Oran7CaptureFrameConverter.cpp" "${CAP}/Oran7CaptureSceneSources.cpp" "${CAP}/Oran7RecordingSession.cpp"
+    "${CAP}/Oran7WindowCaptureWorker.cpp" "${CAP}/Oran7WindowCaptureWorker.h"
+    "${CAP}/Oran7CaptureSceneStore.cpp"
     "${CAP}/Oran7SignalingClient.cpp"
     stubs/D3d11DeviceProvider.h stubs/D3d11Videoitem.h)
 target_include_directories(recovery_checks PRIVATE stubs "${CAP}" "${ROOT}/src/cpp/Oran7Config" "${FFMPEG_ROOT_DIR}/include")
 target_link_libraries(recovery_checks PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Test Qt6::Network Qt6::WebSockets
-    "${FFMPEG_ROOT_DIR}/lib/avutil.lib" "${FFMPEG_ROOT_DIR}/lib/swscale.lib" "${FFMPEG_ROOT_DIR}/lib/avfilter.lib" d3d11 dxgi)
+    "${FFMPEG_ROOT_DIR}/lib/avutil.lib" "${FFMPEG_ROOT_DIR}/lib/swscale.lib" "${FFMPEG_ROOT_DIR}/lib/avfilter.lib" d3d11 dxgi dwmapi runtimeobject uuid)
 
 target_sources(recovery_checks PRIVATE "${CAP}/Live/Oran7LiveSession.cpp" "${CAP}/Live/Oran7LiveSession.h" "${CAP}/Live/Oran7RtmpPublisher.cpp")
 target_link_libraries(recovery_checks PRIVATE "${FFMPEG_ROOT_DIR}/lib/avformat.lib" "${FFMPEG_ROOT_DIR}/lib/avcodec.lib")

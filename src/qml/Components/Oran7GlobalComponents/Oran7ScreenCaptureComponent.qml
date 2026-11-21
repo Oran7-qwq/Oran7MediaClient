@@ -9,9 +9,17 @@ Rectangle {
     color: "black"
     property var screenCapture: null
     property alias renderHost: renderHost
+    property alias previewInfo: infoOverlay
     property int renderObject: Client.ScreenCaptureRender
     property bool firstOpen: true
     property bool openScreenInfo: true  // 默认显示抓屏信息面板
+    property string infoFontFamily: ""
+    property int infoPixelSize: 13
+    property size sourceSizeHint: Qt.size(0, 0)
+    readonly property size previewSourceSize: screenInfo.srcWidth > 0 && screenInfo.srcHeight > 0
+        ? Qt.size(screenInfo.srcWidth, screenInfo.srcHeight) : sourceSizeHint
+    readonly property real previewSourceAspect: previewSourceSize.height > 0
+        ? previewSourceSize.width / previewSourceSize.height : 0
 
     // ========= 抓屏信息面板 =========
     Connections{
@@ -25,6 +33,7 @@ Rectangle {
     property var screenInfo: ({})
 
     Rectangle {
+        id: infoOverlay
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: 10
@@ -44,7 +53,7 @@ Rectangle {
                 qsTranslate("Oran7Ui", "DXGI格式:  ") + root.screenInfo.dxgiFormatName  + "\n" +
                 qsTranslate("Oran7Ui", "抓屏帧率: ") + root.screenInfo.fps
             color: "#00FF88"
-            font.pixelSize: 12
+            font.family: root.infoFontFamily; font.pixelSize: root.infoPixelSize
         }
     }
     // =================================

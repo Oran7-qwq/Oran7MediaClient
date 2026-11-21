@@ -60,6 +60,19 @@ struct Oran7AudioConfig {
     double compressorMakeupDb{};
 };
 
+struct Oran7VisualizerConfig {
+    static constexpr double kSmoothing = 1.0;
+    static constexpr int kFps = 60;
+    bool enabled{}, alwaysOnTop{}, stretchToEdges{};
+    int barWidth{}, barGap{}, height{}, maxHeight{}, bottomOffset{}, minFrequency{}, maxFrequency{};
+    double opacity{}, gain{};
+    QString screen;
+
+    static Oran7VisualizerConfig fromJson(const QJsonObject& value);
+    QJsonObject toJson() const;
+    static QJsonObject normalize(const QJsonObject& input, const QJsonObject& defaults);
+};
+
 struct Oran7AppConfig {
     static constexpr int kVersion = 2;
     Oran7WindowConfig window;
@@ -73,6 +86,7 @@ struct Oran7AppConfig {
     Oran7RecordingConfig recording;
     Oran7LiveConfig live;
     Oran7AudioConfig audio;
+    Oran7VisualizerConfig visualizer;
     QStringList recentFiles;
     QVariantList videoHistory;
     int recentFilesMaxCount{};

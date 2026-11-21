@@ -1,4 +1,5 @@
 #include "Oran7FFplayerCore.h"
+#include "Oran7AudioSpectrumTap.h"
 #include "Oran7VideoRefreshScheduler.h"
 
 #include <string.h>
@@ -1555,6 +1556,7 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
         if (discontinuity != is->audio_seen_discontinuity_)
         {
             is->audio_seen_discontinuity_ = discontinuity;
+            if (is->audio_spectrum_tap_) is->audio_spectrum_tap_->invalidate();
             is->audio_processor_->reset();
             // 丢弃旧 serial 尚未输出的 PCM；下一轮循环重新从采样队列取帧。
             is->audio_buf_index = static_cast<int>(is->audio_buf_size);
@@ -1564,6 +1566,8 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
         }
     }
 
+    auto* const spectrum = is->audio_spectrum_tap_.get();
+    const auto spectrumEpoch = spectrum ? spectrum->epoch() : 0;
     // 现在设置是每次需要2048个采样点
     // len = 8192
     // len 4096
@@ -1732,6 +1736,12 @@ void Oran7FFplayerCore::sdl_audio_callback(void *opaque, Uint8 *stream, int len)
             is->audio_transition_.apply(reinterpret_cast<float*>(output),frames,is->audio_tgt.channels);
         else if (is->audio_tgt.fmt==AV_SAMPLE_FMT_S16)
             is->audio_transition_.apply(reinterpret_cast<short*>(output),frames,is->audio_tgt.channels);
+        if (spectrumEpoch & 1u) {
+            if (is->audio_tgt.fmt == AV_SAMPLE_FMT_FLT)
+                spectrum->push(reinterpret_cast<const float*>(output), frames, is->audio_tgt.channels, is->audio_tgt.freq, spectrumEpoch);
+            else if (is->audio_tgt.fmt == AV_SAMPLE_FMT_S16)
+                spectrum->push(reinterpret_cast<const std::int16_t*>(output), frames, is->audio_tgt.channels, is->audio_tgt.freq, spectrumEpoch);
+        }
     }
     is->audio_write_buf_size = is->audio_buf_size - is->audio_buf_index;
     /* Let's assume the audio driver that is used by SDL has two periods. */
@@ -1888,6 +1898,7 @@ int Oran7FFplayerCore::audio_open(AVChannelLayout wanted_channel_layout, int wan
     audio_volume_ramp_.reset(static_cast<float>(audio_volume.load(std::memory_order_relaxed))
                              / static_cast<float>(SDL_MIX_MAXVOLUME));
     audio_transition_.prepare(spec.freq);
+    if (audio_spectrum_tap_) audio_spectrum_tap_->invalidate();
     audio_output_ready_.store(true,std::memory_order_release);
 
     return spec.size;	/* SDL内部缓存的数据字节, samples * channels *byte_per_sample */
@@ -1900,6 +1911,7 @@ void Oran7FFplayerCore::audio_close()
 {
     audio_output_ready_.store(false,std::memory_order_release);
     m_audioDevice.close();
+    if (audio_spectrum_tap_) audio_spectrum_tap_->invalidate();
     // 设备关闭会停止回调；此后才能安全释放处理器状态。
     // 参数队列保留，重新打开格式时再创建处理器。
     audio_processor_.reset();

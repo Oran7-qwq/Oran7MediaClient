@@ -39,7 +39,7 @@ add_executable(simultaneous_output_checks simultaneous.cpp "${CAP}/Oran7CaptureO
     "${CAP}/Oran7CaptureFrameConverter.cpp" "${CAP}/Oran7VideoEncoder.cpp" "${CAP}/Oran7AudioEncoder.cpp"
     "${CAP}/Oran7Mp4Muxer.cpp" "${CAP}/Live/Oran7RtmpPublisher.cpp")
 target_include_directories(simultaneous_output_checks PRIVATE "${CAP}" "${ROOT}/src/cpp/GlobalSingleton" "${FFMPEG_ROOT_DIR}/include")
-target_link_libraries(simultaneous_output_checks PRIVATE ${recordingLibraries} Qt6::Network d3d11 dxgi)
+target_link_libraries(simultaneous_output_checks PRIVATE ${recordingLibraries} Qt6::Gui Qt6::Network d3d11 dxgi)
 target_compile_definitions(simultaneous_output_checks PRIVATE APP_ROOT="${ORAN7_SOURCE_ROOT}")
 target_link_libraries(simultaneous_output_checks PRIVATE "${FFMPEG_ROOT_DIR}/lib/swscale.lib")
 add_executable(output_shutdown_checks shutdown.cpp "${CAP}/Oran7RecordingSession.cpp"

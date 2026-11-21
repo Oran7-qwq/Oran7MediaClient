@@ -1,4 +1,5 @@
 #pragma once
+#include "Oran7CaptureComposition.h"
 #include <QString>
 #include <memory>
 #include <d3d11.h>
@@ -22,7 +23,7 @@ class Oran7CaptureFrameConverter
         QString error;
         bool invalidated = false;
     };
-    // 默认使用 FFmpeg 硬件下载；离线检查可替换这个边界，不依赖硬件视频接口。
+    // FFmpeg 硬件下载与外部 BGRA 纹理回读共用转换链路；离线检查可替换下载边界。
     using FrameTransfer = int (*)(AVFrame*, const AVFrame*, int);
     explicit Oran7CaptureFrameConverter(ID3D11Device* device, int fps, FrameTransfer download = nullptr);
     ~Oran7CaptureFrameConverter();
@@ -30,7 +31,7 @@ class Oran7CaptureFrameConverter
     Oran7CaptureFrameConverter& operator=(const Oran7CaptureFrameConverter&) = delete;
     // 空帧且无错误表示预览忙/不支持；不影响随后对原始帧的录制转换。
     Oran7PreviewResult preview(const AVFrame* source);
-    Frame recording(const AVFrame* source, int width, int height);
+    Frame recording(const AVFrame* source, int width, int height, const Oran7CaptureComposition& composition = {});
     void beginRecording(); // 新录制重新尝试 GPU 转换。
     void endRecording(); // 归还空闲软件缓冲，编码器持有的在途帧自行延寿。
   private:

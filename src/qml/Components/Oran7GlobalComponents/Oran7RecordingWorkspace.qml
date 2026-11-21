@@ -8,10 +8,10 @@ import Oran7UI.Impl
 Pane {
     id: root
     padding: 10
-    readonly property real sourcePanelWidth: 230
-    readonly property real outputPanelWidth: 260
+    readonly property real sourcePanelWidth: 244 + Math.max(0, controlPixelSize - 15) * 5
+    readonly property real outputPanelWidth: 276 + Math.max(0, controlPixelSize - 15) * 6
     readonly property real minimumCenterWidth: 480
-    readonly property real outputCardHeight: 96
+    readonly property real outputCardHeight: Math.max(110, 64 + headingPixelSize + captionPixelSize + controlPixelSize)
     font.family: root.fontFamily
     font.pixelSize: root.textPixelSize
     required property var service
@@ -95,6 +95,7 @@ Pane {
     }
     Timer { id: liveSave; interval: 2000; onTriggered: root.saveLive() }
     function flushPendingSettings() {
+        if (previewPanel) previewPanel.flushSceneLibrary()
         if (flushingPendingSettings) return true
         flushingPendingSettings = true
         audioSave.stop()
@@ -142,8 +143,10 @@ Pane {
     property color inputColor: root.violetSkin ? "#edf2fc" : "#1b1e25"
     property color borderColor: root.violetSkin ? "#a1a9ca" : "#3d4350"
     property color mutedTextColor: root.violetSkin ? "#4a5576" : "#aeb7c7"
-    property real controlHeight: 34
-    property real controlPixelSize: 13
+    readonly property int controlPixelSize: Math.max(12, Math.round(textPixelSize - 1))
+    readonly property int headingPixelSize: Math.max(14, Math.round(textPixelSize + 1))
+    readonly property int captionPixelSize: Math.max(11, Math.round(textPixelSize * 0.8125))
+    readonly property int controlHeight: Math.max(38, controlPixelSize + 21)
     // 这些标志只控制自定义输入区的展开，不复制设置草稿。
     property bool customCaptureFps: false
     property bool customOutputFps: false
@@ -187,6 +190,10 @@ Pane {
     property real toggleHeight: 20
     property string fontFamily: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).family
     property real textPixelSize: (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).pixelSize > 0 ? (typeof Oran7UiPreferences !== "undefined" ? Oran7UiPreferences.font : Qt.application.font).pixelSize : 16
+    FontMetrics {
+        id: panelHeadingMetrics
+        font.family: root.fontFamily; font.pixelSize: root.headingPixelSize; font.bold: true
+    }
     property alias pageState: state
     readonly property var previewSource: {
         var list = state.monitors
@@ -370,6 +377,285 @@ Pane {
 
     Oran7RecordingPageState { id: state; service: root.service; controller: root.controller }
 
+    function createNamedScene() {
+        let number = 1
+        let name
+        do {
+            name = qsTranslate("Oran7Ui", "场景 %1").arg(number++)
+        } while (previewPanel.scenes.some(scene => scene.name === name))
+        previewPanel.createScene(name)
+    }
+
+    readonly property bool imageSourceSupported: previewPanel.managedScenes
+        && typeof controller.openSceneImage === "function"
+
+    function sourceGlyph(kind) {
+        return kind === "window" || kind === "image" ? kind : "monitor"
+    }
+
+    function pickSourceFile(id) {
+        imageSourcePicker.sceneId = previewPanel.currentSceneId
+        imageSourcePicker.sourceId = id
+        imageSourcePicker.open()
+    }
+
+    function pickSourceWindow(id) {
+        windowSourcePicker.sceneId = previewPanel.currentSceneId
+        windowSourcePicker.sourceId = id
+        windowSourcePicker.open()
+    }
+
+    component Oran7AddSceneSource: Oran7Action {
+        id: addSourceButton
+        objectName: "recordingAddSceneSource"
+        symbol: "+"
+        text: qsTranslate("Oran7Ui", "添加采集源")
+        enabled: root.imageSourceSupported || previewPanel.windowSceneSupported || root.pageState.monitors.some(monitor => monitor.attached)
+        onClicked: {
+            sourceMenu.anchorButton = addSourceButton
+            sourceMenu.open()
+        }
+    }
+
+    Menu {
+        id: sourceMenu
+        property Item anchorButton
+        parent: anchorButton
+        y: anchorButton ? anchorButton.height + 4 : 0
+        onAboutToShow: if (previewPanel.managedScenes) root.pageState.refreshMonitors()
+        MenuItem {
+            objectName: "recordingAddWindowSource"
+            visible: previewPanel.windowSceneSupported
+            text: qsTranslate("Oran7Ui", "窗口采集…")
+            font.family: root.fontFamily; font.pixelSize: root.controlPixelSize
+            onTriggered: {
+                if (sceneSettings.visible) sceneSettings.close()
+                Qt.callLater(() => root.pickSourceWindow(-1))
+            }
+        }
+        MenuItem {
+            objectName: "recordingAddImageSource"
+            visible: root.imageSourceSupported
+            text: qsTranslate("Oran7Ui", "图片…")
+            font.family: root.fontFamily; font.pixelSize: root.controlPixelSize
+            onTriggered: {
+                if (sceneSettings.visible) sceneSettings.close()
+                Qt.callLater(() => root.pickSourceFile(-1))
+            }
+        }
+        MenuSeparator {
+            visible: previewPanel.windowSceneSupported && root.pageState.monitors.some(monitor => monitor.attached)
+        }
+        Repeater {
+            model: root.pageState.monitors.filter(monitor => monitor.attached)
+            delegate: MenuItem {
+                required property var modelData
+                objectName: "recordingAddMonitor_" + modelData.outputIndex
+                text: modelData.name
+                font.family: root.fontFamily; font.pixelSize: root.controlPixelSize
+                onTriggered: {
+                    if (previewPanel.addSceneSource(modelData)) {
+                        if (sceneSettings.visible) sceneSettings.close()
+                    } else {
+                        state.message = qsTranslate("Oran7Ui", "无法添加该采集源")
+                    }
+                }
+            }
+        }
+    }
+
+    FileDialog {
+        id: imageSourcePicker
+        title: qsTranslate("Oran7Ui", "选择图片")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTranslate("Oran7Ui", "图片文件") + " (*.png *.jpg *.jpeg *.bmp *.webp *.gif *.tiff *.tif)",
+            qsTranslate("Oran7Ui", "所有文件") + " (*)"]
+        property int sourceId: -1
+        property string sceneId: ""
+        onAccepted: {
+            if (sceneId === previewPanel.currentSceneId && !previewPanel.addImageSource(selectedFile, sourceId))
+                state.message = qsTranslate("Oran7Ui", "无法读取图片文件")
+        }
+    }
+
+    Dialog {
+        id: sceneSettings
+        objectName: "recordingSceneSettings"
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        width: Math.min(460, parent ? parent.width - 32 : 460)
+        title: qsTranslate("Oran7Ui", "场景设置")
+        property bool confirmingDeletion: false
+        onOpened: {
+            sceneName.text = previewPanel.currentSceneName
+        }
+        onClosed: confirmingDeletion = false
+        background: Rectangle { color: root.inputColor; border.color: root.borderColor; radius: 8 }
+        header: Label {
+            text: sceneSettings.title; padding: 14
+            color: root.textColor; font.family: root.fontFamily; font.pixelSize: root.headingPixelSize; font.bold: true
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            RowLayout {
+                Oran7Input {
+                    id: sceneName
+                    objectName: "recordingSceneName"
+                    Layout.fillWidth: true
+                    placeholderText: qsTranslate("Oran7Ui", "场景名称")
+                    maximumLength: 80
+                }
+                Oran7Action {
+                    objectName: "recordingRenameScene"
+                    text: qsTranslate("Oran7Ui", "重命名")
+                    enabled: sceneName.text.trim().length > 0 && sceneName.text.trim() !== previewPanel.currentSceneName
+                    onClicked: {
+                        previewPanel.renameScene(sceneName.text)
+                        sceneName.text = previewPanel.currentSceneName
+                    }
+                }
+            }
+            RowLayout {
+                Oran7Action {
+                    objectName: "recordingCreateScene"
+                    text: qsTranslate("Oran7Ui", "新建场景")
+                    onClicked: {
+                        root.createNamedScene()
+                        sceneName.text = previewPanel.currentSceneName
+                        sceneSettings.confirmingDeletion = false
+                    }
+                }
+                Oran7Action {
+                    objectName: "recordingDeleteScene"
+                    text: sceneSettings.confirmingDeletion ? qsTranslate("Oran7Ui", "确认删除") : qsTranslate("Oran7Ui", "删除场景")
+                    destructive: true
+                    enabled: previewPanel.scenes.length > 1
+                    onClicked: {
+                        if (sceneSettings.confirmingDeletion) {
+                            previewPanel.deleteScene()
+                            sceneName.text = previewPanel.currentSceneName
+                        }
+                        sceneSettings.confirmingDeletion = !sceneSettings.confirmingDeletion
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Oran7Action { text: qsTranslate("Oran7Ui", "关闭"); onClicked: sceneSettings.close() }
+            }
+            Oran7AddSceneSource { objectName: "recordingSceneSettingsAddSource"; Layout.fillWidth: true }
+        }
+    }
+
+    Dialog {
+        id: windowSourcePicker
+        objectName: "recordingWindowSourcePicker"
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        width: Math.min(560, parent ? parent.width - 32 : 560)
+        height: Math.min(430, parent ? parent.height - 32 : 430)
+        title: qsTranslate("Oran7Ui", "选择采集窗口")
+        property int sourceId: -1
+        property string sceneId: ""
+        property var candidates: []
+        property string message: ""
+        readonly property var filteredCandidates: {
+            const query = windowFilter.text.trim().toLowerCase()
+            return query ? candidates.filter(windowInfo =>
+                windowInfo.name.toLowerCase().includes(query) || windowInfo.application.toLowerCase().includes(query)) : candidates
+        }
+        function refresh() {
+            candidates = previewPanel.windowSceneSupported ? root.controller.sceneWindows() : []
+        }
+        onOpened: {
+            message = ""
+            windowFilter.clear()
+            refresh()
+        }
+        background: Rectangle { color: root.inputColor; border.color: root.borderColor; radius: 8 }
+        header: Label {
+            text: windowSourcePicker.title
+            padding: 14
+            color: root.textColor
+            font.family: root.fontFamily; font.pixelSize: root.headingPixelSize; font.bold: true
+        }
+        contentItem: ColumnLayout {
+            spacing: 8
+            RowLayout {
+                Layout.fillWidth: true
+                Oran7Input {
+                    id: windowFilter
+                    objectName: "recordingWindowSourceFilter"
+                    Layout.fillWidth: true
+                    placeholderText: qsTranslate("Oran7Ui", "搜索窗口或应用")
+                }
+                Oran7Action {
+                    text: qsTranslate("Oran7Ui", "刷新")
+                    onClicked: { windowSourcePicker.message = ""; windowSourcePicker.refresh() }
+                }
+            }
+            ListView {
+                id: windowList
+                Layout.fillWidth: true; Layout.fillHeight: true
+                clip: true
+                model: windowSourcePicker.filteredCandidates
+                ScrollBar.vertical: ScrollBar {}
+                delegate: ItemDelegate {
+                    id: candidate
+                    required property var modelData
+                    required property int index
+                    objectName: "recordingWindowCandidate_" + index
+                    width: ListView.view.width
+                    text: modelData.name
+                    contentItem: Column {
+                        spacing: 2
+                        Text {
+                            id: candidateTitle
+                            width: parent.width; text: candidate.text; elide: Text.ElideRight
+                            color: root.textColor; font.family: root.fontFamily; font.pixelSize: root.controlPixelSize
+                        }
+                        Text {
+                            width: parent.width; elide: Text.ElideRight
+                            text: candidate.modelData.application + (candidate.modelData.minimized
+                                ? "  " + qsTranslate("Oran7Ui", "已最小化") : "")
+                            visible: text.length > 0
+                            color: root.mutedTextColor; font.family: root.fontFamily; font.pixelSize: root.captionPixelSize
+                        }
+                    }
+                    background: Rectangle { radius: 4; color: candidate.hovered || candidate.activeFocus ? root.hoverColor : "transparent" }
+                    ToolTip.visible: hovered && candidateTitle.truncated
+                    ToolTip.text: text
+                    onClicked: {
+                        if (windowSourcePicker.sceneId !== previewPanel.currentSceneId)
+                            windowSourcePicker.close()
+                        else if (previewPanel.addWindowSource(modelData, windowSourcePicker.sourceId))
+                            windowSourcePicker.close()
+                        else {
+                            windowSourcePicker.message = qsTranslate("Oran7Ui", "窗口已关闭或无法采集，请重新选择")
+                            windowSourcePicker.refresh()
+                        }
+                    }
+                }
+                Label {
+                    parent: windowList
+                    anchors.centerIn: parent
+                    visible: windowList.count === 0
+                    text: qsTranslate("Oran7Ui", "没有匹配的窗口")
+                    color: root.mutedTextColor; font.family: root.fontFamily; font.pixelSize: root.controlPixelSize
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    text: windowSourcePicker.message; wrapMode: Text.Wrap
+                    color: root.errorColor; font.family: root.fontFamily; font.pixelSize: root.captionPixelSize
+                }
+                Oran7Action { text: qsTranslate("Oran7Ui", "取消"); onClicked: windowSourcePicker.close() }
+            }
+        }
+    }
+
     // 标签、空白和预览通常不接收焦点，点击这些区域时主动结束输入。
     // 被动监听按下，不拦截按钮、输入框或滚动区域原有的鼠标操作。
     Item {
@@ -402,7 +688,7 @@ Pane {
         property Component footer
         property real minimumFooterHeight: 0
         // 为标题、输出按钮和最小设置视口留足空间，短窗口交给外层滚动。
-        readonly property real minimumPanelHeight: 60 + 120 + 12 + minimumFooterHeight
+        readonly property real minimumPanelHeight: Math.max(60, Math.ceil(panelHeadingMetrics.height) + 32) + 132 + minimumFooterHeight
         color: root.panelColor
         radius: 9
         border.color: root.borderColor
@@ -457,19 +743,19 @@ Pane {
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
             spacing: 6
             Label {
-                text: panel.sectionId; color: root.paperInkColor; font.pixelSize: 11; font.bold: true
+                text: panel.sectionId; color: root.paperInkColor; font.pixelSize: root.captionPixelSize; font.bold: true
                 leftPadding: 4; rightPadding: 4
                 background: Rectangle {
                     color: root.paperColor; radius: root.violetSkin ? 3 : 2
                     Rectangle { visible: root.violetSkin; x: 0; y: parent.height + 3; width: parent.width; height: 2; radius: 1; color: root.accentColor; opacity: 0.6 }
                 }
             }
-            Label { text: panel.title; color: root.textColor; font.pixelSize: 15; font.bold: true; Layout.fillWidth: true; Layout.minimumWidth: 0; elide: Text.ElideRight }
+            Label { text: panel.title; color: root.textColor; font.pixelSize: root.headingPixelSize; font.bold: true; Layout.fillWidth: true; Layout.minimumWidth: 0; elide: Text.ElideRight }
             Label {
                 objectName: panel.objectName + "Status"
                 text: panel.statusText
                 color: panel.modified ? root.accentColor : root.mutedTextColor
-                font.pixelSize: 10
+                font.pixelSize: root.captionPixelSize
             }
         }
         Rectangle {
@@ -521,20 +807,186 @@ Pane {
             x: 10; y: 11
             width: parent.width - 20
             spacing: 10
-            Label { text: parent.parent.title; color: root.textColor; font.pixelSize: 13; font.bold: true }
+            Label {
+                width: parent.width
+                text: parent.parent.title; color: root.textColor
+                font.pixelSize: root.controlPixelSize; font.bold: true; wrapMode: Text.Wrap
+            }
         }
     }
+    component Oran7SceneDock: Rectangle {
+        id: dock
+        default property alias contents: rows.data
+        property string title
+        property Component actions
+        width: parent.width
+        implicitHeight: dockLayout.implicitHeight + 10
+        radius: 6
+        color: root.groupColor
+        border.color: root.borderColor
+        ColumnLayout {
+            id: dockLayout
+            x: 5; y: 5
+            width: parent.width - 10
+            spacing: 4
+            Label {
+                Layout.fillWidth: true
+                leftPadding: 6; topPadding: 4; bottomPadding: 4
+                text: dock.title; color: root.textColor
+                font.family: root.fontFamily; font.pixelSize: root.controlPixelSize; font.weight: Font.DemiBold
+            }
+            Column { id: rows; Layout.fillWidth: true; spacing: 2 }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: root.borderColor }
+            Loader { Layout.fillWidth: true; sourceComponent: dock.actions }
+        }
+    }
+
+    component Oran7DockButton: ToolButton {
+        id: button
+        property string glyph
+        property bool transparentIdle: false
+        width: Math.max(30, root.captionPixelSize + 15)
+        height: width
+        hoverEnabled: true
+        ToolTip.visible: hovered
+        ToolTip.text: text
+        ToolTip.delay: 450
+        Accessible.name: text
+        contentItem: Item {
+            Oran7RecordingIcon {
+                anchors.centerIn: parent
+                width: 17; height: 17
+                glyph: button.glyph; ink: button.enabled ? root.textColor : root.mutedTextColor
+                opacity: button.enabled ? 1 : 0.45
+            }
+        }
+        background: Rectangle {
+            radius: 4
+            color: button.hovered || button.activeFocus ? root.hoverColor : button.transparentIdle ? "transparent" : root.inputColor
+            border.color: button.activeFocus ? root.accentColor : "transparent"
+        }
+    }
+
+    component Oran7DockRow: ItemDelegate {
+        id: entry
+        property string glyph: ""
+        property string description: text
+        width: parent.width
+        implicitHeight: Math.max(31, root.controlPixelSize + 12)
+        leftPadding: 7; rightPadding: 7
+        topPadding: 0; bottomPadding: 0
+        hoverEnabled: true
+        ToolTip.visible: hovered && (rowTitle.truncated || description !== text)
+        ToolTip.text: description
+        ToolTip.delay: 500
+        contentItem: RowLayout {
+            spacing: 5
+            Oran7RecordingIcon {
+                visible: entry.glyph.length > 0
+                Layout.preferredWidth: 16; Layout.preferredHeight: 16
+                glyph: entry.glyph; ink: root.textColor
+            }
+            Label {
+                id: rowTitle
+                Layout.fillWidth: true; Layout.minimumWidth: 0
+                text: entry.text; color: root.textColor; elide: Text.ElideRight
+                font.family: root.fontFamily; font.pixelSize: root.controlPixelSize
+            }
+        }
+        background: Rectangle {
+            radius: 4
+            color: entry.highlighted ? root.selectionColor : entry.hovered ? root.hoverColor : "transparent"
+            border.color: entry.activeFocus || entry.highlighted ? root.accentColor : "transparent"
+        }
+    }
+
+    Component {
+        id: contextualSourceOptions
+        Rectangle {
+            id: options
+            readonly property var info: previewPanel.selectedSource
+            readonly property var recipe: info?.recipe
+            readonly property string kind: recipe?.kind || ""
+            readonly property bool interacting: sourceMonitor.popup.visible
+            color: root.groupColor
+            implicitHeight: sourceOptionRow.implicitHeight + 10
+            RowLayout {
+                id: sourceOptionRow
+                anchors.fill: parent; anchors.margins: 5
+                spacing: 7
+                Oran7RecordingIcon {
+                    Layout.leftMargin: 7
+                    Layout.preferredWidth: 18; Layout.preferredHeight: 18
+                    glyph: root.sourceGlyph(options.kind); ink: root.accentColor
+                }
+                Label {
+                    text: options.kind === "window" ? qsTranslate("Oran7Ui", "窗口采集")
+                        : options.kind === "image" ? qsTranslate("Oran7Ui", "图片文件") : qsTranslate("Oran7Ui", "显示器")
+                    font.family: root.fontFamily; font.pixelSize: root.controlPixelSize; font.weight: Font.DemiBold
+                    color: root.textColor
+                }
+                Oran7Choice {
+                    id: sourceMonitor
+                    objectName: "recordingSourceMonitor"
+                    visible: options.kind === "display"
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    fieldGlyph: "monitor"
+                    model: root.pageState.monitors.filter(monitor => monitor.attached)
+                    textRole: "name"
+                    selectedRow: model.findIndex(monitor => options.recipe?.monitorPath
+                        ? monitor.monitorPath?.toLowerCase() === options.recipe.monitorPath.toLowerCase()
+                        : monitor.deviceName === options.recipe?.deviceName)
+                    displayText: currentIndex >= 0 ? currentText
+                        : options.info?.name || qsTranslate("Oran7Ui", "请选择已连接的显示器")
+                    onActivated: index => {
+                        if (!previewPanel.addSceneSource(model[index], previewPanel.selectedLayerId))
+                            state.message = qsTranslate("Oran7Ui", "无法切换显示器")
+                    }
+                }
+                Oran7Input {
+                    objectName: "recordingSourceValue"
+                    visible: options.kind !== "display"
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    readOnly: true
+                    text: options.kind === "image" ? options.recipe?.file || "" : options.info?.name || ""
+                    ToolTip.visible: hovered
+                    ToolTip.text: text
+                }
+                Oran7Action {
+                    objectName: "recordingReplaceSource"
+                    visible: options.kind !== "display"
+                    text: options.kind === "image" ? qsTranslate("Oran7Ui", "浏览…") : qsTranslate("Oran7Ui", "重新选择…")
+                    onClicked: {
+                        if (options.kind === "image")
+                            root.pickSourceFile(previewPanel.selectedLayerId)
+                        else
+                            root.pickSourceWindow(previewPanel.selectedLayerId)
+                    }
+                }
+                Oran7RecordingIcon {
+                    visible: !!options.info?.error
+                    Layout.preferredWidth: 18; Layout.preferredHeight: 18
+                    glyph: "info"; ink: root.errorColor
+                    HoverHandler { id: sourceErrorHover }
+                    ToolTip.visible: sourceErrorHover.hovered
+                    ToolTip.text: options.info?.error ? qsTranslate("Oran7Ui", options.info.error) : ""
+                }
+            }
+        }
+    }
+
     component Oran7Caption: Label {
         width: parent.width
         color: root.mutedTextColor
         wrapMode: Text.Wrap
-        font.pixelSize: 11
+        font.pixelSize: root.captionPixelSize
         lineHeight: 1.15
     }
     component Oran7FieldLabel: Label {
         width: parent.width
         color: root.textColor
         font.pixelSize: root.controlPixelSize
+        wrapMode: Text.Wrap
     }
     component Oran7Input: TextField {
         id: editor
@@ -600,6 +1052,7 @@ Pane {
         id: choice
         property int selectedRow: 0
         property string fieldGlyph: "info"
+        readonly property bool showFieldIcon: root.violetSkin && width >= 180
         ToolTip.visible: hovered && !popup.visible
         ToolTip.delay: 600
         ToolTip.text: displayText
@@ -614,7 +1067,7 @@ Pane {
         width: parent.width
         implicitHeight: root.controlHeight
         font.pixelSize: root.controlPixelSize
-        leftPadding: root.violetSkin ? 30 : 9
+        leftPadding: showFieldIcon ? 30 : 9
         rightPadding: root.violetSkin ? 30 : 24
         contentItem: Text {
             text: choice.displayText
@@ -631,7 +1084,7 @@ Pane {
             radius: 6; color: root.inputColor
             border.color: choice.activeFocus ? root.accentColor : root.borderColor
             Oran7RecordingIcon {
-                visible: root.violetSkin; x: 9; anchors.verticalCenter: parent.verticalCenter
+                visible: choice.showFieldIcon; x: 9; anchors.verticalCenter: parent.verticalCenter
                 width: 14; height: 14; glyph: choice.fieldGlyph; ink: root.mutedTextColor
             }
             Rectangle {
@@ -643,9 +1096,9 @@ Pane {
         delegate: ItemDelegate {
             required property int index
             width: choice.popupWidth
-            height: 34
+            height: root.controlHeight
             highlighted: choice.highlightedIndex === index
-            contentItem: Text { text: choice.textAt(index); color: root.textColor; font.pixelSize: root.controlPixelSize; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+            contentItem: Text { text: choice.textAt(index); color: root.textColor; font: choice.font; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
             background: Rectangle { radius: 4; color: parent.highlighted ? (root.violetSkin ? root.hoverColor : root.selectionColor) : "transparent" }
         }
         popup: Popup {
@@ -685,7 +1138,10 @@ Pane {
                 opacity: enabled ? 1 : 0.35
                 padding: 2
                 contentItem: Text {
-                    text: parent.text; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                    text: parent.text
+                    font.family: root.fontFamily; font.pixelSize: root.captionPixelSize
+                    fontSizeMode: Text.HorizontalFit; minimumPixelSize: 11; elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                     color: root.violetSkin && choices.selectedIndex === index ? root.accentColor : root.textColor
                 }
                 background: Oran7StudioControlSurface {
@@ -709,6 +1165,8 @@ Pane {
         borderColor: root.borderColor
         dangerColor: root.errorColor
         font.family: root.fontFamily
+        font.pixelSize: root.controlPixelSize
+        implicitHeight: root.controlHeight
     }
     component Oran7WorkspaceSwitch: Oran7StudioSwitch {
         polished: root.violetSkin
@@ -729,7 +1187,7 @@ Pane {
         Label {
             anchors.verticalCenter: parent.verticalCenter
             text: reading.caption
-            font.pixelSize: 11
+            font.pixelSize: root.captionPixelSize
             color: root.mutedTextColor
         }
         TextMetrics { id: loadValueMetrics; font: loadValue.font; text: "100%" }
@@ -740,7 +1198,7 @@ Pane {
             width: Math.ceil(loadValueMetrics.advanceWidth)
             horizontalAlignment: Text.AlignRight
             text: reading.percent < 0 ? "—" : reading.percent + "%"
-            font.pixelSize: 11
+            font.pixelSize: root.captionPixelSize
             font.weight: Font.DemiBold
             color: reading.percent >= reading.highLoadThreshold ? root.errorColor : root.textColor
         }
@@ -753,19 +1211,19 @@ Pane {
             Layout.fillWidth: true
             Column {
                 spacing: 2
-                Label { text: "ORAN7 / CONTROL ROOM"; color: root.accentColor; font.pixelSize: 9; font.letterSpacing: 1.5 }
-                Label { text: qsTranslate("Oran7Ui", "直播工作台"); color: root.textColor; font.pixelSize: 20; font.bold: true }
+                Label { text: "ORAN7 / CONTROL ROOM"; color: root.accentColor; font.pixelSize: Math.max(10, root.captionPixelSize - 2); font.letterSpacing: 1.5 }
+                Label { text: qsTranslate("Oran7Ui", "直播工作台"); color: root.textColor; font.pixelSize: root.headingPixelSize + 5; font.bold: true }
             }
             Rectangle {
-                implicitWidth: formatBadge.implicitWidth + 16; implicitHeight: 24
+                implicitWidth: formatBadge.implicitWidth + 16; implicitHeight: formatBadge.implicitHeight + 8
                 radius: 5; color: root.groupColor; border.color: root.borderColor
-                Label { id: formatBadge; anchors.centerIn: parent; text: root.controller && root.controller.liveBusy === true ? "RTMP" : root.pageState.outputDraft.format === "flv" ? qsTranslate("Oran7Ui", "本地 FLV") : qsTranslate("Oran7Ui", "本地 MP4"); color: root.mutedTextColor; font.pixelSize: 11 }
+                Label { id: formatBadge; anchors.centerIn: parent; text: root.controller && root.controller.liveBusy === true ? "RTMP" : root.pageState.outputDraft.format === "flv" ? qsTranslate("Oran7Ui", "本地 FLV") : qsTranslate("Oran7Ui", "本地 MP4"); color: root.mutedTextColor; font.pixelSize: root.captionPixelSize }
             }
             Item { Layout.fillWidth: true }
             Oran7StudioControlSurface {
                 objectName: "recordingProcessLoad"
                 implicitWidth: readings.implicitWidth + 16
-                implicitHeight: 28
+                implicitHeight: readings.implicitHeight + 10
                 radius: 7
                 polished: root.violetSkin
                 color: root.violetSkin ? root.panelColor : Qt.alpha(root.groupColor, 0.88)
@@ -923,9 +1381,25 @@ Pane {
                             controller: root.controller
                             pageState: state
                             previewComponent: root.previewComponent
+                            sourceOptionsComponent: contextualSourceOptions
+                            sourceDock: sourceDockPanel
+                            sourceOptionsHeight: root.controlHeight + 10
+                            sourceSizeHint: Qt.size(root.previewSource.width || 0, root.previewSource.height || 0)
+                            initialMonitor: root.previewSource
+                            outputSize: {
+                                const options = root.liveSupported && root.controller.liveBusy === true
+                                    && root.controller.recordingBusy !== true ? root.controller.liveOptions : state.outputSaved
+                                return Qt.size(options.width || 0, options.height || 0)
+                            }
                             sourceName: root.previewSource.name || ""
-                            sourceDetails: (root.previewSource.details ? root.previewSource.details + " · " : "")
-                                + qsTranslate("Oran7Ui", "采集上限 %1 FPS").arg(state.captureSaved.fps || 60)
+                            sourceDetails: {
+                                const size = canvasResolution
+                                const details = managedScenes
+                                    ? (size.width > 0 && size.height > 0 ? size.width + " × " + size.height : "")
+                                    : root.previewSource.details || ""
+                                const fps = qsTranslate("Oran7Ui", "采集上限 %1 FPS").arg(state.captureSaved.fps || 60)
+                                return details ? details + " · " + fps : fps
+                            }
                             violetSkin: root.violetSkin
                             materialStrength: root.materialStrength
                             paperColor: root.paperColor; paperInkColor: root.paperInkColor
@@ -940,6 +1414,9 @@ Pane {
                             borderColor: root.borderColor
                             errorColor: root.errorColor
                             fontFamily: root.fontFamily
+                            controlPixelSize: root.controlPixelSize
+                            headingPixelSize: root.headingPixelSize
+                            captionPixelSize: root.captionPixelSize
                             showInfo: root.showScreenInfo
                             fillPreview: root.fillPreview
                             onInfoToggled: function(checked) { root.showScreenInfo = checked }
@@ -972,7 +1449,9 @@ Pane {
                             toggleThumbColor: root.toggleThumbColor
                             toggleHeight: root.toggleHeight
                             fontFamily: root.fontFamily
-                            textPixelSize: root.textPixelSize
+                            controlPixelSize: root.controlPixelSize
+                            headingPixelSize: root.headingPixelSize
+                            captionPixelSize: root.captionPixelSize
                             meterNormalColor: root.violetSkin ? root.accentColor : "#4bcb76"
                             meterWarningColor: root.violetSkin ? "#936728" : "#f1c454"
                             meterPeakColor: root.errorColor
@@ -982,7 +1461,7 @@ Pane {
                         id: sourcePanel
                         objectName: "recordingSourcePanel"
                         Layout.minimumHeight: minimumPanelHeight
-                        minimumFooterHeight: 36 + 25
+                        minimumFooterHeight: root.controlHeight + 25
                         title: qsTranslate("Oran7Ui", "画面来源")
                         statusText: root.pageState.applying ? qsTranslate("Oran7Ui", "应用中") : root.pageState.captureDirty ? qsTranslate("Oran7Ui", "待保存") : qsTranslate("Oran7Ui", "已保存")
                         modified: root.pageState.captureDirty
@@ -1009,10 +1488,133 @@ Pane {
                         }
                         Column {
                             width: parent.width; spacing: 12
-                            enabled: !root.pageState.busy
-                            opacity: enabled ? 1 : 0.5
+                            Oran7SceneDock {
+                                visible: previewPanel.managedScenes
+                                title: qsTranslate("Oran7Ui", "场景")
+                                Repeater {
+                                    model: previewPanel.scenes
+                                    delegate: Oran7DockRow {
+                                        required property var modelData
+                                        objectName: "recordingScene_" + modelData.id
+                                        text: modelData.name
+                                        highlighted: modelData.id === previewPanel.currentSceneId
+                                        onClicked: previewPanel.activateScene(modelData.id)
+                                    }
+                                }
+                                actions: Component {
+                                    Row {
+                                        spacing: 4
+                                        Oran7DockButton {
+                                            glyph: "add"; text: qsTranslate("Oran7Ui", "新建场景")
+                                            onClicked: root.createNamedScene()
+                                        }
+                                        Oran7DockButton {
+                                            glyph: "remove"; text: qsTranslate("Oran7Ui", "删除场景")
+                                            enabled: previewPanel.scenes.length > 1
+                                            onClicked: { sceneSettings.confirmingDeletion = true; sceneSettings.open() }
+                                        }
+                                        Oran7DockButton {
+                                            objectName: "recordingOpenSceneSettings"
+                                            glyph: "settings"; text: qsTranslate("Oran7Ui", "场景设置")
+                                            onClicked: sceneSettings.open()
+                                        }
+                                        Oran7DockButton {
+                                            glyph: "up"; text: qsTranslate("Oran7Ui", "上移场景")
+                                            enabled: previewPanel.sceneIndex > 0
+                                            onClicked: previewPanel.moveScene(-1)
+                                        }
+                                        Oran7DockButton {
+                                            glyph: "down"; text: qsTranslate("Oran7Ui", "下移场景")
+                                            enabled: previewPanel.sceneIndex >= 0 && previewPanel.sceneIndex + 1 < previewPanel.scenes.length
+                                            onClicked: previewPanel.moveScene(1)
+                                        }
+                                    }
+                                }
+                                Oran7Caption { visible: text.length > 0; text: previewPanel.sceneMessage; color: root.errorColor }
+                            }
+                            Oran7SceneDock {
+                                id: sourceDockPanel
+                                visible: previewPanel.managedScenes
+                                title: qsTranslate("Oran7Ui", "源")
+                                Oran7Caption {
+                                    visible: previewPanel.sceneRows.length === 0
+                                    leftPadding: 6
+                                    text: qsTranslate("Oran7Ui", "当前场景没有源")
+                                }
+                                Repeater {
+                                    model: previewPanel.managedScenes ? previewPanel.sceneRows : []
+                                    delegate: Item {
+                                        id: sourceEntry
+                                        required property var modelData
+                                        readonly property bool sourceHidden: modelData.recipe?.hidden === true
+                                        readonly property bool sourceLocked: modelData.recipe?.locked === true
+                                        width: parent.width
+                                        height: Math.max(sourceRow.implicitHeight, sourceButtons.implicitHeight)
+                                        Oran7DockRow {
+                                            id: sourceRow
+                                            anchors.fill: parent
+                                            rightPadding: sourceButtons.width + 5
+                                            objectName: "recordingSceneSource_" + sourceEntry.modelData.id
+                                            glyph: root.sourceGlyph(sourceEntry.modelData.recipe?.kind)
+                                            text: (sourceEntry.modelData.error === "等待窗口重新打开"
+                                                ? qsTranslate("Oran7Ui", "待连接") + " · " : "")
+                                                + sourceEntry.modelData.name
+                                            description: sourceEntry.modelData.error ? qsTranslate("Oran7Ui", sourceEntry.modelData.error) : text
+                                            highlighted: sourceEntry.modelData.id === previewPanel.selectedLayerId
+                                            onClicked: previewPanel.selectSceneLayer(sourceEntry.modelData.id)
+                                        }
+                                        Row {
+                                            id: sourceButtons
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            Oran7DockButton {
+                                                objectName: "recordingSourceVisibility_" + sourceEntry.modelData.id
+                                                transparentIdle: true
+                                                glyph: sourceEntry.sourceHidden ? "eyeOff" : "eye"
+                                                text: sourceEntry.sourceHidden ? qsTranslate("Oran7Ui", "显示源") : qsTranslate("Oran7Ui", "隐藏源")
+                                                onClicked: previewPanel.toggleSourceFlag(sourceEntry.modelData.id, "hidden")
+                                            }
+                                            Oran7DockButton {
+                                                objectName: "recordingSourceLock_" + sourceEntry.modelData.id
+                                                transparentIdle: true
+                                                glyph: sourceEntry.sourceLocked ? "lock" : "unlock"
+                                                text: sourceEntry.sourceLocked ? qsTranslate("Oran7Ui", "解锁变换") : qsTranslate("Oran7Ui", "锁定变换")
+                                                onClicked: previewPanel.toggleSourceFlag(sourceEntry.modelData.id, "locked")
+                                            }
+                                        }
+                                    }
+                                }
+                                actions: Component {
+                                    Row {
+                                        spacing: 4
+                                        Oran7DockButton {
+                                            id: addSource
+                                            glyph: "add"; text: qsTranslate("Oran7Ui", "添加采集源")
+                                            onClicked: { sourceMenu.anchorButton = addSource; sourceMenu.open() }
+                                        }
+                                        Oran7DockButton {
+                                            glyph: "remove"; text: qsTranslate("Oran7Ui", "删除源")
+                                            enabled: previewPanel.selectedLayerId > 0
+                                            onClicked: previewPanel.removeActiveLayer()
+                                        }
+                                        Oran7DockButton {
+                                            glyph: "up"; text: qsTranslate("Oran7Ui", "上移源")
+                                            enabled: previewPanel.canMoveLayer(true)
+                                            onClicked: previewPanel.stepLayer(true)
+                                        }
+                                        Oran7DockButton {
+                                            glyph: "down"; text: qsTranslate("Oran7Ui", "下移源")
+                                            enabled: previewPanel.canMoveLayer(false)
+                                            onClicked: previewPanel.stepLayer(false)
+                                        }
+                                    }
+                                }
+                            }
                             Oran7SettingsGroup {
+                                visible: !previewPanel.managedScenes
                                 title: qsTranslate("Oran7Ui", "显示器")
+                                enabled: !root.pageState.busy
+                                opacity: enabled ? 1 : 0.5
                                 Row {
                                     width: parent.width; spacing: 6
                                     Oran7Choice {
@@ -1030,13 +1632,13 @@ Pane {
                                             required property var modelData
                                             required property int index
                                             width: monitorSelector.popup.width - 8
-                                            height: 54
+                                            height: Math.max(54, implicitContentHeight + topPadding + bottomPadding)
                                             enabled: modelData.attached
                                             highlighted: monitorSelector.highlightedIndex === index
                                             contentItem: Column {
                                                 spacing: 3
-                                                Text { width: parent.width; text: modelData.name; color: root.textColor; font.pixelSize: 13; elide: Text.ElideRight }
-                                                Text { width: parent.width; text: modelData.details; color: root.mutedTextColor; font.pixelSize: 10; elide: Text.ElideRight }
+                                                Text { width: parent.width; text: modelData.name; color: root.textColor; font.family: root.fontFamily; font.pixelSize: root.controlPixelSize; elide: Text.ElideRight }
+                                                Text { width: parent.width; text: modelData.details; color: root.mutedTextColor; font.family: root.fontFamily; font.pixelSize: root.captionPixelSize; elide: Text.ElideRight }
                                             }
                                             background: Rectangle { radius: 4; color: parent.highlighted ? (root.violetSkin ? root.hoverColor : root.selectionColor) : "transparent" }
                                         }
@@ -1064,7 +1666,38 @@ Pane {
                                 Oran7Caption { text: root.pageState.monitorRow >= 0 ? root.pageState.monitors[root.pageState.monitorRow].details : qsTranslate("Oran7Ui", "请选择已连接的显示器") }
                             }
                             Oran7SettingsGroup {
+                                visible: previewPanel.sceneSupported && !previewPanel.managedScenes
+                                title: qsTranslate("Oran7Ui", "源")
+                                Oran7AddSceneSource {
+                                    visible: !previewPanel.managedScenes
+                                    width: parent.width
+                                }
+                                Oran7Caption { visible: previewPanel.sceneRows.length === 0; text: qsTranslate("Oran7Ui", "当前场景没有源") }
+                                Column {
+                                    width: parent.width; spacing: 4
+                                    Repeater {
+                                        model: previewPanel.managedScenes ? [] : previewPanel.sceneRows
+                                        delegate: Oran7Action {
+                                            required property var modelData
+                                            readonly property bool layerSelected: modelData.id === previewPanel.selectedLayerId
+                                            objectName: "recordingSceneSource_" + modelData.id
+                                            width: parent.width
+                                            text: (modelData.error === "等待窗口重新打开" ? qsTranslate("Oran7Ui", "待连接") + " · " : "")
+                                                + (modelData.name || qsTranslate("Oran7Ui", "显示器")) + (modelData.removed
+                                                ? qsTranslate("Oran7Ui", "（隐藏）") : modelData.error ? "  !" : "")
+                                            surfaceColor: layerSelected ? root.selectionColor : root.inputColor
+                                            textColor: layerSelected ? (root.violetSkin ? root.accentColor : root.textColor) : root.textColor
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: modelData.error ? qsTranslate("Oran7Ui", modelData.error) : text
+                                            onClicked: previewPanel.selectSceneLayer(modelData.id)
+                                        }
+                                    }
+                                }
+                            }
+                            Oran7SettingsGroup {
                                 title: qsTranslate("Oran7Ui", "采集设置")
+                                enabled: !root.pageState.busy
+                                opacity: enabled ? 1 : 0.5
                                 Oran7FieldLabel { text: qsTranslate("Oran7Ui", "采集帧率 · FPS") }
                                 Oran7QuickChoices {
                                     objectName: "captureFpsChoices"
@@ -1087,8 +1720,8 @@ Pane {
                                     onCommitRequested: root.pageState.commitCapture()
                                 }
                                 Item {
-                                    width: parent.width; height: 34
-                                    Label { anchors.verticalCenter: parent.verticalCenter; text: qsTranslate("Oran7Ui", "显示鼠标"); color: root.textColor; font.pixelSize: 13 }
+                                    width: parent.width; height: root.controlHeight
+                                    Label { anchors.verticalCenter: parent.verticalCenter; text: qsTranslate("Oran7Ui", "显示鼠标"); color: root.textColor; font.pixelSize: root.controlPixelSize }
                                     Oran7WorkspaceSwitch {
                                         id: mouseToggle
                                         objectName: "recordingMouse"
@@ -1100,14 +1733,21 @@ Pane {
                             }
                             Column {
                                 width: parent.width; spacing: 8
+                                enabled: !root.pageState.busy
+                                opacity: enabled ? 1 : 0.5
                                 Button {
                                     id: advancedToggle
                                     objectName: "recordingAdvancedToggle"
-                                    width: parent.width; height: 30
+                                    width: parent.width; height: root.controlHeight
                                     checkable: true
                                     contentItem: Item {
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: qsTranslate("Oran7Ui", "高级设置"); color: root.mutedTextColor; font.pixelSize: 12 }
-                                        Oran7Chevron { x: 60; anchors.verticalCenter: parent.verticalCenter; rotation: advancedToggle.checked ? 180 : 0 }
+                                        Text {
+                                            id: advancedLabel
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: qsTranslate("Oran7Ui", "高级设置"); color: root.mutedTextColor
+                                            font.family: root.fontFamily; font.pixelSize: root.controlPixelSize
+                                        }
+                                        Oran7Chevron { anchors.left: advancedLabel.right; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; rotation: advancedToggle.checked ? 180 : 0 }
                                     }
                                     background: Oran7StudioControlSurface {
                                         polished: root.violetSkin
@@ -1120,8 +1760,8 @@ Pane {
                                     visible: advancedToggle.checked
                                     title: qsTranslate("Oran7Ui", "诊断")
                                     Item {
-                                        width: parent.width; height: 34
-                                        Label { anchors.verticalCenter: parent.verticalCenter; text: qsTranslate("Oran7Ui", "调试日志"); color: root.textColor; font.pixelSize: 13 }
+                                        width: parent.width; height: root.controlHeight
+                                        Label { anchors.verticalCenter: parent.verticalCenter; text: qsTranslate("Oran7Ui", "调试日志"); color: root.textColor; font.pixelSize: root.controlPixelSize }
                                         Oran7WorkspaceSwitch {
                                             id: debugToggle
                                             objectName: "recordingDebugLog"
@@ -1159,6 +1799,8 @@ Pane {
                                     materialStrength: root.materialStrength
                                     paperColor: root.paperColor; paperInkColor: root.paperInkColor
                                     controller: root.controller; pageState: root.pageState
+                                    fontFamily: root.fontFamily
+                                    controlPixelSize: root.controlPixelSize; headingPixelSize: root.headingPixelSize; captionPixelSize: root.captionPixelSize
                                     commitAudio: function() { return root.saveLiveAudio() }
                                     accentColor: root.recordingAccentColor; textColor: root.textColor; mutedTextColor: root.mutedTextColor
                                     actionColor: root.violetSkin ? root.inputColor : root.actionColor
@@ -1172,6 +1814,8 @@ Pane {
                                     materialStrength: root.materialStrength
                                     paperColor: root.paperColor; paperInkColor: root.paperInkColor
                                     controller: root.controller; pageState: root.pageState
+                                    fontFamily: root.fontFamily
+                                    controlPixelSize: root.controlPixelSize; headingPixelSize: root.headingPixelSize; captionPixelSize: root.captionPixelSize
                                     commitAudio: function() { return root.saveLiveAudio() }
                                     commitLive: function() { return root.saveLive() }
                                     accentColor: root.liveAccentColor; textColor: root.textColor; mutedTextColor: root.mutedTextColor
@@ -1280,14 +1924,14 @@ Pane {
                                                 width: parent.width
                                                 text: modelData.title
                                                 color: index === root.bitratePresetIndex ? root.accentColor : root.textColor
-                                                font.pixelSize: 13; font.bold: true
+                                                font.family: root.fontFamily; font.pixelSize: root.controlPixelSize; font.bold: true
                                                 elide: Text.ElideRight
                                             }
                                             Text {
                                                 width: parent.width
                                                 text: modelData.description
                                                 color: root.mutedTextColor
-                                                font.pixelSize: 11
+                                                font.family: root.fontFamily; font.pixelSize: root.captionPixelSize
                                                 wrapMode: Text.Wrap
                                             }
                                         }
@@ -1302,12 +1946,12 @@ Pane {
                                 Oran7Input {
                                     objectName: "recordingBitrate"
                                     visible: root.bitratePresetIndex === root.bitratePresets.length - 1
-                                    rightPadding: 50
+                                    rightPadding: bitrateUnit.implicitWidth + 18
                                     validator: DoubleValidator { bottom: 0.1; top: 200; decimals: 3; notation: DoubleValidator.StandardNotation; locale: "C" }
                                     text: root.pageState.outputDraft.bitrateKbps === null ? "" : String(Number(root.pageState.outputDraft.bitrateKbps) / 1000)
                                     onTextEdited: root.pageState.editOutput("bitrateKbps", text.length ? Math.round(Number(text) * 1000) : null, true)
                                     onCommitRequested: root.pageState.commitOutput()
-                                    Label { anchors { right: parent.right; rightMargin: 9; verticalCenter: parent.verticalCenter } text: "Mbps"; color: root.mutedTextColor; font.pixelSize: 11 }
+                                    Label { id: bitrateUnit; anchors { right: parent.right; rightMargin: 9; verticalCenter: parent.verticalCenter } text: "Mbps"; color: root.mutedTextColor; font.pixelSize: root.captionPixelSize }
                                 }
                                 Oran7Caption {
                                     text: root.bitratePresets[root.bitratePresetIndex].description

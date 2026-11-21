@@ -23,6 +23,7 @@ public:
     // 独立存储入口，用于隔离配置读写；不会访问进程单例或用户目录。
     Oran7AppConfigManager(const QString& filePath, const QJsonObject& defaults, QObject* parent = nullptr);
     Oran7AppConfig snapshot() const { return Oran7AppConfig::fromJson(m_config); }
+    Oran7VisualizerConfig defaultVisualizerConfig() const;
     void updateConfig(const Oran7AppConfig& config);
     QString lastError() const { return m_lastError; }
     bool isWritable() const { return m_writable; }

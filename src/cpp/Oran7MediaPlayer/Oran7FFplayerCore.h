@@ -19,6 +19,7 @@ struct ID3D11Device;
 struct sonicStreamStruct;
 class Oran7AudioProcessor;
 class Oran7AudioParameterQueue;
+class Oran7AudioSpectrumTap;
 
 /**
  * @brief Oran7FFplayerCore  播放器核心（ffplay 系移植）：解封装读取线程、播放控制、音视频同步、
@@ -57,6 +58,7 @@ public:
     // =========音效参数通道 =========//
     // 必须在 ffp_prepare_async_l 之前注入；空队列表示整体旁路。
     void setAudioParameterQueue(std::shared_ptr<Oran7AudioParameterQueue> queue);
+    void setAudioSpectrumTap(std::shared_ptr<Oran7AudioSpectrumTap> tap) { audio_spectrum_tap_ = std::move(tap); }
 
     //================= 消息队列访问器 =================//
     // msg_queue_ 的唯一外部出口（Oran7MediaPlayer 经它收发播放状态消息）
@@ -232,6 +234,7 @@ private:
 
     // A0：每播放器独立的参数通道与处理器；seek 用代际号清理旧 PCM/滤波历史。
     std::shared_ptr<Oran7AudioParameterQueue> audio_parameter_queue_;
+    std::shared_ptr<Oran7AudioSpectrumTap> audio_spectrum_tap_;
     std::unique_ptr<Oran7AudioProcessor> audio_processor_;
     std::atomic<std::uint32_t> audio_discontinuity_{0};
     std::uint32_t audio_seen_discontinuity_ = 0;
